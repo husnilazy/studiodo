@@ -1,0 +1,108 @@
+{
+  "name": "studiodo-kiosk",
+  "version": "0.1.1",
+  "description": "STUDIODO Photobooth — Kiosk + Admin, Electron .exe",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev:client": "node ./node_modules/vite/bin/vite.js --config client/vite.config.ts",
+    "dev:server": "node ./node_modules/cross-env/src/bin/cross-env.js PORT=4050 node ./node_modules/tsx/dist/cli.mjs watch server/index.ts",
+    "dev": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER -c blue,green \"npm:dev:client\" \"npm:dev:server\"",
+    "dev:electron": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER,ELECTRON -c blue,green,magenta \"npm:dev:client\" \"npm:dev:server\" \"node ./node_modules/wait-on/bin/wait-on http://localhost:5173 && node ./node_modules/cross-env/src/bin/cross-env.js NODE_ENV=development node ./node_modules/electron/cli.js .\"",
+    "build:client": "node ./node_modules/vite/bin/vite.js build --config client/vite.config.ts",
+    "build:server": "node ./node_modules/typescript/bin/tsc -p server/tsconfig.json",
+    "build": "npm run build:client && npm run build:server",
+    "dist": "npm run build && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "build": {
+    "appId": "com.framelesscreative.studiodo",
+    "productName": "STUDIODO",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "dist-client/**/*",
+      "dist-server/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": "native/canon-bridge",
+        "to": "canon-bridge",
+        "filter": [
+          "canon-bridge.exe",
+          "CanonEDSDK.dll",
+          "EDSDK.dll",
+          "*.json"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.36.4",
+    "express": "^5.0.1",
+    "framer-motion": "^11.11.17",
+    "multer": "^1.4.5-lts.1",
+    "nanoid": "^5.0.9",
+    "postgres": "^3.4.5",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "wouter": "^3.3.5",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.9.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "drizzle-kit": "^0.28.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  }
+}
