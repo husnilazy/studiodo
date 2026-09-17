@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useBoothConfig } from "@/lib/boothConfigStore";
 
 interface Props {
   value: string;
@@ -18,11 +19,12 @@ const symbolRows = [
 ];
 
 export default function VirtualKeyboard({ value, onChange, onClose }: Props) {
+  const keyboardScale = useBoothConfig((state) => state.config.keyboardScale);
   const [symbols, setSymbols] = useState(false);
   const [shift, setShift] = useState(false);
   const append = (key: string) => onChange(value + (shift && /^[A-Z]$/.test(key) ? key.toLowerCase() : key));
   return (
-    <div className="mx-auto w-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-ink-950/98 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-5">
+    <div className="keyboard-panel mx-auto max-w-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-ink-950/98 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-5" style={{ width: `${Math.min(100, 100 / (keyboardScale / 100))}%`, transform: `scale(${keyboardScale / 100})` }}>
       <div className="mx-auto w-full max-w-5xl">
         {(symbols ? symbolRows : rows).map((row, rowIndex) => (
           <div

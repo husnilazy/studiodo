@@ -4,12 +4,13 @@ import { useKioskSession } from "@/lib/sessionStore";
 import { renderTemplate } from "@/lib/output";
 import { useTemplateLibrary } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
+import { api } from "@/lib/api";
 import type { PhotoSticker, CameraFilter } from "@/lib/sessionStore";
 import { FILTER_LABELS, FILTER_CSS } from "@/lib/sessionStore";
 
 export default function PreviewFoto() {
   const [, navigate] = useLocation();
-  const { photoUrls, selectedTemplateId, selectedTemplateData, filter, setFilter, colorCorrection, setColorCorrection, photoStickers, setPhotoStickers, templatePhotoMap, setTemplatePhotoMap, setCurrentSlot, incrementRetake, retakeCounts } = useKioskSession();
+  const { photoUrls, orientation, selectedTemplateId, selectedTemplateData, setSelectedTemplateId, setSelectedTemplateData, filter, setFilter, colorCorrection, setColorCorrection, photoStickers, setPhotoStickers, templatePhotoMap, setTemplatePhotoMap, setCurrentSlot, incrementRetake, retakeCounts } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,11 +19,41 @@ export default function PreviewFoto() {
   const [editing, setEditing] = useState(false);
   const [draggingSticker, setDraggingSticker] = useState<string | null>(null);
   const [draggedPhoto, setDraggedPhoto] = useState<number | null>(null);
+  const stickerAssets = Object.fromEntries(stickers.map((sticker) => [sticker.id, sticker.dataUrl]));
+  const [serverTemplates, setServerTemplates] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getFrames(orientation).then((frames) => setServerTemplates(frames.filter((frame) => frame.kind === "template"))).catch(() => setServerTemplates([]));
+  }, [orientation]);
+
+  const availableTemplates = [
+    ...serverTemplates.map((frame) => ({
+      id: frame.id,
+      name: frame.name,
+      orientation,
+      outputPreset: "4r" as const,
+      canvasWidth: frame.canvasWidth ?? 1200,
+      canvasHeight: frame.canvasHeight ?? 1800,
+      frameDataUrl: frame.imageUrl,
+      slots: frame.slots ?? [],
+      category: "custom" as const,
+      style: "Server template",
+    })),
+    ...useTemplateLibrary.getState().templates.filter((item) => item.orientation === orientation),
+  ];
+
+  const selectTemplate = (id: string) => {
+    const next = availableTemplates.find((item) => item.id === id);
+    if (!next) return;
+    setSelectedTemplateId(next.id);
+    setSelectedTemplateData(next);
+    setTemplatePhotoMap({});
+  };
 
   useEffect(() => {
     if (!template || !canvasRef.current || photoUrls.length === 0) return;
-    renderTemplate(photoUrls, template, canvasRef.current, [], {}, filter, templatePhotoMap, colorCorrection).catch((error) => console.error("Preview template gagal", error));
-  }, [photoUrls, template, filter, templatePhotoMap, colorCorrection]);
+    renderTemplate(photoUrls, template, canvasRef.current, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection).catch((error) => console.error("Preview template gagal", error));
+  }, [photoUrls, template, filter, templatePhotoMap, colorCorrection, photoStickers, stickers]);
 
   const updateSticker = (sticker: PhotoSticker) =>
     setPhotoStickers(photoStickers.map((item) => item.stickerId === sticker.stickerId ? sticker : item));
@@ -44,8 +75,8 @@ export default function PreviewFoto() {
   };
 
   return (
-    <div className="kinetic-page h-full overflow-y-auto px-4 py-6 sm:px-8 lg:px-12">
-      <header className="sticky top-0 z-20 mx-auto flex w-full max-w-7xl items-end justify-between gap-4 bg-[var(--kiosk-background)]/95 py-3 backdrop-blur-xl">
+    <div className="kinetic-page flex h-full min-h-0 flex-col overflow-hidden px-4 py-4 sm:px-8">
+      <header className="mx-auto flex w-full max-w-7xl shrink-0 items-end justify-between gap-4 py-2">
         <div>
           <span className="eyebrow">04 / YOUR CAPTURE GALLERY</span>
           <h2 className="mt-2 font-display text-4xl font-bold sm:text-6xl">Momenmu, siap diedit.</h2>
@@ -57,8 +88,8 @@ export default function PreviewFoto() {
         </div>
       </header>
 
-      <div className="mx-auto mt-8 grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="glass-panel rounded-[2rem] p-5 sm:p-7">
+      <div className="mx-auto mt-4 grid min-h-0 w-full max-w-7xl flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="glass-panel min-h-0 overflow-y-auto rounded-[2rem] p-5 sm:p-7">
           <div className="mb-5 flex items-center justify-between">
             <div><span className="eyebrow">CAPTURED</span><h3 className="font-display text-2xl font-semibold">Galeri jepretan</h3></div>
             <button onClick={() => redo(selectedPhoto)} disabled={(retakeCounts[selectedPhoto] ?? 0) >= 3} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-white/70 hover:border-accent hover:text-white disabled:opacity-40">Ulangi foto</button>
@@ -74,10 +105,11 @@ export default function PreviewFoto() {
           </div>
         </section>
 
-        <aside className="space-y-5">
+        <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
           {template && (
             <div className="glass-panel rounded-[2rem] p-5">
               <div className="mb-3"><span className="eyebrow">LIVE COMPOSITION</span><h3 className="font-display text-2xl font-semibold">{template.name}</h3></div>
+              {availableTemplates.length > 1 && <select value={selectedTemplateId ?? ""} onChange={(event) => selectTemplate(event.target.value)} className="mb-3 w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm"><option value="">Ganti template</option>{availableTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
               <div className="relative flex justify-center rounded-2xl bg-black/30 p-3">
                 <canvas ref={canvasRef} className="max-h-[52vh] max-w-full rounded-xl object-contain" />
                 {editing && photoStickers.map((sticker) => {
@@ -107,7 +139,8 @@ export default function PreviewFoto() {
         </aside>
       </div>
 
-      <div className="mx-auto mt-6 flex max-w-7xl flex-wrap items-center justify-center gap-2 rounded-[2rem] border border-white/10 bg-black/20 p-4">
+      <div className="mx-auto mt-4 max-h-[30vh] w-full max-w-7xl shrink-0 overflow-y-auto rounded-[2rem] border border-white/10 bg-black/20 p-3">
+        <div className="flex flex-wrap items-center justify-center gap-2">
         {photoUrls.map((url, index) => (
           <button key={`${url}-mini`} onClick={() => setSelectedPhoto(index)} className={`h-16 w-12 overflow-hidden rounded-lg border-2 ${selectedPhoto === index ? "border-accent" : "border-white/15"}`}>
             <img src={url} className="h-full w-full object-cover" style={{ filter: FILTER_CSS[filter] }} />
@@ -137,6 +170,7 @@ export default function PreviewFoto() {
         <section className="mx-auto mt-4 grid max-w-7xl gap-3 rounded-[2rem] border border-white/10 bg-black/20 p-4 sm:grid-cols-3">
           {(["brightness", "contrast", "saturation"] as const).map((key) => <label key={key} className="text-xs uppercase tracking-wider text-white/50">{key}<input type="range" min={50} max={150} value={colorCorrection[key]} onChange={(event) => setColorCorrection({ ...colorCorrection, [key]: Number(event.target.value) })} className="mt-2 w-full accent-[var(--accent)]" /></label>)}
         </section>
+        </div>
         {template && stickers.length > 0 && (
           <button onClick={() => setEditing((value) => !value)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">
             {editing ? "Tutup stiker" : "Tambah stiker"}

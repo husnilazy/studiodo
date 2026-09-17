@@ -31,6 +31,13 @@ export const api = {
     if (!res.ok) throw new Error(`Media upload gagal: ${res.status}`);
     return res.json();
   },
+  uploadStrip: async (sessionId: string, blob: Blob) => {
+    const form = new FormData();
+    form.append("strip", blob, `strip-${Date.now()}.jpg`);
+    const res = await fetch(`${BASE}/sessions/${sessionId}/strip`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(`Upload strip gagal: ${res.status}`);
+    return res.json();
+  },
   finalizeSession: (id: string, body: Record<string, unknown>) =>
     request<any>(`/sessions/${id}/finalize`, { method: "POST", body: JSON.stringify(body) }),
   updateCustomer: (id: string, body: { whatsapp?: string; email?: string; publishConsent: boolean; feedback?: string }) =>
@@ -38,14 +45,19 @@ export const api = {
   getPublicSession: (id: string) => request<any>(`/sessions/${id}/public`),
   getCustomers: () => request<any[]>("/sessions"),
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
-  startQris: (sessionId: string, amount: number) =>
-    request<any>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId, amount }) }),
+  startQris: (sessionId: string) =>
+    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
+  startAdditionalPrint: (sessionId: string, quantity: number) => request<{ demo: boolean; qrString: string; amount: number; expiresInSeconds?: number }>("/payment/additional-print", { method: "POST", body: JSON.stringify({ sessionId, quantity }) }),
+  getPrintingConfig: () => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing"),
+  updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
     request<{ valid: boolean; amount: number; discount: number }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
-  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean }>("/config/payment"),
+  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean }>("/config/payment"),
   updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
+  updateCashPaymentConfig: (enabled: boolean) => request<{ enabled: boolean }>("/config/cash-payment", { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  createCashVoucher: (body: { amount: number; customerName?: string }) => request<any>("/vouchers/cash", { method: "POST", body: JSON.stringify(body) }),
   getVouchers: () => request<any[]>("/vouchers"),
   createVoucher: (body: Record<string, unknown>) => request<any>("/vouchers", { method: "POST", body: JSON.stringify(body) }),
   updateVoucher: (id: string, body: Record<string, unknown>) => request<any>(`/vouchers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -68,4 +80,5 @@ export const api = {
   createPackage: (body: Record<string, unknown>) => request<any>("/packages", { method: "POST", body: JSON.stringify(body) }),
   updatePackage: (id: string, body: Record<string, unknown>) => request<any>(`/packages/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deletePackage: (id: string) => request<void>(`/packages/${id}`, { method: "DELETE" }),
+  deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };

@@ -1,9 +1,12 @@
 // STUDIODO — Electron main process
 // Dual window: kiosk (fullscreen, customer-facing) + dashboard (admin, windowed)
+require("dotenv").config();
 const { app, BrowserWindow, ipcMain, globalShortcut, screen, dialog } = require("electron");
 const { spawn } = require("child_process");
 const http = require("http");
 const { startCanonBridge, stopCanonBridge } = require("./canon-bridge.cjs");
+const { startDigicamBridge, stopDigicamBridge } = require("./digicam-bridge.cjs");
+const { listPrinters, printImage } = require("./print.cjs");
 const path = require("path");
 
 const isDev = process.env.NODE_ENV === "development";
@@ -86,6 +89,11 @@ function createKioskWindow() {
 }
 
 function createAdminWindow() {
+  if (adminWin && !adminWin.isDestroyed()) {
+    adminWin.show();
+    adminWin.focus();
+    return;
+  }
   adminWin = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -100,9 +108,16 @@ function createAdminWindow() {
   adminWin.on("closed", () => (adminWin = null));
 }
 
+function openAdminWindow() {
+  createAdminWindow();
+}
+
 app.whenReady().then(() => {
   startPackagedServer();
   startCanonBridge();
+  if (process.env.DIGICAM_BRIDGE_ENABLED !== "false") {
+    startDigicamBridge();
+  }
   const ready = isDev ? Promise.resolve() : waitForServer();
   ready.then(createKioskWindow).catch((error) => {
     console.error("[STUDIODO] gagal memulai server:", error);
@@ -111,17 +126,21 @@ app.whenReady().then(() => {
       `${error instanceof Error ? error.message : "Server lokal gagal dimulai."}\n\nPastikan PostgreSQL/DATABASE_URL sudah tersedia.`
     );
     app.quit();
+    kioskWin.webContents.on("before-input-event", (event, input) => {
+      const isAdminShortcut = input.type === "keyDown"
+        && input.key.toLowerCase() === "a"
+        && input.control
+        && (input.shift || input.alt);
+      if (isAdminShortcut) {
+        event.preventDefault();
+        openAdminWindow();
+      }
+    });
   });
 
   // Secret combo to open/reveal admin dashboard on top of the kiosk
-  globalShortcut.register("Control+Shift+A", () => {
-    if (adminWin) {
-      adminWin.show();
-      adminWin.focus();
-    } else {
-      createAdminWindow();
-    }
-  });
+  globalShortcut.register("Control+Shift+A", openAdminWindow);
+  globalShortcut.register("Control+Alt+A", openAdminWindow);
 
   // Escape kiosk mode for setup/debugging (dev convenience — disable/gate in production build)
   globalShortcut.register("Control+Shift+Q", () => {
@@ -140,6 +159,7 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   stopCanonBridge();
+  stopDigicamBridge();
   if (serverProcess && !serverProcess.killed) serverProcess.kill();
 });
 
@@ -151,3 +171,22 @@ ipcMain.handle("app:relaunchKiosk", () => {
 ipcMain.handle("canon:bridgeStatus", () => ({
   configured: Boolean(process.env.STUDIODO_CANON_BRIDGE) || Boolean(process.resourcesPath),
 }));
+ipcMain.handle("digicam:bridgeStatus", () => ({
+  enabled: process.env.DIGICAM_BRIDGE_ENABLED !== "false",
+  port: Number(process.env.DIGICAM_BRIDGE_PORT || 5510),
+}));
+ipcMain.handle("print:listPrinters", async () => {
+  try {
+    return { ok: true, printers: await listPrinters() };
+  } catch (error) {
+    return { ok: false, printers: [], error: error instanceof Error ? error.message : "Gagal membaca daftar printer" };
+  }
+});
+ipcMain.handle("print:image", async (_event, payload) => {
+  try {
+    await printImage(payload);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Print gagal" };
+  }
+});

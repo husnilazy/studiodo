@@ -22,10 +22,18 @@ export interface PhotoSticker {
   scale: number;
 }
 
+export interface PhotoEdit {
+  zoom: number;
+  rotation: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 interface KioskSessionState {
   sessionId: string | null;
   selectedPackage: Package | null;
   orientation: Orientation;
+  mirrorLiveView: boolean;
   filter: CameraFilter;
   colorCorrection: ColorCorrection;
   frameId: string | null;
@@ -39,12 +47,14 @@ interface KioskSessionState {
   mediaUrl: string | null;
   mediaUrls: string[];
   photoUrls: string[];
+  photoEdits: Record<number, PhotoEdit>;
   currentSlot: number;
   retakeCounts: Record<number, number>;
 
   setSessionId: (id: string) => void;
   setPackage: (pkg: Package) => void;
   setOrientation: (o: Orientation) => void;
+    setMirrorLiveView: (mirror: boolean) => void;
   setFilter: (f: CameraFilter) => void;
   setColorCorrection: (value: ColorCorrection) => void;
   setFrameId: (id: string | null) => void;
@@ -55,6 +65,7 @@ interface KioskSessionState {
   setTemplatePhotoMap: (map: Record<number, number>) => void;
   setSelectedExtras: (extras: { id: string; name: string; price: number }[]) => void;
   setMediaUrl: (url: string) => void;
+  setPhotoEdit: (slot: number, edit: PhotoEdit) => void;
   beginSessionTimer: () => void;
   setPhotoAtSlot: (slot: number, url: string) => void;
   setCurrentSlot: (slot: number) => void;
@@ -66,6 +77,7 @@ const initial = {
   sessionId: null,
   selectedPackage: null,
   orientation: "portrait" as Orientation,
+    mirrorLiveView: true,
   filter: "normal" as CameraFilter,
   colorCorrection: { brightness: 100, contrast: 100, saturation: 100 },
   frameId: null,
@@ -79,6 +91,7 @@ const initial = {
   mediaUrl: null,
   mediaUrls: [] as string[],
   photoUrls: [] as string[],
+  photoEdits: {},
   currentSlot: 0,
   retakeCounts: {},
 };
@@ -88,6 +101,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
   setSessionId: (id) => set({ sessionId: id }),
   setPackage: (pkg) => set({ selectedPackage: pkg }),
   setOrientation: (o) => set({ orientation: o }),
+    setMirrorLiveView: (mirrorLiveView) => set({ mirrorLiveView }),
   setFilter: (f) => set({ filter: f }),
   setColorCorrection: (colorCorrection) => set({ colorCorrection }),
   setFrameId: (id) => set({ frameId: id }),
@@ -98,6 +112,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
   setTemplatePhotoMap: (templatePhotoMap) => set({ templatePhotoMap }),
   setSelectedExtras: (selectedExtras) => set({ selectedExtras }),
   setMediaUrl: (mediaUrl) => set((state) => ({ mediaUrl, mediaUrls: [...state.mediaUrls, mediaUrl] })),
+  setPhotoEdit: (slot, edit) => set((state) => ({ photoEdits: { ...state.photoEdits, [slot]: edit } })),
   beginSessionTimer: () => set((state) => ({ sessionStartedAt: state.sessionStartedAt ?? Date.now() })),
   setPhotoAtSlot: (slot, url) =>
     set((s) => {
@@ -112,7 +127,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
     set((state) => ({ retakeCounts: { ...state.retakeCounts, [slot]: current + 1 } }));
     return true;
   },
-  resetSession: () => set({ ...initial, photoUrls: [], templatePhotoMap: {} }),
+  resetSession: () => set({ ...initial, photoUrls: [], photoEdits: {}, templatePhotoMap: {} }),
 }));
 
 export const FILTER_LABELS: Record<CameraFilter, string> = {

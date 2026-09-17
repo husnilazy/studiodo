@@ -14,7 +14,6 @@ import ShareGallery from "@/pages/ShareGallery";
 import CustomerManagement from "@/pages/CustomerManagement";
 import AdminDashboard from "@/pages/AdminDashboard";
 import FrameManagement from "@/pages/FrameManagement";
-import KioskCustomizer from "@/pages/KioskCustomizer";
 import { AnimatePresence, motion } from "framer-motion";
 
 function AnimatedRoutes() {
@@ -41,7 +40,7 @@ function AnimatedRoutes() {
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/customers" component={CustomerManagement} />
           <Route path="/admin/frames" component={FrameManagement} />
-          <Route path="/admin/customizer" component={KioskCustomizer} />
+          <Route path="/admin/customizer">{() => { window.location.hash = "#/admin"; return null; }}</Route>
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>
             <div className="flex h-full items-center justify-center text-white/50">Halaman tidak ditemukan</div>

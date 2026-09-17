@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, FILTER_CSS, FILTER_LABELS, type CameraFilter } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
-import { captureFromTether } from "@/lib/camera";
+import { captureFromTether, focusTetherCamera } from "@/lib/camera";
 import { renderTemplate } from "@/lib/output";
 import { useTemplateLibrary } from "@/lib/templateStore";
+import { isBrowserOnline } from "@/lib/offlineStore";
 
 const VIBE_GRADIENTS: Record<string, string> = {
   Electric: "linear-gradient(135deg, #7C3AED, #06B6D4)",
@@ -20,6 +21,42 @@ const VIBE_GRADIENTS: Record<string, string> = {
 const CAMERA_WARMUP_MS = 2800;
 const FILTER_ORDER: CameraFilter[] = ["normal", "bw", "warm", "cool", "vintage", "fade", "vivid"];
 
+/** Overlay yang muncul begitu timer sesi habis.
+ *  Auto-redirect ke /preview setelah 3 detik. */
+function TimerExpiredOverlay({ onSkip }: { onSkip: () => void }) {
+  const [countdown, setCountdown] = useState(3);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((n) => {
+        if (n <= 1) {
+          clearInterval(interval);
+          onSkip();
+          return 0;
+        }
+        return n - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [onSkip]);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 backdrop-blur-sm">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/20 ring-1 ring-red-400/40">
+        <span className="font-display text-3xl font-bold text-red-300">{countdown}</span>
+      </div>
+      <div className="text-center">
+        <p className="font-display text-2xl font-semibold text-white">Waktu sesi habis</p>
+        <p className="mt-1 text-white/50">Melanjutkan ke preview dalam {countdown} detik...</p>
+      </div>
+      <button
+        className="pointer-events-auto rounded-2xl bg-accent px-8 py-3 font-semibold text-white shadow-lg shadow-accent/30"
+        onClick={onSkip}
+      >
+        Lanjut sekarang →
+      </button>
+    </div>
+  );
+}
+
 export default function SesiFoto() {
   const [, navigate] = useLocation();
   const config = useBoothConfig((s) => s.config);
@@ -27,6 +64,7 @@ export default function SesiFoto() {
     sessionId,
     selectedPackage,
     orientation,
+      mirrorLiveView,
     filter,
     setFilter,
     photoUrls,
@@ -45,12 +83,16 @@ export default function SesiFoto() {
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
+  const captureLockRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [focusing, setFocusing] = useState(false);
+  const [capturedSlot, setCapturedSlot] = useState<number | null>(null);
+  const [liveViewUrl, setLiveViewUrl] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(config.sessionTimerMinutes * 60);
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
@@ -106,6 +148,25 @@ export default function SesiFoto() {
   }, [config.cameraMode, selectedPackage, sessionId]);
 
   useEffect(() => {
+    if (config.cameraMode !== "tether") return;
+    const controller = new AbortController();
+    const bridgeUrl = config.tetherBridgeUrl.replace(/\/$/, "");
+
+    const refreshLiveView = async () => {
+      while (!controller.signal.aborted) {
+        setLiveViewUrl(`${bridgeUrl}/liveview.jpg?ts=${Date.now()}`);
+        await new Promise((resolve) => window.setTimeout(resolve, 140));
+      }
+    };
+
+    refreshLiveView();
+    return () => {
+      controller.abort();
+      setLiveViewUrl(null);
+    };
+  }, [config.cameraMode, config.tetherBridgeUrl]);
+
+  useEffect(() => {
     if (!template || !templateCanvasRef.current) return;
     renderTemplate(photoUrls, template, templateCanvasRef.current, [], {}, filter, templatePhotoMap).catch((error) => {
       console.error("Preview frame live gagal", error);
@@ -122,12 +183,42 @@ export default function SesiFoto() {
     osc.stop(ctx.currentTime + 0.12);
   };
 
+  const playShutter = () => {
+    if (!config.beepEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // First click — mechanical shutter
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "square";
+      osc1.frequency.value = 180;
+      gain1.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.07);
+      // Second pop — mirror bounce
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.value = 320;
+      gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.06);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.06);
+      osc2.stop(ctx.currentTime + 0.18);
+    } catch (_) {/* silent fail if AudioContext unavailable */}
+  };
+
   const capture = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !sessionId) return false;
 
+    playShutter();
     setFlash(true);
-    setTimeout(() => setFlash(false), 400);
+    setTimeout(() => setFlash(false), 500);
 
     let blob: Blob;
     if (config.cameraMode === "tether") {
@@ -154,7 +245,12 @@ export default function SesiFoto() {
     try {
       const localUrl = URL.createObjectURL(blob);
       setPhotoAtSlot(currentSlot, localUrl); // optimistic preview
-      await api.uploadPhoto(sessionId, currentSlot, blob);
+      if (isBrowserOnline() && !sessionId.startsWith("offline-")) {
+        await api.uploadPhoto(sessionId, currentSlot, blob);
+      }
+      // Show capture success toast
+      setCapturedSlot(currentSlot);
+      setTimeout(() => setCapturedSlot(null), 1600);
     } catch (err) {
       console.error("Gagal mengambil foto", err);
       setCameraError(err instanceof Error ? err.message : "Gagal mengambil foto dari kamera.");
@@ -181,9 +277,11 @@ export default function SesiFoto() {
       const blob = new Blob(recordingChunksRef.current, { type: mimeType });
       const kind = selectedPackage?.hasVideo ? "video" : "gif";
       try {
-        const result = await api.uploadMedia(sessionId!, kind, blob);
-        const mediaUrl = result.videoUrl ?? result.gifUrl;
-        if (mediaUrl) setMediaUrl(mediaUrl);
+        if (isBrowserOnline() && !sessionId!.startsWith("offline-")) {
+          const result = await api.uploadMedia(sessionId!, kind, blob);
+          const mediaUrl = result.videoUrl ?? result.gifUrl;
+          if (mediaUrl) setMediaUrl(mediaUrl);
+        }
       } catch (error) {
         console.error("Gagal upload klip media", error);
       }
@@ -198,7 +296,15 @@ export default function SesiFoto() {
   };
 
   const startCountdown = () => {
-    if (!cameraReady || countdown !== null || remainingSeconds <= 0) return;
+    if (!cameraReady || countdown !== null || remainingSeconds <= 0 || captureLockRef.current) return;
+    captureLockRef.current = true;
+    setCameraError(null);
+    if (config.cameraMode === "tether") {
+      setFocusing(true);
+      focusTetherCamera(config.tetherBridgeUrl)
+        .catch((error) => setCameraError(error instanceof Error ? error.message : "Autofocus kamera gagal."))
+        .finally(() => setFocusing(false));
+    }
     let n = config.countdownSeconds;
     setCountdown(n);
     playBeep();
@@ -208,7 +314,12 @@ export default function SesiFoto() {
       if (n <= 0) {
         clearInterval(interval);
         setCountdown(null);
-        capture().finally(stopClipRecording);
+        capture().catch((error) => {
+          setCameraError(error instanceof Error ? error.message : "Gagal mengambil foto dari kamera.");
+        }).finally(() => {
+          captureLockRef.current = false;
+          stopClipRecording();
+        });
       } else {
         setCountdown(n);
         playBeep();
@@ -279,13 +390,27 @@ export default function SesiFoto() {
                 </div>
               )}
               {config.cameraMode === "tether" ? (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-black px-8 text-center">
-                  <span className="text-4xl">📷</span>
-                  <span className="font-display text-xl">Canon DSLR siap</span>
-                  <span className="text-sm text-white/50">Tekan tombol capture untuk mengambil foto melalui bridge tether.</span>
+                <div className="relative h-full w-full bg-black">
+                  <img
+                    src={liveViewUrl ?? undefined}
+                    alt="Live view kamera Canon"
+                    className="h-full w-full object-contain"
+                    style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
+                  />
+                  <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-emerald-300/40 bg-black/60 px-3 py-1 text-xs text-emerald-200 backdrop-blur-sm">
+                    LIVE VIEW
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => useKioskSession.getState().setMirrorLiveView(!useKioskSession.getState().mirrorLiveView)}
+                    className="absolute right-4 top-4 z-20 rounded-xl border border-white/20 bg-black/65 px-3 py-2 text-xs font-semibold text-white backdrop-blur-sm transition hover:border-accent hover:bg-black/80"
+                    aria-pressed={mirrorLiveView}
+                  >
+                    Mirror {mirrorLiveView ? "On" : "Off"}
+                  </button>
                 </div>
               ) : (
-                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ filter: FILTER_CSS[filter] }} />
+                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ filter: FILTER_CSS[filter], transform: mirrorLiveView ? "scaleX(-1)" : undefined }} />
               )}
               {flash && <div className="pointer-events-none absolute inset-0 animate-flash bg-white" />}
               <motion.button
@@ -301,7 +426,7 @@ export default function SesiFoto() {
                     <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="3" />
                     <circle cx="50" cy="50" r="44" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeDasharray="276" strokeDashoffset={276 * (1 - countdown / Math.max(1, config.countdownSeconds))} transform="rotate(-90 50 50)" />
                   </svg>
-                ) : <span className="h-4 w-4 rounded-full border border-white/90 bg-white/10" />}
+                ) : <span className={`h-4 w-4 rounded-full border border-white/90 bg-white/10 ${focusing ? "animate-pulse" : ""}`} />}
                 {countdown !== null && <span className="relative text-2xl font-semibold text-white">{countdown}</span>}
               </motion.button>
             </div>
@@ -318,8 +443,36 @@ export default function SesiFoto() {
         <section className="order-3 flex min-h-0 h-full flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-black/20 p-3 backdrop-blur-xl"><div className="flex items-center justify-between"><div><p className="eyebrow mb-1">LIVE COMPOSITION</p><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[10px] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-white/45">Foto otomatis masuk ke frame pilihan.</p>{template ? <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/10 bg-black/30 p-3"><canvas ref={templateCanvasRef} className="max-h-full max-w-full rounded-xl object-contain" /></div> : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-white/15 text-xs text-white/35">Frame belum dipilih</div>}</section>
       </div>
       {remainingSeconds <= 0 && (
-        <p className="relative z-10 mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-sm text-red-200">Waktu sesi habis. Lanjutkan ke preview.</p>
+        <TimerExpiredOverlay onSkip={() => navigate("/preview")} />
       )}
+
+      {/* Capture success toast */}
+      <AnimatePresence>
+        {capturedSlot !== null && (
+          <motion.div
+            key={capturedSlot}
+            initial={{ opacity: 0, scale: 0.85, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-3"
+          >
+            <motion.div
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: [0.7, 1.15, 1], opacity: [0, 1, 1] }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/20 ring-4 ring-emerald-400/40 shadow-2xl shadow-emerald-400/20"
+            >
+              <span className="text-3xl">✓</span>
+            </motion.div>
+            <div className="rounded-2xl border border-emerald-400/30 bg-black/80 px-5 py-3 text-center backdrop-blur-md shadow-2xl">
+              <p className="font-display text-lg font-bold text-emerald-300">Foto ke-{capturedSlot + 1} berhasil! ✨</p>
+              <p className="text-xs text-white/50 mt-0.5">{capturedSlot + 1} dari {totalPhotos} foto diambil</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <canvas ref={canvasRef} className="hidden" />
 
     </div>

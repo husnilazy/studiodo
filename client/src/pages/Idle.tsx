@@ -21,11 +21,12 @@ export default function Idle() {
       className="kinetic-page relative flex h-full w-full cursor-pointer flex-col items-center justify-center overflow-hidden px-6"
       onClick={() => navigate("/paket")}
     >
-      {/* Ambient animated gradient background */}
       <div
-        className="absolute inset-0 bg-[length:200%_200%] animate-gradient opacity-70"
+        className={`absolute inset-0 bg-[length:200%_200%] ${config.animationsEnabled && config.backgroundGradientEnabled ? "animate-gradient" : ""} opacity-70`}
         style={{
-          backgroundImage: `radial-gradient(circle at 30% 30%, var(--accent, #7C3AED) 0%, transparent 55%), radial-gradient(circle at 70% 70%, #0d0d12 0%, #07070a 70%)`,
+          backgroundImage: config.backgroundGradientEnabled
+            ? `radial-gradient(circle at 30% 30%, ${config.accentColor} 0%, transparent 55%), linear-gradient(135deg, ${config.backgroundGradientStart}, ${config.backgroundGradientEnd})`
+            : "none",
         }}
       />
       {config.idleCoverUrl && config.idleCoverType === "image" && <img src={config.idleCoverUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45" />}
@@ -33,7 +34,7 @@ export default function Idle() {
       <div className="absolute inset-0 bg-black/35" />
 
       {config.logoUrl && (
-        <img src={config.logoUrl} alt={config.brandName} className="relative z-10 mb-6 h-20 object-contain" />
+        <img src={config.logoUrl} alt={config.brandName} className="relative z-10 mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
       )}
 
       <motion.h1

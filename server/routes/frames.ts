@@ -17,7 +17,7 @@ framesRouter.get("/", async (req, res) => {
   const merged = [
     ...customTemplates
       .filter((t) => t.orientation === orientation)
-      .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: t.frameImageUrl, slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight })),
+      .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: t.frameImageUrl, slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation })),
     ...overlays
       .filter((o) => o.orientation === orientation)
       .map((o) => ({ id: o.id, kind: "overlay" as const, name: o.name, imageUrl: o.imageUrl })),
@@ -50,4 +50,12 @@ framesRouter.post("/", async (req, res) => {
     imageUrl: row.frameImageUrl,
     slots: row.slots,
   });
+});
+
+// DELETE /api/frames/:id — admin: hapus frame dari server
+framesRouter.delete("/:id", async (req, res) => {
+  const id = String(req.params.id);
+  const [deleted] = await db.delete(templates).where(eq(templates.id, id)).returning();
+  if (!deleted) return res.status(404).json({ error: "Frame tidak ditemukan" });
+  res.json({ ok: true, id: deleted.id });
 });

@@ -66,6 +66,16 @@ body,
   transition-duration: 0s !important;
 }
 
+[data-background-style="solid"] .kinetic-orb,
+[data-background-gradient="false"] .kinetic-orb {
+  display: none;
+}
+
+.keyboard-panel {
+  transform-origin: bottom center;
+  transition: transform 220ms ease, width 220ms ease;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -34,6 +34,10 @@ export const vouchers = pgTable("vouchers", {
   active: boolean("active").notNull().default(true),
   startsAt: timestamp("starts_at"),
   expiresAt: timestamp("expires_at"),
+  voucherType: text("voucher_type").notNull().default("discount"), // 'discount' | 'cash'
+  cashAmount: numeric("cash_amount", { precision: 12, scale: 2 }),
+  invoiceNumber: text("invoice_number"),
+  customerName: text("customer_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -45,6 +49,9 @@ export const sessions = pgTable("sessions", {
   paymentMethod: text("payment_method").notNull().default("qris"), // 'qris' | 'voucher'
   paymentStatus: text("payment_status").notNull().default("pending"), // pending | success | expired | failed
   selectedExtras: jsonb("selected_extras").$type<{ id: string; name: string; price: number }[]>().notNull().default([]),
+  additionalPrintsPaid: integer("additional_prints_paid").notNull().default(0),
+  additionalPrintsPending: integer("additional_prints_pending").notNull().default(0),
+  paymentPurpose: text("payment_purpose").notNull().default("session"), // 'session' | 'additional_print'
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }),
   voucherCode: text("voucher_code"),
   xenditInvoiceId: text("xendit_invoice_id"),
@@ -108,8 +115,13 @@ export const boothConfig = pgTable("booth_config", {
   cameraMode: text("camera_mode").notNull().default("webcam"), // 'webcam' | 'tether'
   tetherBridgeUrl: text("tether_bridge_url"),
   qrisEnabled: boolean("qris_enabled").notNull().default(true),
+  cashPaymentEnabled: boolean("cash_payment_enabled").notNull().default(false),
   xenditSecretKey: text("xendit_secret_key"),
   xenditWebhookToken: text("xendit_webhook_token"),
+  additionalPrintEnabled: boolean("additional_print_enabled").notNull().default(true),
+  additionalPrintLabel: text("additional_print_label").notNull().default("Tambah print 4R"),
+  additionalPrintPrice: numeric("additional_print_price", { precision: 12, scale: 2 }).notNull().default("15000"),
+  additionalPrintMax: integer("additional_print_max").notNull().default(5),
   stripLayout: text("strip_layout").notNull().default("classic-vertical"),
   stripTemplate: text("strip_template").notNull().default("solid"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

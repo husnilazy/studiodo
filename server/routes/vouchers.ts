@@ -2,8 +2,33 @@ import { Router } from "express";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { vouchers } from "../db/schema.js";
+import { boothConfig } from "../db/schema.js";
+import crypto from "node:crypto";
 
 export const vouchersRouter = Router();
+
+vouchersRouter.post("/cash", async (req, res) => {
+  const amount = Math.round(Number(req.body.amount) || 0);
+  const customerName = String(req.body.customerName ?? "").trim().slice(0, 100) || null;
+  const [config] = await db.select({ enabled: boothConfig.cashPaymentEnabled }).from(boothConfig).where(eq(boothConfig.boothId, "default"));
+  if (!config?.enabled) return res.status(403).json({ error: "Pembayaran cash belum diaktifkan" });
+  if (amount <= 0) return res.status(400).json({ error: "Nominal cash harus lebih dari nol" });
+  const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase();
+  const code = `CASH-${suffix}`;
+  const invoiceNumber = `CASH-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${suffix}`;
+  const [row] = await db.insert(vouchers).values({
+    code,
+    voucherType: "cash",
+    discountType: "free",
+    discountValue: "0",
+    cashAmount: amount.toFixed(2),
+    invoiceNumber,
+    customerName,
+    maxUses: 1,
+    active: true,
+  }).returning();
+  res.status(201).json(row);
+});
 
 vouchersRouter.get("/", async (_req, res) => {
   res.json(await db.select().from(vouchers).orderBy(asc(vouchers.createdAt)));

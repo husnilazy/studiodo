@@ -1,15 +1,99 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 import { OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate, type OutputPreset, type TemplateCategory } from "@/lib/templateStore";
 import type { Orientation } from "@/lib/sessionStore";
 import TemplateEditor from "@/components/TemplateEditor";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { api } from "@/lib/api";
+import { checkTetherBridge, type TetherBridgeHealth } from "@/lib/camera";
+import { renderPhotoStrip, STRIP_LAYOUT_LABELS, STRIP_TEMPLATE_LABELS } from "@/lib/stripRenderer";
 import { Link } from "wouter";
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
 const sectionClass = "rounded-2xl border border-white/10 bg-ink-900/70 p-5";
+type AdminSection = "kiosk" | "camera" | "frames" | "payments" | "printing";
+type PreviewStage = "idle" | "packages" | "payment" | "capture" | "preview" | "frame" | "result";
+
+const previewStages: { value: PreviewStage; label: string; hint: string }[] = [
+  { value: "idle", label: "Awal", hint: "Customer mulai dari layar pembuka." },
+  { value: "packages", label: "Paket", hint: "Customer memilih paket foto." },
+  { value: "payment", label: "Bayar", hint: "Customer menyelesaikan pembayaran." },
+  { value: "capture", label: "Sesi foto", hint: "Customer mengikuti arahan pengambilan foto." },
+  { value: "preview", label: "Edit", hint: "Customer memeriksa dan mengedit hasil." },
+  { value: "frame", label: "Frame", hint: "Customer memilih frame favorit." },
+  { value: "result", label: "Hasil", hint: "Customer mengunduh atau mencetak hasil." },
+];
+
+function KioskPreview({ config }: { config: BoothConfig }) {
+  const [stage, setStage] = useState<PreviewStage>("idle");
+  const [ratio, setRatio] = useState<"portrait" | "landscape" | "square">("portrait");
+  const [buttonSize, setButtonSize] = useState<"small" | "medium" | "large">("medium");
+  const stageInfo = previewStages.find((item) => item.value === stage) ?? previewStages[0];
+  const buttonRadius = config.buttonStyle === "pill" ? "999px" : config.buttonStyle === "square" ? "4px" : "14px";
+  const compact = config.kioskDensity === "compact";
+  const previewFrame = ratio === "portrait" ? "aspect-[3/4]" : ratio === "landscape" ? "aspect-[16/10]" : "aspect-square";
+  const buttonPadding = buttonSize === "small" ? "px-3 py-1.5 text-[10px]" : buttonSize === "large" ? "px-5 py-3 text-sm" : "px-4 py-2 text-xs";
+  const previewButton = { borderRadius: buttonRadius, backgroundColor: config.accentColor, color: config.textColor };
+
+  return (
+    <aside className="lg:sticky lg:top-6 lg:self-start">
+      <div className="overflow-hidden rounded-2xl border border-accent/30 bg-black/60 shadow-2xl shadow-black/30">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div>
+            <p className="eyebrow">LIVE PREVIEW</p>
+            <h2 className="font-display text-lg font-semibold">Kiosk Preview</h2>
+          </div>
+          <span className="rounded-full border border-emerald-300/30 px-2 py-1 text-[10px] text-emerald-200">Draft</span>
+        </div>
+        <div className="border-b border-white/10 p-3">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/40">Rasio layar</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["portrait", "landscape", "square"] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setRatio(value)} className={`rounded-lg border px-2 py-2 text-xs ${ratio === value ? "border-accent bg-accent/15 text-white" : "border-white/10 text-white/50"}`}>
+                {value === "portrait" ? "Portrait" : value === "landscape" ? "Landscape" : "Square"}
+              </button>
+            ))}
+          </div>
+          <p className="mb-2 mt-3 text-[11px] uppercase tracking-[0.16em] text-white/40">Ukuran tombol</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["small", "medium", "large"] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setButtonSize(value)} className={`rounded-lg border px-2 py-2 text-xs ${buttonSize === value ? "border-accent bg-accent/15 text-white" : "border-white/10 text-white/50"}`}>
+                {value === "small" ? "Kecil" : value === "medium" ? "Normal" : "Besar"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="border-b border-white/10 p-3">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/40">Alur customer</p>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {previewStages.map((item, index) => (
+              <button key={item.value} type="button" onClick={() => setStage(item.value)} className={`min-w-14 rounded-lg border px-2 py-2 text-[10px] ${stage === item.value ? "border-accent bg-accent/15 text-white" : "border-white/10 text-white/45"}`}>
+                <span className="block text-[9px] text-white/35">0{index + 1}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={`mx-auto my-5 flex ${previewFrame} w-[calc(100%-28px)] max-w-[440px] flex-col overflow-hidden border border-white/15 bg-[var(--kiosk-background)] shadow-2xl shadow-black/40`} style={{ color: config.textColor, fontFamily: config.fontFamily }}>
+          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[9px] text-white/45">
+            <span>{config.brandName || "STUDIODO"}</span><span>{stageInfo.label}</span>
+          </div>
+          <div className={`flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center ${compact ? "gap-3" : "gap-5"}`}>
+            {stage === "idle" && <><span className="text-[9px] uppercase tracking-[0.2em] text-accent">{config.tagline}</span><h3 className="font-display text-2xl font-bold">{config.idleHeadline}</h3><p className="text-[10px] text-white/50">{config.idleSubheadline}</p><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>{config.idleStartText}</button></>}
+            {stage === "packages" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">01 / SELECT YOUR MOMENT</p><h3 className="font-display text-xl font-bold">{config.packageHeadline}</h3><div className="w-full space-y-2"><div className="rounded-lg border border-white/10 p-2 text-left"><p className="text-xs font-semibold">Basic</p><p className="mt-1 text-[9px] text-white/45">3 foto · Rp 50.000</p></div><button type="button" style={previewButton} className={`w-full ${buttonPadding} font-semibold`}>Pilih paket</button></div></>}
+            {stage === "payment" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">03 / SECURE CHECKOUT</p><h3 className="font-display text-xl font-bold">{config.paymentHeadline}</h3><div className="rounded-lg border border-white/10 px-5 py-4 text-[10px] text-white/55">QRIS PREVIEW</div><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>Saya sudah bayar</button></>}
+            {stage === "capture" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">PHOTO SESSION</p><h3 className="font-display text-xl font-bold">{config.captureHeadline}</h3><div className="flex w-full flex-1 items-center justify-center rounded-lg bg-black/70 text-2xl">📷</div><p className="text-[10px] text-white/50">Ikuti countdown, lalu tekan tombol capture.</p><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>Ambil foto</button></>}
+            {stage === "preview" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">04 / REVIEW</p><h3 className="font-display text-xl font-bold">{config.previewHeadline}</h3><div className="grid w-full flex-1 grid-cols-2 gap-1 rounded-lg bg-white/10 p-2"><div className="rounded bg-white/15" /><div className="rounded bg-white/15" /><div className="rounded bg-white/15" /><div className="rounded bg-white/15" /></div><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>Edit hasil</button></>}
+            {stage === "frame" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">05 / FRAME</p><h3 className="font-display text-xl font-bold">{config.frameHeadline}</h3><div className="flex w-1/2 flex-1 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-[10px] text-white/40">Frame PNG</div><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>Pilih frame</button></>}
+            {stage === "result" && <><p className="text-[9px] uppercase tracking-[0.2em] text-accent">06 / COMPLETE</p><h3 className="font-display text-xl font-bold">{config.resultHeadline}</h3><div className="flex w-1/2 flex-1 items-center justify-center rounded-lg bg-white/10 text-[10px] text-white/40">HASIL FOTO</div><button type="button" style={previewButton} className={`${buttonPadding} font-semibold`}>Download hasil</button></>}
+          </div>
+          <div className="border-t border-white/10 px-3 py-2 text-center text-[9px] text-white/35">{stageInfo.hint}</div>
+        </div>
+      </div>
+    </aside>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -39,6 +123,53 @@ function ColorField({
   );
 }
 
+function AdminLiveView({ bridgeUrl, enabled }: { bridgeUrl: string; enabled: boolean }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !bridgeUrl) {
+      setImageUrl(null);
+      return;
+    }
+    const controller = new AbortController();
+    let currentUrl: string | null = null;
+    const refresh = async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/liveview.jpg?ts=${Date.now()}`, { cache: "no-store", signal: controller.signal });
+          if (!response.ok) throw new Error(`Live view status ${response.status}`);
+          const nextUrl = URL.createObjectURL(await response.blob());
+          if (currentUrl) URL.revokeObjectURL(currentUrl);
+          currentUrl = nextUrl;
+          setImageUrl(nextUrl);
+        } catch (error) {
+          if (!controller.signal.aborted) console.error("Live view admin gagal diperbarui", error);
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+    };
+    refresh();
+    return () => {
+      controller.abort();
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      setImageUrl(null);
+    };
+  }, [bridgeUrl, enabled]);
+
+  return (
+    <section className={sectionClass}>
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="eyebrow">CAMERA MONITOR</p><h2 className="font-display text-xl font-semibold">Live view</h2></div>
+        {enabled && <span className="rounded-full border border-emerald-300/30 px-2 py-1 text-[10px] text-emerald-200">LIVE</span>}
+      </div>
+      <div className="mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/50">
+        {enabled && imageUrl ? <img src={imageUrl} alt="Live view kamera" className="h-full w-full object-contain" /> : <p className="px-5 text-center text-xs text-white/35">Aktifkan mode tether dan pastikan bridge kamera terhubung untuk melihat live view.</p>}
+      </div>
+      <p className="mt-3 text-xs text-white/40">Preview ini hanya memantau kamera. Pengambilan foto tetap dilakukan dari sesi kiosk.</p>
+    </section>
+  );
+}
+
 export default function AdminPlaceholder() {
   const { config, update, reset } = useBoothConfig();
   const { templates, addTemplate, updateTemplate, removeTemplate } = useTemplateLibrary();
@@ -46,7 +177,11 @@ export default function AdminPlaceholder() {
   const [saved, setSaved] = useState(false);
   const [paymentSaved, setPaymentSaved] = useState(false);
   const [paymentConfig, setPaymentConfig] = useState({ secretKey: "", webhookToken: "" });
-  const [paymentStatus, setPaymentStatus] = useState({ hasSecretKey: false, hasWebhookToken: false, demoMode: false });
+  const [paymentStatus, setPaymentStatus] = useState({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false });
+  const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
+  const [cashInvoiceDraft, setCashInvoiceDraft] = useState({ amount: "", customerName: "" });
+  const [cashInvoice, setCashInvoice] = useState<any | null>(null);
+  const [cashInvoiceError, setCashInvoiceError] = useState<string | null>(null);
   const [templateDraft, setTemplateDraft] = useState<LocalTemplate | null>(null);
   const [packages, setPackages] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -55,6 +190,43 @@ export default function AdminPlaceholder() {
   const [editingVoucher, setEditingVoucher] = useState<Record<string, string>>({});
   const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false });
   const [extraDrafts, setExtraDrafts] = useState<Record<string, { name: string; price: string }>>({});
+  const [bridgeHealth, setBridgeHealth] = useState<TetherBridgeHealth | null>(null);
+  const [bridgeChecking, setBridgeChecking] = useState(false);
+  const [printers, setPrinters] = useState<{ name: string; displayName: string; isDefault: boolean }[]>([]);
+  const [printersError, setPrintersError] = useState<string | null>(null);
+  const [testPrintStatus, setTestPrintStatus] = useState<"idle" | "printing" | "ok" | "error">("idle");
+  const [testPrintError, setTestPrintError] = useState<string | null>(null);
+  const [additionalPrintSaved, setAdditionalPrintSaved] = useState(false);
+  const [additionalPrintConfig, setAdditionalPrintConfig] = useState({ enabled: true, label: "Tambah print 4R", price: 15000, max: 5 });
+  const [activeSection, setActiveSection] = useState<AdminSection>("kiosk");
+  const stripPreviewRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = stripPreviewRef.current;
+    if (!canvas) return;
+    const placeholderPhotos = ["#f472b6", "#60a5fa", "#34d399", "#fbbf24", "#a78bfa", "#f87171"].map((color) => {
+      const c = document.createElement("canvas");
+      c.width = 400;
+      c.height = 300;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "bold 48px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("📷", c.width / 2, c.height / 2);
+      return c.toDataURL("image/jpeg", 0.8);
+    });
+    const photoCount = config.stripLayout === "classic-3cut" ? 3 : config.stripLayout === "grid-2x2" ? 4 : 6;
+    renderPhotoStrip(placeholderPhotos.slice(0, photoCount), canvas, {
+      accentColor: config.accentColor,
+      stripLayout: config.stripLayout,
+      stripTemplate: config.stripTemplate,
+      outputPreset: "4r",
+      filter: "normal",
+    }).catch((error) => console.error("Gagal render preview strip", error));
+  }, [config.stripLayout, config.stripTemplate, config.accentColor]);
   const set = <K extends keyof BoothConfig>(key: K, value: BoothConfig[K]) => {
     update({ [key]: value } as Partial<BoothConfig>);
     setSaved(false);
@@ -65,12 +237,79 @@ export default function AdminPlaceholder() {
     reader.readAsDataURL(file);
   };
 
+  const checkBridgeNow = async () => {
+    if (config.cameraMode !== "tether" || !config.tetherBridgeUrl) {
+      setBridgeHealth(null);
+      return;
+    }
+    setBridgeChecking(true);
+    const result = await checkTetherBridge(config.tetherBridgeUrl);
+    setBridgeHealth(result);
+    setBridgeChecking(false);
+  };
+  useEffect(() => {
+    checkBridgeNow();
+    if (config.cameraMode !== "tether" || !config.tetherBridgeUrl) return;
+    const interval = setInterval(checkBridgeNow, 5000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.cameraMode, config.tetherBridgeUrl]);
+
+  useEffect(() => {
+    if (!window.studiodo?.listPrinters) return;
+    window.studiodo.listPrinters().then((result) => {
+      if (result.ok) {
+        setPrinters(result.printers);
+        if (!config.printerName) {
+          const epsonPrinter = result.printers.find((printer) => /epson.*l8050|l8050.*epson/i.test(`${printer.name} ${printer.displayName}`));
+          if (epsonPrinter) set("printerName", epsonPrinter.name);
+        }
+      }
+      else setPrintersError(result.error ?? "Gagal membaca daftar printer");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runTestPrint = async () => {
+    if (!window.studiodo?.printImage) {
+      setTestPrintStatus("error");
+      setTestPrintError("Fitur cetak hanya tersedia di aplikasi desktop STUDIODO (Electron), bukan di browser biasa.");
+      return;
+    }
+    setTestPrintStatus("printing");
+    setTestPrintError(null);
+    const canvas = document.createElement("canvas");
+    canvas.width = 1200;
+    canvas.height = 1800;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = config.accentColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 72px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("TEST PRINT", canvas.width / 2, canvas.height / 2 - 40);
+    ctx.font = "40px sans-serif";
+    ctx.fillText(config.brandName, canvas.width / 2, canvas.height / 2 + 40);
+    ctx.font = "28px sans-serif";
+    ctx.fillText("4R · 10.2 x 15.2 cm", canvas.width / 2, canvas.height / 2 + 100);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const result = await window.studiodo.printImage({ dataUrl, printerName: config.printerName, copies: 1 });
+    if (result.ok) setTestPrintStatus("ok");
+    else {
+      setTestPrintStatus("error");
+      setTestPrintError(result.error ?? "Print gagal");
+    }
+  };
+
   const refreshPackages = () => api.getPackagesAll().then(setPackages).catch((error) => console.error("Gagal memuat paket", error));
   useEffect(() => { refreshPackages(); }, []);
   const refreshVouchers = () => api.getVouchers().then(setVouchers).catch((error) => console.error("Gagal memuat voucher", error));
   useEffect(() => { refreshVouchers(); }, []);
   useEffect(() => {
     api.getPaymentConfig().then(setPaymentStatus).catch((error) => console.error("Gagal memuat konfigurasi pembayaran", error));
+  }, []);
+  useEffect(() => {
+    api.getPrintingConfig().then(setAdditionalPrintConfig).catch((error) => console.error("Gagal memuat konfigurasi print tambahan", error));
   }, []);
 
   const savePaymentConfig = async () => {
@@ -82,6 +321,41 @@ export default function AdminPlaceholder() {
       hasSecretKey: Boolean(paymentConfig.secretKey.trim()) || state.hasSecretKey,
       hasWebhookToken: Boolean(paymentConfig.webhookToken.trim()) || state.hasWebhookToken,
     }));
+  };
+
+  const toggleCashPayment = async (enabled: boolean) => {
+    const result = await api.updateCashPaymentConfig(enabled);
+    setPaymentStatus((state) => ({ ...state, cashPaymentEnabled: result.enabled }));
+    setCashPaymentSaved(true);
+    window.setTimeout(() => setCashPaymentSaved(false), 1800);
+  };
+
+  const generateCashInvoice = async () => {
+    setCashInvoiceError(null);
+    try {
+      const invoice = await api.createCashVoucher({ amount: Number(cashInvoiceDraft.amount), customerName: cashInvoiceDraft.customerName });
+      setCashInvoice(invoice);
+      setCashInvoiceDraft({ amount: "", customerName: "" });
+    } catch (error) {
+      setCashInvoiceError(error instanceof Error ? error.message : "Gagal membuat invoice cash");
+    }
+  };
+
+  const printCashInvoice = () => {
+    if (!cashInvoice) return;
+    const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[character] ?? character));
+    const printWindow = window.open("", "studiodo-cash-invoice", "width=420,height=620");
+    if (!printWindow) return;
+    printWindow.document.write(`<html><head><title>${escapeHtml(cashInvoice.invoiceNumber)}</title><style>body{font-family:Arial,sans-serif;width:72mm;margin:0 auto;padding:8mm 4mm;color:#111}h1{text-align:center;font-size:18px;margin:0 0 8px}p{margin:5px 0;font-size:12px}.code{font-size:20px;font-weight:bold;letter-spacing:2px;text-align:center;border:1px dashed #111;padding:10px 4px;margin:14px 0}.total{font-size:16px;font-weight:bold;border-top:1px solid #111;padding-top:8px}</style></head><body><h1>STUDIODO</h1><p style="text-align:center">Invoice Pembayaran Cash</p><p>No: ${escapeHtml(cashInvoice.invoiceNumber)}</p><p>Customer: ${escapeHtml(cashInvoice.customerName || "-")}</p><p class="total">Total: Rp ${Number(cashInvoice.cashAmount).toLocaleString("id-ID")}</p><div class="code">${escapeHtml(cashInvoice.code)}</div><p style="text-align:center">Berikan kode ini ke customer untuk memulai sesi.</p></body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+  const saveAdditionalPrintConfig = async () => {
+    const savedConfig = await api.updatePrintingConfig(additionalPrintConfig);
+    setAdditionalPrintConfig(savedConfig);
+    setAdditionalPrintSaved(true);
+    window.setTimeout(() => setAdditionalPrintSaved(false), 1800);
   };
 
   const createPackage = async () => {
@@ -175,9 +449,11 @@ export default function AdminPlaceholder() {
     reader.readAsDataURL(file);
   };
 
+  const panelClass = (section: AdminSection, extra = "") => `${sectionClass} ${activeSection === section ? "" : "hidden"} ${extra}`;
+
   return (
     <div className="h-full overflow-y-auto px-6 py-8 text-[var(--kiosk-text)] md:px-10">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-[1500px]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-accent">STUDIODO Control Center</p>
@@ -199,8 +475,29 @@ export default function AdminPlaceholder() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          <section className={`${sectionClass} lg:col-span-2`}>
+        <nav className="mt-8 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-black/25 p-2 sm:grid-cols-5" aria-label="Kategori pengaturan admin">
+          {[
+            ["kiosk", "Tampilan kiosk", "Branding, idle screen, gaya UI"],
+            ["camera", "Kamera", "Capture, tether, live view"],
+            ["frames", "Frame & output", "Template, stiker, layout"],
+            ["payments", "Paket & pembayaran", "Paket, voucher, QRIS"],
+            ["printing", "Printer", "Cetak otomatis dan printer"],
+          ].map(([value, label, description]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveSection(value as AdminSection)}
+              className={`rounded-xl px-3 py-3 text-left transition ${activeSection === value ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
+            >
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className={`mt-1 block text-[11px] ${activeSection === value ? "text-white/75" : "text-white/35"}`}>{description}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="mt-5 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_500px] xl:gap-8">
+          <div className="grid items-start gap-5 lg:grid-cols-2">
+          <section className={panelClass("payments", "lg:col-span-2")}>
             <h2 className="font-display text-xl font-semibold">Paket & Extra Cetak</h2>
             <div className="mt-4 grid gap-2 md:grid-cols-[1fr_140px_100px_auto_auto_auto]">
               <input className={inputClass} placeholder="Nama paket" value={packageDraft.name} onChange={(e) => setPackageDraft({ ...packageDraft, name: e.target.value })} />
@@ -232,7 +529,7 @@ export default function AdminPlaceholder() {
               ))}
             </div>
           </section>
-          <section className={`${sectionClass} lg:col-span-2`}>
+          <section className={panelClass("kiosk", "lg:col-span-2")}>
             <h2 className="font-display text-xl font-semibold">Idle Screen & Pop-up Banner</h2>
             <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Atur tampilan default branding, cover foto/video, dan banner promo saat kiosk menunggu.</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -249,7 +546,7 @@ export default function AdminPlaceholder() {
               </Field>
             </div>
           </section>
-          <section className={`${sectionClass} lg:col-span-2`}>
+          <section className={panelClass("payments", "lg:col-span-2")}>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="eyebrow">PROMO CONTROL</p>
@@ -297,7 +594,7 @@ export default function AdminPlaceholder() {
               {vouchers.length === 0 && <p className="text-sm text-white/40">Belum ada voucher. Buat promo pertama untuk customer.</p>}
             </div>
           </section>
-          <section className={`${sectionClass} lg:col-span-2`}>
+          <section className={panelClass("payments", "lg:col-span-2")}>
             <h2 className="font-display text-xl font-semibold">Pembayaran QRIS Xendit</h2>
             <p className="mt-1 text-sm text-[var(--kiosk-muted)]">
               Kredensial disimpan di server dan tidak pernah dikirim kembali ke kiosk.
@@ -318,8 +615,23 @@ export default function AdminPlaceholder() {
                 {paymentStatus.demoMode ? "Mode demo aktif dari PAYMENT_DEMO_MODE." : paymentStatus.hasSecretKey ? "Mode Xendit aktif." : "Belum ada Secret Key; pembayaran belum siap."}
               </span>
             </div>
+            <div className="mt-6 border-t border-white/10 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h3 className="font-display text-lg font-semibold">Pembayaran Cash</h3><p className="mt-1 text-xs text-white/45">Admin menerima uang cash, lalu membuat invoice dan kode sekali pakai.</p></div>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={paymentStatus.cashPaymentEnabled} onChange={(event) => toggleCashPayment(event.target.checked)} /> Aktifkan cash {cashPaymentSaved && <span className="text-emerald-300">Tersimpan</span>}</label>
+              </div>
+              {paymentStatus.cashPaymentEnabled && <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <Field label="Nominal diterima"><input className={inputClass} type="number" min={1} placeholder="50000" value={cashInvoiceDraft.amount} onChange={(event) => setCashInvoiceDraft({ ...cashInvoiceDraft, amount: event.target.value })} /></Field>
+                  <Field label="Nama customer (opsional)"><input className={inputClass} placeholder="Nama customer" value={cashInvoiceDraft.customerName} onChange={(event) => setCashInvoiceDraft({ ...cashInvoiceDraft, customerName: event.target.value })} /></Field>
+                  <button type="button" onClick={generateCashInvoice} disabled={!cashInvoiceDraft.amount} className="mt-1 self-end rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-40">Generate invoice</button>
+                </div>
+                {cashInvoiceError && <p className="mt-3 text-xs text-red-300">{cashInvoiceError}</p>}
+                {cashInvoice && <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-4"><div><p className="text-xs text-white/45">{cashInvoice.invoiceNumber}</p><p className="mt-1 text-2xl font-bold tracking-[0.16em] text-emerald-200">{cashInvoice.code}</p><p className="mt-1 text-sm">Rp {Number(cashInvoice.cashAmount).toLocaleString("id-ID")} · {cashInvoice.customerName || "Tanpa nama"}</p></div><button type="button" onClick={printCashInvoice} className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:border-accent">Print struk kecil</button></div>}
+              </>}
+            </div>
           </section>
-          <section className={sectionClass}>
+          <section className={panelClass("kiosk")}>
             <h2 className="font-display text-xl font-semibold">Branding</h2>
             <div className="mt-4 space-y-4">
               <Field label="Nama brand">
@@ -341,9 +653,12 @@ export default function AdminPlaceholder() {
                 }} />
                 {config.logoUrl && <img src={config.logoUrl} className="mt-3 h-16 w-auto rounded-lg bg-white/10 p-2 object-contain" />}
               </Field>
+              <Field label={`Ukuran logo (${config.logoScale}%)`}>
+                <input type="range" min={60} max={180} value={config.logoScale} onChange={(e) => set("logoScale", Number(e.target.value))} className="mt-3 w-full accent-[var(--accent)]" />
+              </Field>
             </div>
           </section>
-          <section className={sectionClass}>
+          <section className={panelClass("frames")}>
             <h2 className="font-display text-xl font-semibold">Output & Capture</h2>
             <div className="mt-4 space-y-4">
               <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.outputPresetEnabled} onChange={(event) => set("outputPresetEnabled", event.target.checked)} /><span>Aktifkan pilihan ukuran output (4R, 2R, A4)</span></label>
@@ -354,7 +669,7 @@ export default function AdminPlaceholder() {
             </div>
           </section>
 
-          <section className={`${sectionClass} lg:col-span-2`}>
+          <section className={panelClass("frames", "lg:col-span-2")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-semibold">Frame PNG & Template</h2>
@@ -439,7 +754,7 @@ export default function AdminPlaceholder() {
             </div>
           </section>
 
-          <section className={`${sectionClass} lg:col-span-2`}>
+          <section className={panelClass("frames", "lg:col-span-2")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-semibold">Stiker PNG</h2>
@@ -462,11 +777,37 @@ export default function AdminPlaceholder() {
             </div>
           </section>
 
-          <section className={sectionClass}>
+          <section className={panelClass("frames", "lg:col-span-2")}>
+            <h2 className="font-display text-xl font-semibold">Layout & Visual Strip</h2>
+            <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Susunan foto (layout) dan tema warna/border (visual template) dipakai di halaman Hasil dan saat cetak.</p>
+            <div className="mt-4 grid gap-5 md:grid-cols-[280px_1fr]">
+              <div className="mx-auto w-full max-w-[220px]">
+                <canvas ref={stripPreviewRef} className="w-full rounded-xl border border-white/10 shadow-lg" />
+                <p className="mt-2 text-center text-xs text-white/40">Live preview (foto contoh)</p>
+              </div>
+              <div className="space-y-4">
+                <Field label="Layout foto">
+                  <select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
+                    {Object.entries(STRIP_LAYOUT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Visual template">
+                  <select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
+                    {Object.entries(STRIP_TEMPLATE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+                <p className="text-xs text-white/45">Warna aksen di visual template (Neon Glow, gradient, footer bar) mengikuti "Warna aksen" di bawah.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className={panelClass("kiosk")}>
             <h2 className="font-display text-xl font-semibold">Warna & Tipografi</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <ColorField label="Warna aksen" value={config.accentColor} onChange={(v) => set("accentColor", v)} />
               <ColorField label="Background kiosk" value={config.backgroundColor} onChange={(v) => set("backgroundColor", v)} />
+              <ColorField label="Gradient mulai" value={config.backgroundGradientStart} onChange={(v) => set("backgroundGradientStart", v)} />
+              <ColorField label="Gradient akhir" value={config.backgroundGradientEnd} onChange={(v) => set("backgroundGradientEnd", v)} />
               <ColorField label="Surface kartu" value={config.surfaceColor} onChange={(v) => set("surfaceColor", v)} />
               <ColorField label="Warna teks" value={config.textColor} onChange={(v) => set("textColor", v)} />
               <ColorField label="Teks sekunder" value={config.mutedTextColor} onChange={(v) => set("mutedTextColor", v)} />
@@ -482,7 +823,7 @@ export default function AdminPlaceholder() {
             </div>
           </section>
 
-          <section className={sectionClass}>
+          <section className={panelClass("kiosk")}>
             <h2 className="font-display text-xl font-semibold">Gaya UI Kiosk</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Bentuk tombol">
@@ -510,6 +851,13 @@ export default function AdminPlaceholder() {
                 <input type="checkbox" checked={config.animationsEnabled} onChange={(e) => set("animationsEnabled", e.target.checked)} />
                 <span className="text-sm text-white/70">Aktifkan animasi dan transisi</span>
               </label>
+              <label className="flex items-center gap-3 sm:col-span-2">
+                <input type="checkbox" checked={config.backgroundGradientEnabled} onChange={(e) => set("backgroundGradientEnabled", e.target.checked)} />
+                <span className="text-sm text-white/70">Aktifkan gradient background</span>
+              </label>
+              <Field label={`Ukuran virtual keyboard (${config.keyboardScale}%)`}>
+                <input type="range" min={80} max={140} value={config.keyboardScale} onChange={(e) => set("keyboardScale", Number(e.target.value))} className="mt-3 w-full accent-[var(--accent)]" />
+              </Field>
             </div>
             <div className="mt-5 rounded-xl border border-white/10 p-4" style={{ backgroundColor: "var(--kiosk-surface)" }}>
               <p className="text-sm text-[var(--kiosk-muted)]">Live preview</p>
@@ -520,7 +868,7 @@ export default function AdminPlaceholder() {
             </div>
           </section>
 
-          <section className={sectionClass}>
+          <section className={panelClass("camera")}>
             <h2 className="font-display text-xl font-semibold">Sesi Foto & Kamera</h2>
             <div className="mt-4 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -545,11 +893,81 @@ export default function AdminPlaceholder() {
               </Field>
               {config.cameraMode === "tether" && (
                 <Field label="URL tether bridge">
-                  <input className={inputClass} value={config.tetherBridgeUrl} onChange={(e) => set("tetherBridgeUrl", e.target.value)} placeholder="http://127.0.0.1:5513" />
+                  <div className="flex gap-2">
+                    <input className={`${inputClass} flex-1`} value={config.tetherBridgeUrl} onChange={(e) => set("tetherBridgeUrl", e.target.value)} placeholder="http://127.0.0.1:5510" />
+                    <button type="button" onClick={checkBridgeNow} className="mt-1 shrink-0 rounded-lg border border-white/15 px-3 text-xs text-white/60 hover:text-white">
+                      {bridgeChecking ? "Cek..." : "Cek koneksi"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs">
+                    {bridgeHealth === null ? (
+                      <span className="text-white/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
+                    ) : bridgeHealth.ok && bridgeHealth.digicamReachable ? (
+                      <span className="text-emerald-300">● Bridge aktif, digiCamControl terhubung ({bridgeHealth.digicamUrl})</span>
+                    ) : bridgeHealth.ok ? (
+                      <span className="text-amber-300">● Bridge aktif, tapi digiCamControl tidak terjangkau di {bridgeHealth.digicamUrl}. Pastikan digiCamControl sudah dibuka dan webserver-nya aktif (File &gt; Settings &gt; Webserver).</span>
+                    ) : (
+                      <span className="text-red-300">● Bridge tidak terjangkau: {bridgeHealth.error}</span>
+                    )}
+                  </p>
                 </Field>
               )}
             </div>
           </section>
+          {activeSection === "camera" && <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable)} />}
+
+          <section className={panelClass("printing")}>
+            <h2 className="font-display text-xl font-semibold">Cetak Otomatis</h2>
+            <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Strip hasil selalu dicetak di ukuran 4R (10.2 × 15.2 cm), terpisah dari ukuran output digital yang dipilih customer.</p>
+            <div className="mt-4 space-y-4">
+              <label className="flex items-center gap-3 border-b border-white/10 pb-4">
+                <input type="checkbox" checked={config.offlineModeEnabled} onChange={(e) => set("offlineModeEnabled", e.target.checked)} />
+                <span className="text-sm text-white/70">Izinkan Offline Mode (paket terakhir, bayar manual, foto dan print lokal)</span>
+              </label>
+              <div className="border-b border-white/10 pb-4">
+                <p className="text-sm font-semibold">Additional Print</p>
+                <p className="mt-1 text-xs text-white/45">Customer dapat membeli lembar 4R tambahan dari halaman hasil setelah sesi utama lunas.</p>
+                <label className="mt-3 flex items-center gap-3">
+                  <input type="checkbox" checked={additionalPrintConfig.enabled} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, enabled: e.target.checked })} />
+                  <span className="text-sm text-white/70">Aktifkan pembelian print tambahan</span>
+                </label>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <Field label="Label customer"><input className={inputClass} value={additionalPrintConfig.label} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, label: e.target.value })} /></Field>
+                  <Field label="Harga per lembar"><input className={inputClass} type="number" min={0} value={additionalPrintConfig.price} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, price: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+                  <Field label="Maksimal per transaksi"><input className={inputClass} type="number" min={1} max={20} value={additionalPrintConfig.max} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, max: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} /></Field>
+                </div>
+                <button type="button" onClick={saveAdditionalPrintConfig} className="mt-3 rounded-xl bg-accent px-4 py-2 text-sm font-semibold">{additionalPrintSaved ? "Tersimpan" : "Simpan additional print"}</button>
+              </div>
+              <label className="flex items-center gap-3">
+                <input type="checkbox" checked={config.autoPrintEnabled} onChange={(e) => set("autoPrintEnabled", e.target.checked)} />
+                <span className="text-sm text-white/70">Cetak otomatis begitu hasil selesai dirender (tanpa perlu tekan tombol Print)</span>
+              </label>
+              <Field label="Printer">
+                <select className={inputClass} value={config.printerName ?? ""} onChange={(e) => set("printerName", e.target.value || null)}>
+                  <option value="">Printer default sistem</option>
+                  {printers.map((printer) => (
+                    <option key={printer.name} value={printer.name}>
+                      {printer.displayName || printer.name}{printer.isDefault ? " (default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {printersError && <p className="mt-1 text-xs text-red-300">{printersError}</p>}
+                {!window.studiodo?.listPrinters && <p className="mt-1 text-xs text-white/40">Daftar printer hanya bisa dibaca dari aplikasi desktop STUDIODO (Electron).</p>}
+              </Field>
+              <Field label="Jumlah salinan per sesi">
+                <input type="number" min={1} max={10} className={inputClass} value={config.printCopies} onChange={(e) => set("printCopies", Math.max(1, Math.min(10, Number(e.target.value))))} />
+              </Field>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={runTestPrint} disabled={testPrintStatus === "printing"} className="rounded-xl border border-white/15 px-4 py-2 text-sm hover:border-accent disabled:opacity-50">
+                  {testPrintStatus === "printing" ? "Mencetak..." : "Test print"}
+                </button>
+                {testPrintStatus === "ok" && <span className="text-xs text-emerald-300">● Terkirim ke printer</span>}
+                {testPrintStatus === "error" && <span className="text-xs text-red-300">● {testPrintError}</span>}
+              </div>
+            </div>
+          </section>
+          </div>
+          {activeSection === "kiosk" && <KioskPreview config={config} />}
         </div>
       </div>
     </div>

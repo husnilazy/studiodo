@@ -7,15 +7,17 @@
   "scripts": {
     "dev:client": "node ./node_modules/vite/bin/vite.js --config client/vite.config.ts",
     "dev:server": "node ./node_modules/cross-env/src/bin/cross-env.js PORT=4050 node ./node_modules/tsx/dist/cli.mjs watch server/index.ts",
-    "dev": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER -c blue,green \"npm:dev:client\" \"npm:dev:server\"",
-    "dev:electron": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER,ELECTRON -c blue,green,magenta \"npm:dev:client\" \"npm:dev:server\" \"node ./node_modules/wait-on/bin/wait-on http://localhost:5173 && node ./node_modules/cross-env/src/bin/cross-env.js NODE_ENV=development node ./node_modules/electron/cli.js .\"",
+    "dev": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER,DIGICAM -c blue,green,magenta \"npm:dev:client\" \"npm:dev:server\" \"npm:dev:digicam-bridge\"",
+    "dev:electron": "node ./node_modules/concurrently/dist/bin/concurrently.js -k -n CLIENT,SERVER,ELECTRON -c blue,green,magenta \"npm:dev:client\" \"npm:dev:server\" \"node ./node_modules/wait-on/bin/wait-on tcp:5173 && node ./node_modules/cross-env/src/bin/cross-env.js NODE_ENV=development node scripts/start-electron.cjs\"",
+    "dev:digicam-bridge": "node electron/digicam-bridge.cjs",
     "build:client": "node ./node_modules/vite/bin/vite.js build --config client/vite.config.ts",
     "build:server": "node ./node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run build:client && npm run build:server",
     "dist": "npm run build && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:push": "node ./node_modules/drizzle-kit/bin.cjs push",
+    "db:studio": "node ./node_modules/drizzle-kit/bin.cjs studio",
+    "test": "vitest run"
   },
   "build": {
     "appId": "com.framelesscreative.studiodo",
@@ -68,11 +70,13 @@
     }
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1106.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
     "express": "^5.0.1",
     "framer-motion": "^11.11.17",
+    "googleapis": "^181.0.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.9",
     "postgres": "^3.4.5",
@@ -103,6 +107,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
+    "vitest": "^4.1.10",
     "wait-on": "^8.0.1"
   }
 }

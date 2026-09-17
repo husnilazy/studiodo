@@ -1,25 +1,21 @@
 import { Router } from "express";
 import multer from "multer";
-import path from "node:path";
-import fs from "node:fs";
-import { nanoid } from "nanoid";
 import { db } from "../db/client.js";
 import { packages, sessions } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { saveUploadedFile, getStorageDriver } from "../storage.js";
+import {
+  uploadSessionPhoto,
+  uploadSessionStrip,
+  uploadSessionMedia,
+  getFolderUrl,
+  getFilePreviewUrl,
+} from "../lib/gdrive.js";
 
 export const sessionsRouter = Router();
 
-const UPLOAD_DIR = path.join(process.cwd(), "storage", "sessions");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || ".jpg";
-      cb(null, `${nanoid(12)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
@@ -72,13 +68,32 @@ sessionsRouter.post("/:id/photo", upload.single("photo"), async (req, res) => {
   const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
 
-  const url = `/storage/sessions/${req.file.filename}`;
+  let url: string;
+  let updatedFields: Record<string, unknown> = {};
+
+  if (getStorageDriver() === "gdrive") {
+    const result = await uploadSessionPhoto({
+      sessionId: id,
+      slotIndex,
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      existingFolderId: (session as any).driveFolderId ?? null,
+    });
+    url = result.viewUrl;
+    // Simpan Drive file metadata
+    const drivePhotoIds = [...((session as any).drivePhotoIds ?? [])];
+    drivePhotoIds[slotIndex] = { fileId: result.fileId, viewUrl: result.viewUrl, downloadUrl: result.downloadUrl, previewUrl: result.previewUrl };
+    updatedFields = { driveFolderId: result.folderId, drivePhotoIds };
+  } else {
+    url = await saveUploadedFile(req.file, "sessions", ".jpg");
+  }
+
   const photoUrls = [...(session.photoUrls ?? [])];
-  photoUrls[slotIndex] = url; // retake overwrites the same slot, no full-session restart
+  photoUrls[slotIndex] = url;
 
   const [row] = await db
     .update(sessions)
-    .set({ photoUrls })
+    .set({ photoUrls, ...updatedFields })
     .where(eq(sessions.id, id))
     .returning();
 
@@ -89,10 +104,51 @@ sessionsRouter.post("/:id/media", upload.single("media"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File media wajib diupload" });
   const [session] = await db.select().from(sessions).where(eq(sessions.id, String(req.params.id)));
   if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
-  const url = `/storage/sessions/${req.file.filename}`;
+
+  let url: string;
+  if (getStorageDriver() === "gdrive" && (session as any).driveFolderId) {
+    const ext = req.body.kind === "gif" ? ".gif" : ".mp4";
+    const result = await uploadSessionMedia({
+      buffer: req.file.buffer,
+      filename: `clip-${Date.now()}${ext}`,
+      mimeType: req.file.mimetype,
+      folderId: (session as any).driveFolderId,
+    });
+    url = result.viewUrl;
+  } else {
+    url = await saveUploadedFile(req.file, "sessions", ".webm");
+  }
+
   const mediaUrls = [...(session.mediaUrls ?? []), url];
   const field = req.body.kind === "gif" ? { gifUrl: url, mediaUrls } : { videoUrl: url, mediaUrls };
   const [row] = await db.update(sessions).set(field).where(eq(sessions.id, String(req.params.id))).returning();
+  res.json(row);
+});
+
+sessionsRouter.post("/:id/strip", upload.single("strip"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File strip wajib diupload" });
+  const [session] = await db.select().from(sessions).where(eq(sessions.id, String(req.params.id)));
+  if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+
+  let stripUrl: string;
+  let driveFields: Record<string, unknown> = {};
+
+  if (getStorageDriver() === "gdrive" && (session as any).driveFolderId) {
+    const result = await uploadSessionStrip({
+      buffer: req.file.buffer,
+      folderId: (session as any).driveFolderId,
+    });
+    stripUrl = result.downloadUrl; // use download URL so client can directly download
+    driveFields = { driveStripId: result.fileId };
+  } else {
+    stripUrl = await saveUploadedFile(req.file, "sessions", ".jpg");
+  }
+
+  const [row] = await db
+    .update(sessions)
+    .set({ stripUrl, ...driveFields })
+    .where(eq(sessions.id, String(req.params.id)))
+    .returning();
   res.json(row);
 });
 
@@ -100,7 +156,7 @@ sessionsRouter.post("/:id/media", upload.single("media"), async (req, res) => {
 sessionsRouter.post("/:id/finalize", async (req, res) => {
   const id = String(req.params.id);
   const { stripUrl, gifUrl, videoUrl, shareUrl: requestedShareUrl } = req.body;
-  const shareUrl = requestedShareUrl ?? `${process.env.PUBLIC_BASE_URL ?? "http://localhost:4000"}/s/${id}`;
+  const shareUrl = requestedShareUrl ?? `${process.env.PUBLIC_BASE_URL ?? "http://localhost:4000"}/#/share/${id}`;
 
   const [row] = await db
     .update(sessions)
@@ -179,7 +235,25 @@ sessionsRouter.get("/:id/public", async (req, res) => {
     gifUrl: sessions.gifUrl,
     videoUrl: sessions.videoUrl,
     shareUrl: sessions.shareUrl,
+    driveFolderId: (sessions as any).driveFolderId,
+    drivePhotoIds: (sessions as any).drivePhotoIds,
+    driveStripId: (sessions as any).driveStripId,
   }).from(sessions).where(eq(sessions.id, String(req.params.id)));
   if (!row) return res.status(404).json({ error: "Hasil tidak ditemukan" });
-  res.json(row);
+
+  // Enrich with Drive URLs if applicable
+  const r = row as any;
+  const driveLinks = r.driveFolderId ? {
+    folderUrl: getFolderUrl(r.driveFolderId),
+    stripPreviewUrl: r.driveStripId ? getFilePreviewUrl(r.driveStripId) : null,
+    photos: Array.isArray(r.drivePhotoIds)
+      ? r.drivePhotoIds.filter(Boolean).map((p: any) => ({
+          viewUrl: p.viewUrl,
+          downloadUrl: p.downloadUrl,
+          previewUrl: p.previewUrl,
+        }))
+      : [],
+  } : null;
+
+  res.json({ ...row, driveLinks });
 });

@@ -29,6 +29,12 @@ npm run dev            # jalankan client (Vite) + server (Express) di browser bi
 npm run dev:electron   # jalankan sebagai app Electron (dual window: kiosk + admin)
 ```
 
+Mode kamera tether menggunakan dua port lokal: digiCamControl menyediakan
+webserver di `http://127.0.0.1:5513`, sedangkan `electron/digicam-bridge.cjs`
+menyediakan endpoint aplikasi di `http://127.0.0.1:5510`. `npm run dev`
+menjalankan bridge tersebut otomatis; pada dashboard, isi URL tether bridge
+dengan `http://localhost:5510`.
+
 Buka admin dengan shortcut **Ctrl+Shift+A** saat app Electron jalan.
 
 ## Build .exe
@@ -52,8 +58,8 @@ lalu Electron menjalankannya otomatis saat aplikasi dibuka. Kontrak endpoint dan
 format capture ada di `native/canon-bridge/README.txt`.
 
 STUDIODO tidak dapat mendistribusikan Canon EDSDK atau DLL proprietary Canon.
-Bridge harus menangani koneksi kamera, trigger shutter, dan mengembalikan JPEG
-melalui `POST http://127.0.0.1:5513/capture`.
+Bridge native Canon harus menangani koneksi kamera, trigger shutter, dan
+mengembalikan JPEG melalui endpoint lokal yang dikonfigurasikan oleh aplikasi.
 
 ## Pembayaran QRIS Xendit
 
@@ -64,3 +70,22 @@ setelah mengambil perubahan schema.
 Untuk testing tanpa akun Xendit, set `PAYMENT_DEMO_MODE=true` di `.env`; QR akan auto-sukses
 setelah 5 detik. Untuk produksi, matikan mode demo dan daftarkan endpoint
 `/api/payment/webhook/xendit` di dashboard Xendit.
+
+## Cloudflare R2 storage
+
+Secara default, foto disimpan lokal di folder `storage/`. Untuk production,
+set `.env` berikut agar foto slot, video/GIF, dan strip final otomatis diupload
+ke Cloudflare R2:
+
+```bash
+STORAGE_DRIVER=r2
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_BUCKET=studiodo
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_PUBLIC_BASE_URL=https://cdn.example.com
+R2_PREFIX=studiodo
+```
+
+`R2_PUBLIC_BASE_URL` harus berupa custom domain atau public development URL
+yang sudah diaktifkan di bucket R2. Untuk production, gunakan custom domain.
