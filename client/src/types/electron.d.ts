@@ -27,6 +27,15 @@ export interface StudiodoSystemDiagnostics {
   uptimeSeconds: number;
 }
 
+export interface StudiodoUpdaterStatus {
+  currentVersion: string;
+  state: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+  version: string | null;
+  progressPercent: number | null;
+  error: string | null;
+  lastCheckedAt: string | null;
+}
+
 export interface StudiodoBridgeAPI {
   getVersion: () => Promise<string>;
   relaunchKiosk: () => Promise<void>;
@@ -37,6 +46,9 @@ export interface StudiodoBridgeAPI {
   printImage: (payload: StudiodoPrintPayload) => Promise<{ ok: boolean; error?: string }>;
   downloadAsset: (payload: { url: string; filename: string }) => Promise<{ ok: boolean; path?: string; error?: string }>;
   getSystemDiagnostics: () => Promise<StudiodoSystemDiagnostics>;
+  getUpdaterStatus: () => Promise<StudiodoUpdaterStatus>;
+  checkForUpdate: () => Promise<StudiodoUpdaterStatus>;
+  setAutoUpdateEnabled: (enabled: boolean) => void;
   onOperatorConsoleToggle: (callback: () => void) => () => void;
   logRenderer: (level: "log" | "warn" | "error", args: unknown[]) => void;
   platform: string;

@@ -7,6 +7,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { getSubscriptionStatus } from "../lib/subscription.js";
 import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { logEvent } from "../lib/platformEvents.js";
 
 export const kioskKeysRouter = Router();
 
@@ -26,9 +27,10 @@ kioskKeysRouter.post("/heartbeat", requireKioskAuth, async (req, res) => {
       }
     : undefined;
 
-  await db.update(kioskKeys)
+  const [updated] = await db.update(kioskKeys)
     .set({ ...(appVersion !== undefined ? { appVersion } : {}), ...(lastDiagnostics ? { lastDiagnostics } : {}) })
-    .where(eq(kioskKeys.id, req.kioskKeyId!));
+    .where(eq(kioskKeys.id, req.kioskKeyId!))
+    .returning({ autoUpdateEnabled: kioskKeys.autoUpdateEnabled });
 
   // Fase 6 — piggyback subscription-lock status onto this already-periodic (every
   // 5 min) heartbeat instead of adding a separate polling endpoint. Never rejects:
@@ -42,6 +44,11 @@ kioskKeysRouter.post("/heartbeat", requireKioskAuth, async (req, res) => {
 
   res.json({
     ok: true,
+    // Piggybacked the same way as subscription lock above — this is how
+    // electron/main.cjs's setupAutoUpdater() learns whether THIS specific
+    // kiosk key has been opted out of auto-update by its tenant admin
+    // (KioskKeys.tsx's per-row toggle), without a separate polling endpoint.
+    autoUpdateEnabled: updated?.autoUpdateEnabled ?? true,
     subscription: {
       locked: subscription.locked,
       graceDaysRemaining: subscription.graceDaysRemaining,
@@ -49,6 +56,36 @@ kioskKeysRouter.post("/heartbeat", requireKioskAuth, async (req, res) => {
       renewalCheckoutUrl: settings?.renewalCheckoutUrl ?? null,
     },
   });
+});
+
+// POST /api/kiosk-keys/report-error — a kiosk's own renderer forwards its
+// console.error calls here (see client/src/main.tsx), fire-and-forget, so an
+// unattended booth's app-level bugs actually surface somewhere a human can
+// see them (Superadmin → Aktivitas & Error) instead of only ever existing in
+// that one machine's local app.log. Reuses the existing platform_events
+// table/UI (category "kiosk") rather than a new one — same storage, filter,
+// and pagination Superadmin already has for every other event type.
+kioskKeysRouter.post("/report-error", requireKioskAuth, async (req, res) => {
+  const message = String(req.body?.message ?? "").slice(0, 2000);
+  if (!message) return res.status(400).json({ error: "message wajib diisi" });
+  const stack = typeof req.body?.stack === "string" ? req.body.stack.slice(0, 4000) : undefined;
+  const appVersion = typeof req.body?.appVersion === "string" ? req.body.appVersion.slice(0, 40) : undefined;
+  const level = req.body?.level === "warning" ? "warning" : "error";
+
+  const [key] = await db.select({ label: kioskKeys.label }).from(kioskKeys).where(eq(kioskKeys.id, req.kioskKeyId!));
+
+  logEvent({
+    tenantId: req.tenantId!,
+    level,
+    category: "kiosk",
+    action: "app_error",
+    message,
+    actorType: "kiosk",
+    actorLabel: key?.label ?? null,
+    metadata: { stack, appVersion, kioskKeyId: req.kioskKeyId },
+  });
+
+  res.json({ ok: true });
 });
 
 kioskKeysRouter.use(requireAdminAuth);
@@ -70,11 +107,27 @@ kioskKeysRouter.get("/", async (req, res) => {
       lastDiagnostics: kioskKeys.lastDiagnostics,
       boundDeviceId: kioskKeys.boundDeviceId,
       boundAt: kioskKeys.boundAt,
+      autoUpdateEnabled: kioskKeys.autoUpdateEnabled,
     })
     .from(kioskKeys)
     .where(eq(kioskKeys.tenantId, req.tenantId!))
     .orderBy(desc(kioskKeys.createdAt));
   res.json(rows);
+});
+
+// PATCH /api/kiosk-keys/:id — currently only the auto-update opt-out toggle
+// (KioskKeys.tsx). Advisory only, same as the column comment in schema.ts:
+// the kiosk reads this off its own heartbeat and decides for itself whether
+// to call checkForUpdates(), the server never pushes or enforces anything.
+kioskKeysRouter.patch("/:id", async (req, res) => {
+  if (req.body?.autoUpdateEnabled === undefined) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
+  const [row] = await db
+    .update(kioskKeys)
+    .set({ autoUpdateEnabled: Boolean(req.body.autoUpdateEnabled) })
+    .where(and(eq(kioskKeys.id, req.params.id), eq(kioskKeys.tenantId, req.tenantId!)))
+    .returning({ id: kioskKeys.id, autoUpdateEnabled: kioskKeys.autoUpdateEnabled });
+  if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
+  res.json(row);
 });
 
 // POST /api/kiosk-keys — generate a new kiosk key

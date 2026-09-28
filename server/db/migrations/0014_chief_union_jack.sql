@@ -1,0 +1,1 @@
+ALTER TABLE "kiosk_keys" ADD COLUMN "auto_update_enabled" boolean DEFAULT true NOT NULL;

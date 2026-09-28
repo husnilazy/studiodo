@@ -212,22 +212,95 @@ function openAdminWindow() {
 // app quit/relaunch, never interrupting a customer mid-session.
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+// This whole mechanism used to be entirely invisible — it worked (checks,
+// downloads, installs on restart), but nothing anywhere showed an admin
+// whether it had ever run, found anything, or failed, so from the outside it
+// looked like no update feature existed at all. This state is what the
+// admin dashboard's "Cek update" card (see AdminDashboard.tsx) reads via
+// updater:getStatus, and what a manual click re-triggers via updater:checkNow.
+const updaterStatus = {
+  currentVersion: app.getVersion(),
+  state: "idle", // idle | checking | available | not-available | downloading | downloaded | error
+  version: null,
+  progressPercent: null,
+  error: null,
+  lastCheckedAt: null,
+};
+
+// Defaults to enabled — matches the pre-toggle behavior for every kiosk that
+// hasn't reported in yet, and for one that's simply offline (an unreachable
+// heartbeat must never silently disable updates just because it can't say
+// otherwise). Only ever flipped false by an explicit heartbeat response
+// (client/src/lib/kioskHeartbeat.ts) reflecting a real per-kiosk toggle an
+// admin set in Admin → Kiosk. This only gates the BACKGROUND periodic/
+// startup checks below — a manual "Cek update sekarang" click
+// (updater:checkNow) always bypasses it, same as most OS update UIs
+// separate "auto-update" from "check now".
+let autoUpdateEnabled = true;
+ipcMain.on("updater:setEnabled", (_event, enabled) => {
+  autoUpdateEnabled = Boolean(enabled);
+});
+
 function setupAutoUpdater() {
   if (isDev) return; // no packaged build to replace, and no point hitting the feed from a dev checkout
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on("checking-for-update", () => console.log("[updater] checking for update"));
-  autoUpdater.on("update-available", (info) => console.log(`[updater] update available: ${info.version}`));
-  autoUpdater.on("update-not-available", () => console.log("[updater] no update available"));
-  autoUpdater.on("download-progress", (progress) => console.log(`[updater] downloading update: ${Math.round(progress.percent)}%`));
-  autoUpdater.on("update-downloaded", (info) => console.log(`[updater] update ${info.version} downloaded, will install on next restart`));
-  autoUpdater.on("error", (error) => console.error("[updater] error", error));
+  autoUpdater.on("checking-for-update", () => {
+    updaterStatus.state = "checking";
+    updaterStatus.error = null;
+    console.log("[updater] checking for update");
+  });
+  autoUpdater.on("update-available", (info) => {
+    updaterStatus.state = "available";
+    updaterStatus.version = info.version;
+    updaterStatus.lastCheckedAt = new Date().toISOString();
+    console.log(`[updater] update available: ${info.version}`);
+  });
+  autoUpdater.on("update-not-available", () => {
+    updaterStatus.state = "not-available";
+    updaterStatus.lastCheckedAt = new Date().toISOString();
+    console.log("[updater] no update available");
+  });
+  autoUpdater.on("download-progress", (progress) => {
+    updaterStatus.state = "downloading";
+    updaterStatus.progressPercent = Math.round(progress.percent);
+    console.log(`[updater] downloading update: ${updaterStatus.progressPercent}%`);
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    updaterStatus.state = "downloaded";
+    updaterStatus.version = info.version;
+    console.log(`[updater] update ${info.version} downloaded, will install on next restart`);
+  });
+  autoUpdater.on("error", (error) => {
+    updaterStatus.state = "error";
+    updaterStatus.error = error instanceof Error ? error.message : String(error);
+    updaterStatus.lastCheckedAt = new Date().toISOString();
+    console.error("[updater] error", error);
+  });
 
-  const check = () => autoUpdater.checkForUpdates().catch((error) => console.error("[updater] checkForUpdates gagal", error));
+  const check = () => {
+    if (!autoUpdateEnabled) {
+      console.log("[updater] skip — auto-update dimatikan untuk kiosk ini");
+      return;
+    }
+    autoUpdater.checkForUpdates().catch((error) => console.error("[updater] checkForUpdates gagal", error));
+  };
   check();
   setInterval(check, UPDATE_CHECK_INTERVAL_MS);
 }
+
+ipcMain.handle("updater:getStatus", () => updaterStatus);
+ipcMain.handle("updater:checkNow", async () => {
+  if (isDev) return { ...updaterStatus, error: "Update check dimatikan di mode development" };
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    // Already recorded onto updaterStatus by the "error" listener above —
+    // this catch just stops an unhandled rejection from reaching the caller.
+  }
+  return updaterStatus;
+});
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;

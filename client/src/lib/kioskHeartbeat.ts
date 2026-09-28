@@ -24,6 +24,14 @@ async function sendHeartbeat() {
   // untouched — an offline kiosk keeps whatever lock state it last knew instead of
   // silently reverting to "unlocked" just because it can't reach the server.
   if (result?.subscription) useSubscriptionLock.getState().setFromHeartbeat(result.subscription);
+  // Tell the Electron main process (which owns the actual auto-updater —
+  // electron/main.cjs) whether this specific kiosk key has been opted out
+  // from Admin → Kiosk. Only acted on when explicitly false; an offline/failed
+  // heartbeat leaves the main process's own default (enabled) untouched, same
+  // reasoning as the subscription lock above.
+  if (result && typeof result.autoUpdateEnabled === "boolean") {
+    window.studiodo?.setAutoUpdateEnabled?.(result.autoUpdateEnabled);
+  }
 }
 
 /** Periodic self-report so the admin dashboard's "Perangkat" table (KioskKeys.tsx) has fresh online/diagnostic data. */

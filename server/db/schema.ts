@@ -206,6 +206,12 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // after replacing that booth's hardware.
   boundDeviceId: text("bound_device_id"),
   boundAt: timestamp("bound_at"),
+  // Per-kiosk override — most tenants want every booth to self-update, but a
+  // specific machine (e.g. one mid-testing, or one an admin wants to hold
+  // back deliberately) can opt out. Read by the kiosk's own heartbeat
+  // response and enforced client-side in electron/main.cjs, not by the
+  // server refusing anything — this is advisory, not a security boundary.
+  autoUpdateEnabled: boolean("auto_update_enabled").notNull().default(true),
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
 
 // Paket foto (packages)

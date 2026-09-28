@@ -147,16 +147,24 @@ export const api = {
     request<{ elements: LayoutElement[]; updatedAt: string | null }>(`/config/screen-layout?screenKey=${screenKey}&orientation=${orientation}`),
   updateScreenLayout: (screenKey: string, orientation: ScreenOrientation, elements: LayoutElement[]) =>
     request<{ ok: boolean; elements: LayoutElement[] }>("/config/screen-layout", { method: "PATCH", body: JSON.stringify({ screenKey, orientation, elements }) }),
-  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null }[]>("/kiosk-keys"),
+  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null; autoUpdateEnabled?: boolean }[]>("/kiosk-keys"),
   createKioskKey: (label: string) => request<{ id: string; label: string | null; createdAt: string; key: string }>("/kiosk-keys", { method: "POST", body: JSON.stringify({ label }) }),
   resetKioskKeyDevice: (id: string) => request<{ ok: boolean; id: string }>(`/kiosk-keys/${id}/reset-device`, { method: "POST" }),
   revealKioskKey: (id: string) => request<{ key: string }>(`/kiosk-keys/${id}/reveal`),
   revokeKioskKey: (id: string) => request<{ ok: boolean; id: string }>(`/kiosk-keys/${id}`, { method: "DELETE" }),
+  setKioskKeyAutoUpdate: (id: string, autoUpdateEnabled: boolean) =>
+    request<{ id: string; autoUpdateEnabled: boolean }>(`/kiosk-keys/${id}`, { method: "PATCH", body: JSON.stringify({ autoUpdateEnabled }) }),
   sendKioskHeartbeat: (body: { appVersion?: string; diagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean } }) =>
     request<{
       ok: boolean;
+      autoUpdateEnabled: boolean;
       subscription: { locked: boolean; graceDaysRemaining: number | null; renewalWhatsapp: string | null; renewalCheckoutUrl: string | null };
     }>("/kiosk-keys/heartbeat", { method: "POST", body: JSON.stringify(body) }),
+  // Fire-and-forget from client/src/main.tsx's console.error override — a
+  // failure here must never throw back into the console override itself
+  // (that would recurse), so call sites wrap this in its own try/catch.
+  reportKioskError: (body: { level: "error" | "warning"; message: string; stack?: string; appVersion?: string }) =>
+    request<{ ok: boolean }>("/kiosk-keys/report-error", { method: "POST", body: JSON.stringify(body) }),
   getPublicConfig: (sessionId?: string) => request<{ baseUrl: string; brandName?: string; tagline?: string; logoUrl?: string | null; contactWhatsapp?: string | null; socialInstagram?: string | null; socialTiktok?: string | null; socialFacebook?: string | null; websiteUrl?: string | null; address?: string | null; accentColor?: string | null }>(`/config/public${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`),
   updateGalleryProfile: (body: Record<string, unknown>) => request<any>("/config/gallery-profile", { method: "PATCH", body: JSON.stringify(body) }),
   getPackages: () => request<any[]>("/packages"),
