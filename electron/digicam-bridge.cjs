@@ -4,38 +4,179 @@
 // webserver diaktifkan di Settings > Webserver) ke kontrak HTTP yang dipakai
 // client/src/lib/camera.ts:
 //
-//   GET  /health   -> { ok, digicamReachable }
-//   POST /capture  -> { slotIndex, filter, orientation } => image/jpeg
+//   GET  /health      -> { ok, digicamReachable }
+//   POST /capture     -> { slotIndex, filter, orientation } => image/jpeg
+//   GET  /properties  -> { [name]: { value, choices } } (ISO/shutter/aperture/WB)
+//   POST /properties  -> { [name]: value } => { results: { [name]: { ok, error? } } }
 //
 // digiCamControl HARUS sudah berjalan sendiri (proses .exe terpisah) dengan
 // webserver aktif (default port 5513). Bridge ini TIDAK menjalankan
 // digiCamControl — hanya menerjemahkan panggilan HTTP-nya.
 //
-// Referensi API digiCamControl (Single Command System):
+// API digiCamControl (Single Command System) — verified live 2026-09-29
+// against a real tethered Canon EOS 1300D through this exact bridge, not
+// just from docs (digicamcontrol.com's own web-interface doc page doesn't
+// list the property command syntax, and an earlier guess at "?CMD=Set..."
+// silently did nothing — every request to "/" returns the same static
+// remote-control HTML regardless of whether the command was recognized, so
+// a wrong command looks IDENTICAL to a working one unless you check the
+// camera's actual resulting state):
 //   http://127.0.0.1:5513/?CMD=Capture
-//   http://127.0.0.1:5513/?slc=get&param1=lastcaptured&param2=
+//   http://127.0.0.1:5513/?slc=list&param1=iso&param2=      -> "Auto\n100\n200\n..." (newline list)
+//   http://127.0.0.1:5513/?slc=get&param1=iso&param2=       -> "1600" (current value, plain text)
+//   http://127.0.0.1:5513/?slc=set&param1=iso&param2=400    -> "OK", or "Wrong value X for property Y" on failure — both HTTP 200
 //   http://127.0.0.1:5513/image/<nama file>
 //   http://127.0.0.1:5513/session.json
 
 const http = require("http");
+const net = require("net");
+const { URL } = require("url");
 
 const DIGICAM_URL = (process.env.DIGICAM_URL || "http://127.0.0.1:5513").replace(/\/$/, "");
 const BRIDGE_PORT = Number(process.env.DIGICAM_BRIDGE_PORT || 5510);
 const CAPTURE_TIMEOUT_MS = Number(process.env.DIGICAM_CAPTURE_TIMEOUT_MS || 30000);
 const POLL_INTERVAL_MS = 250;
 
+// Fixed, deliberately small allowlist — these are the properties confirmed
+// working live (see the API note above). digiCamControl's "set"/"get"/"list"
+// commands accept other property names too (compressionsetting, focusmode,
+// exposurecompensation, mode, ...), but only these were actually verified
+// against real hardware, and an allowlist also means /properties can never
+// be used to poke at an arbitrary, unvalidated camera property from the client.
+const CAMERA_PROPERTIES = [
+  { name: "iso", label: "ISO" },
+  { name: "shutterspeed", label: "Shutter Speed" },
+  { name: "aperture", label: "Aperture" },
+  { name: "whitebalance", label: "White Balance" },
+];
+
 let server = null;
 
-async function digicamGet(pathAndQuery) {
-  const response = await fetch(`${DIGICAM_URL}${pathAndQuery}`, {
-    headers: { Connection: "close" },
-    signal: AbortSignal.timeout(5000),
+// Hand-rolled raw-socket HTTP client, NOT fetch() or http.request() — both
+// verified live to fail against digiCamControl's embedded webserver (an old
+// Griffin.Networking-based .NET server). Captured the exact raw bytes over a
+// plain net.connect() to see why: it sends "Content-Length: 4" TWICE
+// (identical values, genuinely just duplicated, not conflicting) for "slc"
+// responses specifically, which Node's HTTP parser refuses outright as a
+// protocol violation — fetch's undici parser rejects it as "fetch failed"
+// (real cause buried in error.cause), and http.request() with
+// insecureHTTPParser:true STILL rejects this specific case ("Parse Error:
+// Duplicate Content-Length"), so there's no supported Node HTTP client that
+// tolerates it. It also ignores the "Connection: close" header entirely
+// (sends "Connection: Keep-Alive" back regardless), so a client waiting for
+// the server to close the socket hangs forever — this reads exactly
+// Content-Length bytes of body (taking whichever duplicate, since they
+// match) and destroys the socket itself rather than waiting for that.
+// /health, /capture etc. never hit this specific bug (whatever's different
+// about how Griffin.Networking builds those particular responses), which is
+// why the original fetch()-based version worked fine until /properties
+// started using slc=get/list. Not fixable on digiCamControl's side from here
+// — it's closed, unmaintained server code — so this bypasses Node's HTTP
+// parsing for ALL requests to it, uniformly, rather than special-casing one path.
+function digicamGet(pathAndQuery) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(`${DIGICAM_URL}${pathAndQuery}`);
+    const socket = net.connect({ host: target.hostname, port: Number(target.port) || 80 });
+    const chunks = [];
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      fn(value);
+    };
+
+    socket.setTimeout(5000);
+    socket.on("timeout", () => finish(reject, new Error("Timeout menghubungi digiCamControl")));
+    socket.on("error", (error) => finish(reject, error));
+    socket.on("connect", () => {
+      socket.write(`GET ${target.pathname}${target.search} HTTP/1.1\r\nHost: ${target.host}\r\nConnection: close\r\n\r\n`);
+    });
+    socket.on("data", (chunk) => {
+      chunks.push(chunk);
+      const raw = Buffer.concat(chunks);
+      const headerEnd = raw.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return; // still waiting for the rest of the headers
+      const headerLines = raw.slice(0, headerEnd).toString("latin1").split("\r\n");
+      const statusMatch = headerLines[0].match(/^HTTP\/1\.\d (\d+)/);
+      const statusCode = statusMatch ? Number(statusMatch[1]) : 0;
+      const headers = {};
+      let contentLength = null;
+      for (const line of headerLines.slice(1)) {
+        const idx = line.indexOf(":");
+        if (idx === -1) continue;
+        const key = line.slice(0, idx).trim().toLowerCase();
+        const value = line.slice(idx + 1).trim();
+        headers[key] = value; // last duplicate wins — fine here since digiCamControl's duplicates always match
+        if (key === "content-length") contentLength = Number(value);
+      }
+      const bodySoFar = raw.length - (headerEnd + 4);
+      if (contentLength === null) return; // no length to know when we're done — keep reading until close/timeout
+      if (bodySoFar >= contentLength) {
+        finish(resolve, { statusCode, body: raw.slice(headerEnd + 4, headerEnd + 4 + contentLength), headers });
+      }
+    });
+    socket.on("close", () => {
+      // Server closed before we saw a Content-Length (or never sent one) —
+      // whatever arrived is all there is.
+      const raw = Buffer.concat(chunks);
+      const headerEnd = raw.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return finish(reject, new Error("Response tidak valid dari digiCamControl"));
+      const statusMatch = raw.slice(0, headerEnd).toString("latin1").match(/^HTTP\/1\.\d (\d+)/);
+      finish(resolve, { statusCode: statusMatch ? Number(statusMatch[1]) : 0, body: raw.slice(headerEnd + 4), headers: {} });
+    });
   });
-  return {
-    statusCode: response.status,
-    body: Buffer.from(await response.arrayBuffer()),
-    headers: Object.fromEntries(response.headers.entries()),
-  };
+}
+
+// The Single Command System takes its 3 arguments as query params named
+// literally "slc"/"param1"/"param2" (not the property name/value directly) —
+// see WebServerModule.cs in digiCamControl's source, which forwards
+// [slc, param1, param2] straight into the same command parser its scripting
+// engine and CameraControlCmd.exe use.
+async function digicamSlc(action, param1, param2 = "") {
+  const query = `/?slc=${encodeURIComponent(action)}&param1=${encodeURIComponent(param1)}&param2=${encodeURIComponent(param2)}`;
+  const response = await digicamGet(query);
+  return response.body.toString("utf8").trim();
+}
+
+// Sequential, not Promise.all — digiCamControl's embedded webserver is an
+// old, simple single-purpose server; not worth risking it choking on several
+// requests at once when one property fully failing doesn't stop the rest anyway.
+async function getCameraProperties() {
+  const result = {};
+  for (const { name } of CAMERA_PROPERTIES) {
+    try {
+      const value = await digicamSlc("get", name);
+      const listRaw = await digicamSlc("list", name);
+      const choices = listRaw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      result[name] = { value: value || null, choices };
+    } catch (error) {
+      result[name] = { value: null, choices: [], error: error instanceof Error ? error.message : "Gagal membaca properti" };
+    }
+  }
+  return result;
+}
+
+// Sequential on purpose, not Promise.all — digiCamControl's own "set" command
+// handler sleeps 200ms after every single set to let the camera settle
+// before the next command, so firing several concurrently risks the camera
+// still processing the previous one when the next SET arrives.
+async function setCameraProperties(values) {
+  const allowedNames = new Set(CAMERA_PROPERTIES.map((p) => p.name));
+  const results = {};
+  for (const [name, rawValue] of Object.entries(values || {})) {
+    if (!allowedNames.has(name)) {
+      results[name] = { ok: false, error: "Properti tidak dikenal" };
+      continue;
+    }
+    try {
+      const response = await digicamSlc("set", name, String(rawValue));
+      results[name] = response === "OK" ? { ok: true } : { ok: false, error: response || "digiCamControl menolak nilai ini" };
+    } catch (error) {
+      results[name] = { ok: false, error: error instanceof Error ? error.message : "Gagal mengubah properti" };
+    }
+  }
+  return results;
 }
 
 async function checkDigicamReachable() {
@@ -220,6 +361,38 @@ function startDigicamBridge() {
 
     if (req.method === "POST" && req.url === "/focus") {
       handleFocus(res);
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/properties") {
+      getCameraProperties()
+        .then((properties) => {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(properties));
+        })
+        .catch((error) => {
+          res.writeHead(502, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Gagal membaca properti kamera" }));
+        });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/properties") {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", async () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ error: "Body tidak valid" }));
+          return;
+        }
+        const results = await setCameraProperties(body);
+        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.end(JSON.stringify({ results }));
+      });
       return;
     }
 

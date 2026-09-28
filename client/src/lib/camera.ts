@@ -54,6 +54,39 @@ export async function captureFromTether(options: TetherCaptureOptions): Promise<
   throw new Error("Respons bridge tidak berisi foto");
 }
 
+export interface CameraPropertyState {
+  value: string | null;
+  choices: string[];
+  error?: string;
+}
+export type CameraProperties = Record<string, CameraPropertyState>;
+
+/**
+ * Reads ISO/shutter speed/aperture/white balance off the tethered camera via
+ * electron/digicam-bridge.cjs's /properties (digiCamControl only — the
+ * separate closed-source canon-bridge.exe doesn't implement this, so a
+ * kiosk tethered that way will just get a failed fetch here, handled by the
+ * caller same as "bridge doesn't support this").
+ */
+export async function getCameraProperties(bridgeUrl: string): Promise<CameraProperties> {
+  const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/properties`, { signal: AbortSignal.timeout(6000) });
+  if (!response.ok) throw new Error(`Gagal membaca pengaturan kamera (${response.status})`);
+  return response.json();
+}
+
+/** Only sends the properties present in `values` — the bridge applies each one in turn and reports per-property success/failure (a camera can reject a value the UI's own choice list still listed, e.g. it changed mid-request). */
+export async function setCameraProperties(bridgeUrl: string, values: Record<string, string>): Promise<Record<string, { ok: boolean; error?: string }>> {
+  const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/properties`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`Gagal mengubah pengaturan kamera (${response.status})`);
+  const payload = (await response.json()) as { results?: Record<string, { ok: boolean; error?: string }> };
+  return payload.results ?? {};
+}
+
 export interface TetherBridgeHealth {
   ok: boolean;
   digicamReachable?: boolean;
