@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:client",
+        "--",
+        "--port",
+        "5174"
+      ],
+      "port": 5174
+    }
+  ]
+}

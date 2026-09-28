@@ -10,6 +10,7 @@ export interface StripRenderOptions {
   stripTemplate: StripVisualTemplate;
   outputPreset: string;
   filter: CameraFilter;
+  mirror?: boolean;
 }
 
 interface Slot {
@@ -31,7 +32,7 @@ function seededRandom(seed: number) {
 
 // ---------- Layouts: menghitung posisi tiap foto di canvas ----------
 
-function layoutSlots(layout: StripLayout, count: number, width: number, height: number): Slot[] {
+export function layoutSlots(layout: StripLayout, count: number, width: number, height: number): Slot[] {
   const pad = Math.round(Math.min(width, height) * 0.035);
 
   switch (layout) {
@@ -120,7 +121,7 @@ function layoutSlots(layout: StripLayout, count: number, width: number, height: 
 
 // ---------- Visual templates: background + border di sekitar tiap slot ----------
 
-function paintBackground(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, width: number, height: number, accentColor: string) {
+export function paintBackground(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, width: number, height: number, accentColor: string) {
   switch (template) {
     case "gradient": {
       const gradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -193,7 +194,7 @@ function paintBackground(ctx: CanvasRenderingContext2D, template: StripVisualTem
   }
 }
 
-function paintSlotFrame(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, slot: Slot, accentColor: string) {
+export function paintSlotFrame(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, slot: Slot, accentColor: string) {
   switch (template) {
     case "neon-glow":
       ctx.save();
@@ -219,7 +220,7 @@ function paintSlotFrame(ctx: CanvasRenderingContext2D, template: StripVisualTemp
   }
 }
 
-function footerAccent(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, width: number, height: number, accentColor: string) {
+export function footerAccent(ctx: CanvasRenderingContext2D, template: StripVisualTemplate, width: number, height: number, accentColor: string) {
   const barHeight = Math.round(height * 0.0035) + 4;
   ctx.fillStyle = template === "film-noir" || template === "neon-glow" ? "#ffffff" : accentColor;
   ctx.fillRect(0, height - barHeight, width, barHeight);
@@ -264,7 +265,7 @@ export async function renderPhotoStrip(photoUrls: string[], canvas: HTMLCanvasEl
       ctx.shadowBlur = 0;
     }
     ctx.filter = FILTER_CSS[options.filter] ?? "none";
-    drawImageCover(ctx, image, slot.x, slot.y, slot.w, slot.h);
+    drawImageCover(ctx, image, slot.x, slot.y, slot.w, slot.h, options.mirror);
     ctx.filter = "none";
     paintSlotFrame(ctx, options.stripTemplate, slot, options.accentColor);
     ctx.restore();

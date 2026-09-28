@@ -3,112 +3,231 @@ import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import QRCode from "qrcode";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
+import QrCodeScanner from "@/components/QrCodeScanner";
 import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
-import { createOfflineSessionId, isBrowserOnline } from "@/lib/offlineStore";
+import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
+import { addPendingSession, createOfflineSessionId, isBrowserOnline } from "@/lib/offlineStore";
+import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
+import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
+import Positionable from "@/components/Positionable";
 
 type Mode = "choose" | "voucher" | "qris";
 
+// The 5-minute ring is only a UI cue — Xendit's own QR string isn't given any
+// explicit expiry by our server, so it typically stays scannable well past
+// this. A first-time customer opening their banking app and confirming a
+// payment can easily take longer than 5 minutes, so polling must keep
+// checking the database well after the ring hits zero instead of abandoning
+// a payment that's still in flight.
+const QRIS_DISPLAY_SECONDS = 300;
+const QRIS_POLL_GRACE_SECONDS = 600;
+const POLL_FAILURE_TOLERANCE = 5;
+
 export default function Pembayaran() {
   const [, navigate] = useLocation();
-  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId } = useKioskSession();
-  const offlineModeEnabled = useBoothConfig((state) => state.config.offlineModeEnabled);
+  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession } = useKioskSession();
+  const boothConfig = useBoothConfig((state) => state.config);
+  const offlineModeEnabled = boothConfig.offlineModeEnabled;
+  const eventFreeEntryActive = boothConfig.eventEnabled && boothConfig.eventFreeEntry && (() => {
+    const now = Date.now();
+    if (boothConfig.eventStartAt) {
+      const start = new Date(boothConfig.eventStartAt).getTime();
+      if (!Number.isNaN(start) && now < start) return false;
+    }
+    if (boothConfig.eventEndAt) {
+      const end = new Date(boothConfig.eventEndAt).getTime();
+      if (!Number.isNaN(end) && now > end) return false;
+    }
+    return true;
+  })();
   const [mode, setMode] = useState<Mode>("choose");
   const [voucherCode, setVoucherCode] = useState("");
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const qrScanSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [qrisString, setQrisString] = useState<string | null>(null);
   const [cashPaymentEnabled, setCashPaymentEnabled] = useState(false);
   const [cashRedeemed, setCashRedeemed] = useState(false);
-  const [qrisExpirySeconds, setQrisExpirySeconds] = useState(300);
+  const [qrisExpirySeconds, setQrisExpirySeconds] = useState(QRIS_DISPLAY_SECONDS);
   const qrisCanvasRef = useRef<HTMLCanvasElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrisTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Hard stop for the background grace-period poll (see QRIS_POLL_GRACE_SECONDS
+  // above) — separate from qrisTimerRef, which only drives the visual ring.
+  const pollGraceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollFailureCountRef = useRef(0);
+  // No-payment-for-too-long -> back to idle. Distinct from the QR's own 5-minute
+  // display countdown: this is the grace period AFTER it expires, just long
+  // enough to read "kedaluwarsa" before the booth resets itself for the next
+  // customer, so an abandoned/unpaid session never just sits there forever.
+  const idleReturnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mounted inside the WYSIWYG editor with no real session — selectedPackage is
+  // always null there, and without this check the guard below would both bounce
+  // the admin out AND (were selectedPackage ever truthy) create a real session
+  // via the API just from opening the editor.
+  const positionable = usePositionableContext();
 
   useEffect(() => {
-    api.getPaymentConfig().then((result) => setCashPaymentEnabled(result.cashPaymentEnabled)).catch(() => setCashPaymentEnabled(false));
+    api.getPaymentConfig().then((result) => setCashPaymentEnabled(result?.cashPaymentEnabled ?? false)).catch(() => setCashPaymentEnabled(false));
   }, []);
 
   useEffect(() => {
     if (!selectedPackage) {
-      navigate("/paket");
+      if (!positionable?.editMode) navigate("/paket");
       return;
     }
     if (!sessionId) {
       api
-        .createSession({ packageId: selectedPackage.id, orientation, selectedExtras })
-        .then((s) => setSessionId(s.id))
-        .catch(() => {
-          if (offlineModeEnabled && !isBrowserOnline()) setSessionId(createOfflineSessionId());
-          else setError("Gagal membuat sesi. Coba lagi.");
+        .createSession({ packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id, orientation, selectedExtras })
+        .then((s) => {
+          setSessionId(s.id);
+          if (eventFreeEntryActive) {
+            api.markEventFree(s.id, boothConfig.eventName).catch(() => undefined);
+          }
+        })
+        .catch((err) => {
+          if (offlineModeEnabled && !isBrowserOnline()) {
+            const offlineId = createOfflineSessionId();
+            void addPendingSession({
+              offlineId,
+              packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
+              orientation,
+              selectedExtras,
+            });
+            setSessionId(offlineId);
+          } else setError(err instanceof Error ? err.message : "Gagal membuat sesi. Coba lagi.");
         });
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+      if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
+      if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
     };
-  }, [selectedPackage, selectedExtras, orientation, sessionId]);
+  }, [selectedPackage, selectedExtras, orientation, sessionId, eventFreeEntryActive, boothConfig.eventName, offlineModeEnabled]);
 
   const totalAmount = Number(selectedPackage?.price ?? 0) + selectedExtras.reduce((sum, extra) => sum + Number(extra.price), 0);
-  const [payableAmount, setPayableAmount] = useState(totalAmount);
+  const [payableAmount, setPayableAmount] = useState(eventFreeEntryActive ? 0 : totalAmount);
+
+  useEffect(() => {
+    setPayableAmount(eventFreeEntryActive ? 0 : totalAmount);
+  }, [eventFreeEntryActive, totalAmount]);
 
   useEffect(() => {
     if (mode !== "qris" || !qrisString || !qrisCanvasRef.current) return;
+    // 220px used to be plenty, back when this box was a plain 256px (16rem)
+    // square — but the kiosk's root font-size scales with viewport (see
+    // index.css), so 16rem can be well over 400px on a big screen while this
+    // bitmap stayed fixed, leaving a small QR floating in a mostly-empty
+    // white box. A bigger fixed bitmap plus the canvas actually filling its
+    // container (see the className below) fixes that at any scale.
     QRCode.toCanvas(qrisCanvasRef.current, qrisString, {
-      width: 220,
+      width: 400,
       margin: 2,
       color: { dark: "#111111", light: "#ffffff" },
     }).catch(() => setError("QRIS gagal ditampilkan. Silakan buat QRIS baru."));
   }, [mode, qrisString]);
 
   const startQris = async () => {
+    if (eventFreeEntryActive) {
+      if (sessionId) {
+        await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
+      }
+      navigate(getNextRoute("payment", boothConfig.kioskFlow));
+      return;
+    }
     if (!sessionId || !selectedPackage || starting) return;
     if (pollRef.current) clearInterval(pollRef.current);
     if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+    if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
+    if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
+    pollFailureCountRef.current = 0;
     setError(null);
     setQrisString(null);
-    setQrisExpirySeconds(300);
+    setQrisExpirySeconds(QRIS_DISPLAY_SECONDS);
     setMode("qris");
     setChecking(true);
     setStarting(true);
+
+    // Shared by every "we've stopped waiting" branch below (expired, failed,
+    // or the status check itself broke) — after a grace period to actually
+    // read the message, abandon this unpaid session and return to idle for
+    // the next customer instead of leaving the booth stuck showing an error.
+    const scheduleIdleReturn = () => {
+      if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
+      idleReturnRef.current = setTimeout(() => {
+        resetSession();
+        navigate("/");
+      }, 15_000);
+    };
+
     try {
       const result = await api.startQris(sessionId);
+      if (!result) throw new Error("Gagal memulai QRIS");
       setQrisString(result.qrString);
-      // Start expiry countdown
+
+      // Visual ring only — reaching 0 just tells the customer the QR looks
+      // stale and offers a fresh one. It must NOT stop the background poll:
+      // the old QR string is usually still honored by Xendit, and a real
+      // payment (open banking app, confirm) can easily run past 5 minutes.
       qrisTimerRef.current = setInterval(() => {
         setQrisExpirySeconds((prev) => {
           if (prev <= 1) {
             if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
-            if (pollRef.current) clearInterval(pollRef.current);
-            setChecking(false);
-            setError("QRIS sudah kedaluwarsa. Silakan buat QRIS baru.");
+            setError("QRIS sudah kedaluwarsa secara tampilan. Kami masih memeriksa jika kamu baru saja membayar — atau tekan \"Buat QRIS baru\".");
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
+
+      // Hard stop for the poll itself — well beyond the visual ring, so a
+      // slow real-world payment still gets picked up before we give up.
+      pollGraceTimeoutRef.current = setTimeout(() => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setChecking(false);
+        setError("Belum ada konfirmasi pembayaran. Silakan buat QRIS baru.");
+        scheduleIdleReturn();
+      }, (QRIS_DISPLAY_SECONDS + QRIS_POLL_GRACE_SECONDS) * 1000);
+
       pollRef.current = setInterval(async () => {
         try {
-          const { status } = await api.getPaymentStatus(sessionId);
+          const status = (await api.getPaymentStatus(sessionId))?.status;
+          pollFailureCountRef.current = 0;
           if (status === "success") {
             if (pollRef.current) clearInterval(pollRef.current);
             if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+            if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
+            if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
             setChecking(false);
-            navigate("/frame");
+            navigate(getNextRoute("payment", boothConfig.kioskFlow));
           } else if (status === "failed" || status === "expired") {
             if (pollRef.current) clearInterval(pollRef.current);
             if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+            if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
             setChecking(false);
             setError("Pembayaran QRIS gagal atau sudah kedaluwarsa. Silakan coba lagi.");
+            scheduleIdleReturn();
           }
         } catch {
-          if (pollRef.current) clearInterval(pollRef.current);
-          if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
-          setChecking(false);
-          setError("Gagal memeriksa status pembayaran.");
+          // A single failed status check is likely a transient network blip,
+          // not a reason to abandon a payment that may already have gone
+          // through — only give up after several in a row.
+          pollFailureCountRef.current += 1;
+          if (pollFailureCountRef.current >= POLL_FAILURE_TOLERANCE) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+            if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
+            setChecking(false);
+            setError("Gagal memeriksa status pembayaran.");
+            scheduleIdleReturn();
+          }
         }
       }, 1500);
     } catch (err) {
@@ -121,52 +240,100 @@ export default function Pembayaran() {
   };
 
   const continueOffline = () => {
-    if (!offlineModeEnabled || isBrowserOnline()) return;
-    if (!sessionId) setSessionId(createOfflineSessionId());
-    navigate("/frame");
+    if (!offlineModeEnabled || isBrowserOnline() || !selectedPackage) return;
+    if (!sessionId) {
+      const offlineId = createOfflineSessionId();
+      void addPendingSession({
+        offlineId,
+        packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
+        orientation,
+        selectedExtras,
+      });
+      setSessionId(offlineId);
+    }
+    navigate(getNextRoute("payment", boothConfig.kioskFlow));
   };
 
-  const redeemVoucher = async () => {
-    if (!sessionId || !voucherCode.trim()) return;
+  const redeemVoucher = async (codeOverride?: string) => {
+    if (eventFreeEntryActive) {
+      if (sessionId) {
+        await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
+      }
+      navigate(getNextRoute("payment", boothConfig.kioskFlow));
+      return;
+    }
+    const code = (codeOverride ?? voucherCode).trim();
+    if (!sessionId || !code || redeemingVoucher) return;
     setError(null);
+    setShowKeyboard(false);
+    setRedeemingVoucher(true);
     try {
-      const result = await api.redeemVoucher(sessionId, voucherCode);
+      const result = await api.redeemVoucher(sessionId, code);
+      if (!result) throw new Error("Voucher tidak valid");
+      const isCash = Boolean(result.cash);
       setPayableAmount(result.amount);
-      setCashRedeemed(Boolean((result as { cash?: boolean }).cash));
-      if (result.amount === 0) {
-        navigate("/frame");
+      setCashRedeemed(isCash);
+      // A cash voucher marks the session as already paid server-side (admin
+      // collected cash on the spot) — its "amount" is the full session total,
+      // not a remaining balance, so it must never fall through to QRIS.
+      if (result.amount === 0 || isCash) {
+        navigate(getNextRoute("payment", boothConfig.kioskFlow));
       } else {
           await startQris();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Voucher tidak dapat digunakan.");
+    } finally {
+      setRedeemingVoucher(false);
     }
   };
 
+  const onQrScanned = (text: string) => {
+    const normalized = text.trim().toUpperCase();
+    setShowScanner(false);
+    setVoucherCode(normalized);
+    redeemVoucher(normalized);
+  };
+
   return (
-    <div className="kinetic-page flex h-full flex-col items-center justify-center gap-10 px-6">
-      <div className="text-center"><span className="eyebrow">03 / SECURE CHECKOUT</span><h2 className="kinetic-heading font-display text-5xl font-bold md:text-7xl">Pembayaran</h2><p className="mt-3 text-[var(--kiosk-muted)]">Satu scan, lalu momenmu siap dibuat.</p></div>
-      <p className="text-xl text-accent">
-        Total {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(payableAmount)}
-      </p>
+    <ScreenLayoutBoundary screenKey="payment">
+    <div className="kinetic-page relative flex h-full flex-col items-center justify-center gap-10 px-6">
+      <Positionable id="heading" type="text" label="Judul">
+        <div className="text-center"><span className="eyebrow">03 / SECURE CHECKOUT</span><h2 className="kinetic-heading font-display text-5xl font-bold md:text-7xl">Pembayaran</h2><p className="mt-3 text-[var(--kiosk-muted)]">Satu scan, lalu momenmu siap dibuat.</p></div>
+      </Positionable>
+      <Positionable id="total-price" type="text" label="Total Harga">
+        <p className="text-xl text-accent">
+          Total {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(payableAmount)}
+        </p>
+      </Positionable>
+
+      {eventFreeEntryActive && (
+        <div className="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 px-6 py-4 text-center text-emerald-100">
+          <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">{boothConfig.eventName || "Event"}</p>
+          <p className="mt-1 text-lg font-semibold">Kiosk sedang aktif untuk event ini, jadi masuk gratis.</p>
+          <p className="mt-1 text-sm text-emerald-50/80">{boothConfig.eventDescription || "Semua paket tersedia tanpa pembayaran."}</p>
+        </div>
+      )}
 
       {mode === "choose" && (
-        <div className="flex flex-wrap justify-center gap-5">
-          <button
-            onClick={startQris}
-            className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
-          >
-            Bayar dengan QRIS
-          </button>
-          <button
-            onClick={() => setMode("voucher")}
-            className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
-          >
-            Gunakan Voucher
-          </button>
-          {cashPaymentEnabled && <button onClick={() => { setCashRedeemed(false); setMode("voucher"); }} className="glass-panel kinetic-button rounded-[2rem] border-emerald-300/20 px-14 py-10 font-display text-2xl font-semibold text-emerald-100 hover:border-emerald-200">Bayar Cash ke Admin</button>}
-          {offlineModeEnabled && !isBrowserOnline() && <button onClick={continueOffline} className="glass-panel kinetic-button rounded-[2rem] border-amber-300/30 px-14 py-10 font-display text-2xl font-semibold text-amber-100 hover:border-amber-200">Lanjut offline<br /><span className="text-sm font-normal">Bayar manual di kasir</span></button>}
-        </div>
+        <Positionable id="choose-buttons" type="system-button" label="Pilihan Metode Bayar">
+          <div className="flex flex-wrap justify-center gap-5">
+            <button
+              onClick={startQris}
+              className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
+            >
+              {eventFreeEntryActive ? "Lanjutkan ke sesi foto" : "Bayar dengan QRIS"}
+            </button>
+            <button
+              onClick={() => setMode("voucher")}
+              className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
+            >
+              Gunakan Voucher
+            </button>
+            {cashPaymentEnabled && <button onClick={() => { setCashRedeemed(false); setMode("voucher"); }} className="glass-panel kinetic-button rounded-[2rem] border-emerald-300/20 px-14 py-10 font-display text-2xl font-semibold text-emerald-100 hover:border-emerald-200">Bayar Cash ke Admin</button>}
+            {offlineModeEnabled && !isBrowserOnline() && <button onClick={continueOffline} className="glass-panel kinetic-button rounded-[2rem] border-amber-300/30 px-14 py-10 font-display text-2xl font-semibold text-amber-100 hover:border-amber-200">Lanjut offline<br /><span className="text-sm font-normal">Bayar manual di kasir</span></button>}
+          </div>
+        </Positionable>
       )}
 
       {mode === "voucher" && (
@@ -194,12 +361,27 @@ export default function Pembayaran() {
                 onKeyDown={(event) => { if (event.key === "Enter") redeemVoucher(); }}
                 placeholder="CONTOH: CASH-AB12CD34"
                 aria-label="Kode voucher"
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-semibold tracking-[0.16em] outline-none transition focus:border-accent"
+                disabled={redeemingVoucher}
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-semibold tracking-[0.16em] outline-none transition focus:border-accent disabled:opacity-60"
               />
-              {voucherCode && <button onClick={() => setVoucherCode("")} className="rounded-lg px-2 text-white/40 hover:text-white" aria-label="Hapus kode voucher">×</button>}
+              {voucherCode && !redeemingVoucher && <button onClick={() => setVoucherCode("")} className="rounded-lg px-2 text-white/40 hover:text-white" aria-label="Hapus kode voucher">×</button>}
             </div>
           </div>
-            <button onClick={redeemVoucher} disabled={!voucherCode.trim()} className="kinetic-button mt-4 w-full rounded-xl bg-accent px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40">Terapkan voucher</button>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => redeemVoucher()}
+                disabled={!voucherCode.trim() || redeemingVoucher}
+                className="kinetic-button flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {redeemingVoucher && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {redeemingVoucher ? "Memeriksa voucher..." : "Terapkan voucher"}
+              </button>
+              {qrScanSupported && (
+                <button onClick={() => setShowScanner(true)} disabled={redeemingVoucher} className="kinetic-button rounded-xl border border-white/15 px-5 py-3 font-semibold text-white/80 hover:border-accent disabled:cursor-not-allowed disabled:opacity-40">
+                  Scan QR tiket
+                </button>
+              )}
+            </div>
             {cashRedeemed && <p className="mt-3 text-center text-sm text-emerald-300">Invoice cash diterima. Sesi siap dimulai.</p>}
           </div>
         </div>
@@ -207,19 +389,26 @@ export default function Pembayaran() {
 
       <AnimatePresence>
         {showKeyboard && mode === "voucher" && (
+          // pointer-events-none on this full-screen wrapper (with -auto only
+          // on the keyboard itself below) — it used to catch every click
+          // across the WHOLE screen (fixed inset-0), including the "Terapkan
+          // voucher" button and input sitting well above the keyboard, so
+          // the first tap silently just dismissed this overlay instead of
+          // reaching the button; only a second tap actually landed on it.
+          // Now a tap anywhere that isn't the keyboard passes straight
+          // through to whatever's really there.
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex items-end justify-center bg-black/45 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6"
-            onMouseDown={(event) => { if (event.target === event.currentTarget) setShowKeyboard(false); }}
+            className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-black/45 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6"
           >
             <motion.div
               initial={{ opacity: 0, y: 32, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 24, scale: 0.97 }}
               transition={{ duration: 0.24, ease: "easeOut" }}
-              className="w-full max-w-5xl"
+              className="pointer-events-auto w-full max-w-5xl"
             >
               <VirtualKeyboard value={voucherCode} onChange={(value) => setVoucherCode(value.toUpperCase())} onClose={() => setShowKeyboard(false)} />
             </motion.div>
@@ -247,6 +436,8 @@ export default function Pembayaran() {
                 onClick={() => {
                   if (pollRef.current) clearInterval(pollRef.current);
                   if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+                  if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
+                  if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
                   setChecking(false);
                   setMode("choose");
                 }}
@@ -258,9 +449,19 @@ export default function Pembayaran() {
               <h3 className="font-display text-3xl font-bold">Bayar dengan QRIS</h3>
               <p className="text-sm text-white/60">Buka aplikasi pembayaran, scan QR, lalu tunggu konfirmasi otomatis.</p>
 
-              {/* QR Code */}
+              {/* QR Code — while the Xendit invoice is still being created
+                  (qrisString not set yet), the canvas is empty, so this used
+                  to render as a blank white square with no indication
+                  anything was happening. */}
               <div className="flex h-64 w-64 items-center justify-center rounded-2xl bg-white p-3 shadow-xl shadow-black/30">
-                <canvas ref={qrisCanvasRef} aria-label="QRIS pembayaran" />
+                {qrisString ? (
+                  <canvas ref={qrisCanvasRef} aria-label="QRIS pembayaran" className="h-full w-full" />
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-black/10 border-t-accent" />
+                    <p className="text-sm font-medium text-black/50">Menyiapkan QRIS...</p>
+                  </div>
+                )}
               </div>
 
               {/* Expiry countdown */}
@@ -277,11 +478,11 @@ export default function Pembayaran() {
                         strokeWidth="3"
                         strokeLinecap="round"
                         strokeDasharray="100.53"
-                        strokeDashoffset={100.53 * (1 - qrisExpirySeconds / 300)}
+                        strokeDashoffset={100.53 * (1 - qrisExpirySeconds / QRIS_DISPLAY_SECONDS)}
                         className="transition-all duration-1000"
                       />
                     </svg>
-                    <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${qrisExpirySeconds < 60 ? "text-red-300" : "text-white/70"}`}>
+                    <span className={`absolute inset-0 flex items-center justify-center text-[0.625rem] font-bold ${qrisExpirySeconds < 60 ? "text-red-300" : "text-white/70"}`}>
                       {Math.ceil(qrisExpirySeconds / 60)}m
                     </span>
                   </div>
@@ -298,28 +499,38 @@ export default function Pembayaran() {
                 </div>
               )}
 
-              {qrisExpirySeconds === 0 && (
-                <div className="w-full rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-center">
-                  <p className="text-sm font-semibold text-red-300">QRIS sudah kedaluwarsa</p>
-                  <p className="mt-0.5 text-xs text-red-300/60">Silakan buat QRIS baru untuk melanjutkan pembayaran.</p>
+              {qrisExpirySeconds === 0 && checking && (
+                <div className="w-full rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-center">
+                  <p className="text-sm font-semibold text-amber-200">QR ini terlihat kedaluwarsa</p>
+                  <p className="mt-0.5 text-xs text-amber-200/70">Sudah bayar? Kami masih memeriksa di latar belakang. Atau buat QRIS baru di bawah.</p>
                 </div>
               )}
 
               {error && <p className="max-w-sm text-sm text-red-300">{error}</p>}
-              {!checking && <button onClick={startQris} className="kinetic-button rounded-xl bg-accent px-5 py-3 font-semibold">Buat QRIS baru</button>}
+              {(qrisExpirySeconds === 0 || !checking) && (
+                <button onClick={startQris} disabled={starting} className="kinetic-button flex items-center gap-2 rounded-xl bg-accent px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50">
+                  {starting && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                  {starting ? "Menyiapkan..." : "Buat QRIS baru"}
+                </button>
+              )}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {showScanner && <QrCodeScanner onDetect={onQrScanned} onClose={() => setShowScanner(false)} />}
+
       {error && <p className="text-red-400">{error}</p>}
 
-      <button
-            onClick={() => (mode === "choose" ? navigate("/paket") : setMode("choose"))}
-        className="text-white/40 hover:text-white/70"
-      >
-        ← Kembali
-      </button>
+      <Positionable id="back-button" type="system-button" label="Tombol Kembali">
+        <button
+          onClick={() => (mode === "choose" ? navigate(getPreviousRoute("payment", boothConfig.kioskFlow)) : setMode("choose"))}
+          className="text-white/40 hover:text-white/70"
+        >
+          ← Kembali
+        </button>
+      </Positionable>
     </div>
+    </ScreenLayoutBoundary>
   );
 }

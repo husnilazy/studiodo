@@ -1,0 +1,1 @@
+ALTER TABLE "platform_settings" ADD COLUMN "grace_period_days" integer DEFAULT 3 NOT NULL;

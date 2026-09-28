@@ -47,18 +47,40 @@ async function checkDigicamReachable() {
   }
 }
 
-async function triggerCapture() {
-  const response = await digicamGet("/?CMD=Capture");
-  if (response.statusCode >= 400 || response.statusCode === 0) {
-    throw new Error(`digiCamControl menolak perintah capture (status ${response.statusCode})`);
+// digiCamControl occasionally answers a command with a transient 5xx/timeout
+// while it's still busy finishing the previous one (autofocus settling,
+// writing the last file, USB re-negotiation) — a couple of quick retries
+// smooths over that without meaningfully slowing down the real failure case
+// (camera actually off/disconnected, which fails the same way every time).
+async function withRetry(fn, attempts = 3, delayMs = 350) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
+  throw lastError;
+}
+
+async function triggerCapture() {
+  await withRetry(async () => {
+    const response = await digicamGet("/?CMD=Capture");
+    if (response.statusCode >= 400 || response.statusCode === 0) {
+      throw new Error(`digiCamControl menolak perintah capture (status ${response.statusCode})`);
+    }
+  });
 }
 
 async function triggerFocus() {
-  const response = await digicamGet("/?CMD=Focus");
-  if (response.statusCode >= 400 || response.statusCode === 0) {
-    throw new Error(`digiCamControl menolak perintah autofocus (status ${response.statusCode})`);
-  }
+  await withRetry(async () => {
+    const response = await digicamGet("/?CMD=Focus");
+    if (response.statusCode >= 400 || response.statusCode === 0) {
+      throw new Error(`digiCamControl menolak perintah autofocus (status ${response.statusCode})`);
+    }
+  });
 }
 
 async function waitForLastCaptured(previousFilename) {
@@ -100,11 +122,13 @@ async function fetchLastCapturedFilename() {
 }
 
 async function downloadImage(filename) {
-  const response = await digicamGet(`/image/${encodeURIComponent(filename)}`);
-  if (response.statusCode !== 200 || response.body.length === 0) {
-    throw new Error(`Gagal mengunduh foto "${filename}" dari digiCamControl (status ${response.statusCode})`);
-  }
-  return response.body;
+  return withRetry(async () => {
+    const response = await digicamGet(`/image/${encodeURIComponent(filename)}`);
+    if (response.statusCode !== 200 || response.body.length === 0) {
+      throw new Error(`Gagal mengunduh foto "${filename}" dari digiCamControl (status ${response.statusCode})`);
+    }
+    return response.body;
+  }, 3, 300);
 }
 
 async function handleLiveView(res) {

@@ -1,0 +1,37 @@
+# Production deploy for the Oracle Cloud (or any Docker-capable) VM.
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+#
+# `server` is only reachable inside the compose network — `caddy` is the one
+# thing bound to the VM's public ports, and it gets free automatic HTTPS
+# (Let's Encrypt) for the domain configured in ./Caddyfile.
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Local-disk fallback storage for tenants who haven't configured R2/Google
+      # Drive yet. Any tenant relying on this alone loses their photos on a
+      # volume wipe — see README's Deployment section.
+      - ./storage:/app/storage
+    expose:
+      - "4050"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+
+volumes:
+  caddy_data:
+  caddy_config:

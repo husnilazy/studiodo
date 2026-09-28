@@ -1,5 +1,5 @@
 import type { LocalTemplate } from "./templateStore";
-import { FILTER_CSS, type CameraFilter, type ColorCorrection, type PhotoSticker } from "./sessionStore";
+import { composeFilterCss, type CameraFilter, type ColorCorrection, type PhotoSticker } from "./sessionStore";
 
 export function drawImageCover(
   ctx: CanvasRenderingContext2D,
@@ -8,18 +8,32 @@ export function drawImageCover(
   y: number,
   width: number,
   height: number,
+  mirror = false,
 ) {
   const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
   const sourceWidth = width / scale;
   const sourceHeight = height / scale;
   const sourceX = (image.naturalWidth - sourceWidth) / 2;
   const sourceY = (image.naturalHeight - sourceHeight) / 2;
-  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  if (mirror) {
+    // Flip only this photo within its own slot (translate to the slot's
+    // right edge, then scale -1 so the draw happens "backwards" into it) —
+    // the frame artwork and any stickers drawn afterward are untouched, only
+    // ever tied to slot position, not the flip.
+    ctx.save();
+    ctx.translate(x + width, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  }
 }
 
 export function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
+    image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Gagal memuat gambar: ${src}`));
     image.src = src;
@@ -35,6 +49,7 @@ export async function renderTemplate(
   filter: CameraFilter = "normal",
   photoMap: Record<number, number> = {},
   correction: ColorCorrection = { brightness: 100, contrast: 100, saturation: 100 },
+  mirror = false,
 ) {
   canvas.width = template.canvasWidth;
   canvas.height = template.canvasHeight;
@@ -47,8 +62,8 @@ export async function renderTemplate(
   template.slots.forEach((slot, index) => {
     const image = photoImages[photoMap[index] ?? index];
     if (!image) return;
-    ctx.filter = `${FILTER_CSS[filter]} brightness(${correction.brightness}%) contrast(${correction.contrast}%) saturate(${correction.saturation}%)`;
-    drawImageCover(ctx, image, slot.x * canvas.width, slot.y * canvas.height, slot.w * canvas.width, slot.h * canvas.height);
+    ctx.filter = composeFilterCss(filter, correction);
+    drawImageCover(ctx, image, slot.x * canvas.width, slot.y * canvas.height, slot.w * canvas.width, slot.h * canvas.height, mirror);
   });
   ctx.filter = "none";
 

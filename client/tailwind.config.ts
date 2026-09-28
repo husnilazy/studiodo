@@ -9,17 +9,21 @@ export default {
   theme: {
     extend: {
       colors: {
+        // index.css force-overrides .bg-ink-800/900/950 to follow --kiosk-surface/
+        // --kiosk-background, so these are cosmetic fallbacks only — ink.700 is the
+        // one shade nothing overrides, so it's the one worth keeping in step with
+        // the warm palette (Fase 7) instead of the old cold slate.
         ink: {
-          950: "#07070a",
-          900: "#0d0d12",
-          800: "#15151d",
-          700: "#1f1f2b",
+          950: "#17130f",
+          900: "#1d1712",
+          800: "#241e19",
+          700: "#2e251e",
         },
-        accent: "var(--accent, #7C3AED)",
+        accent: "var(--accent, #D97757)",
       },
       fontFamily: {
-        display: "var(--font-display, 'Space Grotesk')",
-        body: "var(--font-body, 'Inter')",
+        display: "var(--font-display, 'Space Grotesk Variable')",
+        body: "var(--font-body, 'Inter Variable')",
       },
       keyframes: {
         flash: {

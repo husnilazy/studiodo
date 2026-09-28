@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useOfflineStore, syncPendingPhotos } from "@/lib/offlineStore";
-import { api } from "@/lib/api";
+import { useOfflineStore } from "@/lib/offlineStore";
 
 interface ToastMessage {
   id: string;
@@ -14,11 +13,12 @@ const TOAST_DURATION = 4000;
 
 export default function NetworkToast() {
   const isOnline = useOfflineStore((s) => s.isOnline);
-  const pendingCount = useOfflineStore((s) => s.pendingPhotos.length);
+  const pendingCount = useOfflineStore((s) => s.pendingSessionCount + s.pendingPhotoCount + s.pendingStripCount);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const prevOnline = useRef<boolean | null>(null);
-  const prevPending = useRef(pendingCount);
+  const prevSyncing = useRef(false);
+  const pendingBeforeSync = useRef(0);
 
   const pushToast = (msg: Omit<ToastMessage, "id">) => {
     const id = crypto.randomUUID();
@@ -26,7 +26,9 @@ export default function NetworkToast() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), TOAST_DURATION + 600);
   };
 
-  // React to online/offline transitions
+  // React to online/offline transitions. The actual sync is driven centrally
+  // by offlineStore's network monitor (startNetworkMonitor) — this component
+  // only reacts to its state to show toasts.
   useEffect(() => {
     if (prevOnline.current === null) {
       prevOnline.current = isOnline;
@@ -34,28 +36,23 @@ export default function NetworkToast() {
     }
     if (isOnline && !prevOnline.current) {
       prevOnline.current = true;
-      pushToast({ type: "online", text: "Koneksi tersambung kembali ✓", sub: pendingCount > 0 ? `Menyinkronkan ${pendingCount} foto offline...` : "Semua fitur aktif" });
-
-      // Trigger sync
-      if (pendingCount > 0) {
-        const uploadFn = async (sessionId: string, slotIndex: number, blob: Blob) => {
-          await api.uploadPhoto(sessionId, slotIndex, blob);
-        };
-        syncPendingPhotos(uploadFn).then(() => {
-          pushToast({ type: "synced", text: "Foto offline berhasil disinkronkan ✨", sub: "Semua data tersimpan di server" });
-        });
-      }
+      pushToast({ type: "online", text: "Koneksi tersambung kembali ✓", sub: pendingCount > 0 ? `Menyinkronkan ${pendingCount} data offline...` : "Semua fitur aktif" });
     } else if (!isOnline && prevOnline.current) {
       prevOnline.current = false;
       pushToast({ type: "offline", text: "Koneksi terputus", sub: "Sesi foto tetap berjalan secara offline" });
     }
   }, [isOnline, pendingCount]);
 
-  // Show sync progress
+  // Show sync progress, then a "done" toast once a sync pass that had
+  // something to do finishes.
   useEffect(() => {
     if (syncInProgress) {
-      pushToast({ type: "syncing", text: "Menyinkronkan data...", sub: `${pendingCount} foto menunggu upload` });
+      pendingBeforeSync.current = pendingCount;
+      pushToast({ type: "syncing", text: "Menyinkronkan data...", sub: `${pendingCount} data menunggu upload` });
+    } else if (prevSyncing.current && pendingBeforeSync.current > 0) {
+      pushToast({ type: "synced", text: "Data offline berhasil disinkronkan ✨", sub: "Semua data tersimpan di server" });
     }
+    prevSyncing.current = syncInProgress;
   }, [syncInProgress]);
 
   const ICONS: Record<ToastMessage["type"], string> = {

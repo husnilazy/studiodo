@@ -1,0 +1,1 @@
+ALTER TABLE "kiosk_keys" ADD COLUMN "raw_key" text DEFAULT '' NOT NULL;

@@ -2,27 +2,116 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Kiosk pages were designed at a mobile-ish rem scale, fine on a phone-sized
+   dev window but tiny and lost in empty space on a real kiosk touchscreen
+   (commonly 1080x1920+ portrait) — text/buttons/cards all use Tailwind's
+   rem-based classes, so scaling the root font-size scales all of them
+   together, proportionally, without having to touch every page. Combines vw
+   and vh (not just vw) so it scales correctly in both portrait and landscape
+   kiosk orientation. Admin/superadmin/public-gallery are normal desktop/phone
+   web pages, not a walk-up touchscreen, so they opt back out below.
+   Fase 10. */
+html {
+  font-size: clamp(16px, 1vw + 1vh, 26px);
+}
+html.admin-mode,
+html.superadmin-mode,
+html.public-gallery-mode {
+  font-size: 16px;
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
-  background: var(--kiosk-background, #07070a);
-  color: white;
+  background: var(--kiosk-background, #17130f);
+  /* Was hardcoded "white" — harmless while the kiosk was always dark, but a real
+     bug now that light mode exists (Fase 7): anything that inherits color without
+     KioskShell's own inline override in its ancestry (e.g. a page mounted directly
+     inside ScreenBuilder's WYSIWYG canvas) rendered illegible dark-on-light text. */
+  color: var(--kiosk-text, #f5efe9);
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
 }
 
+html.public-gallery-mode,
+body.public-gallery-mode,
+body.public-gallery-mode #root {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body.public-gallery-mode .kinetic-shell {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+/* Same reasoning as .public-gallery-mode above, for the superadmin dashboard —
+   a normal scrollable admin page, not a fixed-viewport touchscreen kiosk. Without
+   this it inherits the kiosk's html/body/#root height:100%+overflow:hidden lock,
+   so any content past one screenful was simply unreachable — no scrollbar, no
+   scroll wheel, nothing. */
+html.superadmin-mode,
+body.superadmin-mode,
+body.superadmin-mode #root {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
 :root {
-  --accent: #7c3aed;
-  --kiosk-background: #07070a;
-  --kiosk-surface: #14141c;
-  --kiosk-text: #ffffff;
-  --kiosk-muted: #a1a1aa;
+  --accent: #d97757;
+  --kiosk-background: #17130f;
+  --kiosk-surface: #241e19;
+  --kiosk-text: #f5efe9;
+  --kiosk-muted: #b8aa9c;
   --button-radius: 0.75rem;
-  --display-shadow: 0 24px 80px color-mix(in srgb, var(--accent) 16%, transparent);
-  --glass-border: color-mix(in srgb, white 14%, transparent);
+  /* Neutral, warm shadow tokens (Fase 7) — replaces the old accent-tinted glow
+     everywhere so depth reads as soft/ambient instead of a neon halo. */
+  --kiosk-shadow-ambient: 0 20px 60px rgba(15, 10, 6, 0.45);
+  --kiosk-shadow-soft: 0 10px 30px rgba(15, 10, 6, 0.28);
+  --glass-border: color-mix(in srgb, var(--kiosk-text) 12%, transparent);
+  --glass-bg-1: color-mix(in srgb, var(--kiosk-text) 6%, transparent);
+  --glass-bg-2: color-mix(in srgb, var(--kiosk-text) 2%, transparent);
+  --display-shadow: var(--kiosk-shadow-ambient);
+}
+
+/* Structural-only overrides for light mode — actual colors come from the admin's
+   applied theme fields (see themePresets.ts); this block only touches things that
+   must genuinely invert (shadow tint, glass opacity, native input chrome). */
+[data-theme-mode="light"] {
+  --glass-border: color-mix(in srgb, var(--kiosk-text) 10%, transparent);
+  --glass-bg-1: color-mix(in srgb, white 70%, transparent);
+  --glass-bg-2: color-mix(in srgb, white 40%, transparent);
+  --kiosk-shadow-ambient: 0 20px 50px rgba(120, 92, 66, 0.16);
+  --kiosk-shadow-soft: 0 8px 24px rgba(120, 92, 66, 0.1);
+}
+
+[data-theme-mode="light"] select,
+[data-theme-mode="light"] input[type="text"],
+[data-theme-mode="light"] input[type="number"] {
+  color-scheme: light;
+}
+
+[data-theme-mode="light"] .kinetic-heading,
+[data-theme-mode="light"] .kinetic-title {
+  text-shadow: none;
+}
+
+[data-theme-mode="light"] .kinetic-noise {
+  opacity: 0.02;
+}
+
+[data-theme-mode="light"] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 [data-button-style="pill"] {
@@ -66,11 +155,6 @@ body,
   transition-duration: 0s !important;
 }
 
-[data-background-style="solid"] .kinetic-orb,
-[data-background-gradient="false"] .kinetic-orb {
-  display: none;
-}
-
 .keyboard-panel {
   transform-origin: bottom center;
   transition: transform 220ms ease, width 220ms ease;
@@ -99,34 +183,9 @@ select:focus-visible {
 
 .kinetic-shell {
   isolation: isolate;
-  background-image: radial-gradient(circle at 50% -20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 48%);
-}
-
-.kinetic-orb {
-  position: absolute;
-  z-index: -1;
-  width: 34vw;
-  height: 34vw;
-  min-width: 260px;
-  min-height: 260px;
-  border-radius: 999px;
-  filter: blur(70px);
-  opacity: 0.2;
-  pointer-events: none;
-  animation: kinetic-float 14s ease-in-out infinite alternate;
-}
-
-.kinetic-orb-a {
-  top: -14%;
-  right: -8%;
-  background: var(--accent);
-}
-
-.kinetic-orb-b {
-  bottom: -20%;
-  left: -10%;
-  background: #00d9ff;
-  animation-delay: -5s;
+  /* Fase 7 — was a bright, tight halo (22% opacity, 48% falloff); now a much
+     wider, softer wash so it reads as gentle ambient light, not a lamp. */
+  background-image: radial-gradient(circle at 50% -20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%);
 }
 
 .kinetic-noise {
@@ -145,7 +204,9 @@ select:focus-visible {
 
 .kinetic-heading,
 .kinetic-title {
-  text-shadow: 0 8px 40px color-mix(in srgb, var(--accent) 28%, transparent);
+  /* Fase 7 — was an accent-colored glow; a neutral, softer shadow reads as
+     depth rather than a neon halo. Light mode turns this off entirely above. */
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
 }
 
 .eyebrow {
@@ -164,20 +225,20 @@ select:focus-visible {
 
 .glass-panel {
   border: 1px solid var(--glass-border);
-  background: linear-gradient(145deg, color-mix(in srgb, white 8%, transparent), color-mix(in srgb, white 3%, transparent));
-  box-shadow: 0 24px 80px color-mix(in srgb, black 25%, transparent);
-  backdrop-filter: blur(24px);
+  background: linear-gradient(145deg, var(--glass-bg-1), var(--glass-bg-2));
+  box-shadow: var(--kiosk-shadow-ambient);
+  backdrop-filter: blur(20px);
 }
 
 .kinetic-button {
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: var(--kiosk-shadow-soft);
   transition: transform 220ms ease, box-shadow 220ms ease, filter 220ms ease;
 }
 
 .kinetic-button:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 42px color-mix(in srgb, var(--accent) 38%, transparent);
-  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow: var(--kiosk-shadow-ambient);
+  filter: brightness(1.04);
 }
 
 select,
@@ -187,21 +248,28 @@ input[type="number"] {
 }
 
 .kinetic-card-hover:hover {
-  transform: translateY(-8px) rotate(-0.4deg);
-  box-shadow: 0 32px 90px color-mix(in srgb, var(--accent) 25%, transparent);
+  /* Fase 7 — was -8px + rotate(-0.4deg), which read "playful/stiff"; a calmer
+     lift alone fits "smooth" better. */
+  transform: translateY(-4px);
+  box-shadow: var(--kiosk-shadow-ambient);
 }
 
 .kinetic-button,
 .kinetic-cta {
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: var(--kiosk-shadow-soft);
 }
 
 .kinetic-cta {
-  animation: kinetic-pulse 2.8s ease-in-out infinite;
+  animation: kinetic-pulse 3.6s ease-in-out infinite;
   backdrop-filter: blur(14px);
 }
 
-[data-session-layout="split"] .kinetic-page {
+/* "Split — kamera + panel kontrol" is a layout choice for the photo-capture
+   screen specifically (see AdminPlaceholder's "Layout per sesi foto" field),
+   not every kiosk screen — .kinetic-page is shared by all of them, so this
+   stays scoped to the session screen's own class or it bleeds a stray
+   vertical line onto single-column screens like Pilih Paket. */
+[data-session-layout="split"] .kinetic-page-session {
   background: linear-gradient(90deg, transparent 0 48%, color-mix(in srgb, var(--accent) 7%, transparent) 48% 49%, transparent 49%);
 }
 
@@ -213,14 +281,9 @@ input[type="number"] {
   min-height: 24rem;
 }
 
-@keyframes kinetic-float {
-  from { transform: translate3d(-5%, 3%, 0) scale(0.9); }
-  to { transform: translate3d(8%, -5%, 0) scale(1.12); }
-}
-
 @keyframes kinetic-pulse {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  50% { transform: translateY(-3px); }
 }
 
 ::-webkit-scrollbar {

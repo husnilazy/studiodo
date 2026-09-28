@@ -3,8 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { nanoid } from "nanoid";
+import { getStorageSettings, type StorageDriver, type StorageSettings } from "./lib/storageConfig.js";
 
-export type StorageDriver = "local" | "r2" | "gdrive";
+export type { StorageDriver };
 
 export interface UploadedFileInput {
   buffer: Buffer;
@@ -14,20 +15,18 @@ export interface UploadedFileInput {
 
 const localStorageRoot = path.join(process.cwd(), "storage");
 
-let r2Client: S3Client | null = null;
+// Keyed by tenantId, same reasoning as storageConfig.ts's settings cache.
+const r2Clients = new Map<string, S3Client>();
 
-export function resetR2Client() {
-  r2Client = null;
+export function resetR2Client(tenantId: string) {
+  r2Clients.delete(tenantId);
 }
 
-export function getStorageDriver(): StorageDriver {
-  const d = process.env.STORAGE_DRIVER;
-  if (d === "r2") return "r2";
-  if (d === "gdrive") return "gdrive";
-  return "local";
+export async function getStorageDriver(tenantId: string): Promise<StorageDriver> {
+  return (await getStorageSettings(tenantId)).driver;
 }
 
-export function cleanPrefix(value?: string) {
+export function cleanPrefix(value?: string | null) {
   return String(value ?? "").replace(/^\/+|\/+$/g, "");
 }
 
@@ -36,53 +35,55 @@ export function getExtension(filename: string, fallback: string) {
   return ext || fallback;
 }
 
-export function getR2Client() {
-  if (r2Client) return r2Client;
+function buildR2Client(tenantId: string, settings: StorageSettings) {
+  const existing = r2Clients.get(tenantId);
+  if (existing) return existing;
 
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const endpoint = process.env.R2_ENDPOINT ?? (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const endpoint = settings.r2Endpoint ?? (settings.r2AccountId ? `https://${settings.r2AccountId}.r2.cloudflarestorage.com` : undefined);
 
-  if (!endpoint || !accessKeyId || !secretAccessKey || !process.env.R2_BUCKET || !process.env.R2_PUBLIC_BASE_URL) {
+  if (!endpoint || !settings.r2AccessKeyId || !settings.r2SecretAccessKey || !settings.r2Bucket || !settings.r2PublicBaseUrl) {
     throw new Error(
-      "Konfigurasi R2 belum lengkap. Isi R2_ACCOUNT_ID/R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, dan R2_PUBLIC_BASE_URL.",
+      "Konfigurasi R2 belum lengkap. Isi R2 Account ID/Endpoint, Bucket, Access Key ID, Secret Access Key, dan Public Base URL lewat Admin → Storage.",
     );
   }
 
-  r2Client = new S3Client({
+  const client = new S3Client({
     region: "auto",
     endpoint,
     forcePathStyle: true,
-    credentials: { accessKeyId, secretAccessKey },
+    credentials: { accessKeyId: settings.r2AccessKeyId, secretAccessKey: settings.r2SecretAccessKey },
   });
-  return r2Client;
+  r2Clients.set(tenantId, client);
+  return client;
 }
 
-export async function saveUploadedFile(file: UploadedFileInput, folder: string, fallbackExtension = ".jpg") {
+export async function saveUploadedFile(tenantId: string, file: UploadedFileInput, folder: string, fallbackExtension = ".jpg") {
   const safeFolder = cleanPrefix(folder);
   const filename = `${nanoid(12)}${getExtension(file.originalname, fallbackExtension)}`;
-  const driver = getStorageDriver();
+  const settings = await getStorageSettings(tenantId);
 
-  if (driver === "r2") {
-    const rawPrefix = cleanPrefix(process.env.R2_PREFIX);
-    const keyParts = [rawPrefix, safeFolder, filename].filter(Boolean);
+  if (settings.driver === "r2") {
+    const rawPrefix = cleanPrefix(settings.r2Prefix);
+    // tenantId is always included, even though most tenants have their own
+    // dedicated bucket — it's what keeps files apart for tenants that fall
+    // back to a shared bucket (no R2 config of their own yet).
+    const keyParts = [rawPrefix, tenantId, safeFolder, filename].filter(Boolean);
     const key = keyParts.join("/");
 
-    await getR2Client().send(
+    await buildR2Client(tenantId, settings).send(
       new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET,
+        Bucket: settings.r2Bucket!,
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
       }),
     );
-    const baseUrl = String(process.env.R2_PUBLIC_BASE_URL).replace(/\/$/, "");
+    const baseUrl = String(settings.r2PublicBaseUrl).replace(/\/$/, "");
     return `${baseUrl}/${key}`;
   }
 
-  const localDir = path.join(localStorageRoot, safeFolder);
+  const localDir = path.join(localStorageRoot, tenantId, safeFolder);
   await fs.mkdir(localDir, { recursive: true });
   await fs.writeFile(path.join(localDir, filename), file.buffer);
-  return `/storage/${safeFolder}/${filename}`;
+  return `/storage/${tenantId}/${safeFolder}/${filename}`;
 }

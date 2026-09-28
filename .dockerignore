@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-client
+dist-server
+storage
+.env
+.env.production
+*.log
+runtime
+release
+.git

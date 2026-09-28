@@ -3,18 +3,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useBoothConfig, applyThemeToDocument } from "@/lib/boothConfigStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { useOfflineStore, startNetworkMonitor } from "@/lib/offlineStore";
+import { startKioskHeartbeat } from "@/lib/kioskHeartbeat";
 import NetworkToast from "@/components/NetworkToast";
+import OperatorConsole from "@/components/OperatorConsole";
 
 export default function KioskShell({ children }: { children: React.ReactNode }) {
   const config = useBoothConfig((s) => s.config);
   const isOnline = useOfflineStore((s) => s.isOnline);
-  const pendingCount = useOfflineStore((s) => s.pendingPhotos.length);
+  const pendingCount = useOfflineStore((s) => s.pendingSessionCount + s.pendingPhotoCount + s.pendingStripCount);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [showStatus, setShowStatus] = useState(false);
 
-  // Start network monitor once
+  // Start network monitor + fleet heartbeat once
   useEffect(() => {
     startNetworkMonitor();
+    startKioskHeartbeat();
   }, []);
 
   // Apply theme
@@ -50,7 +53,6 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
           : "none",
       }}
     >
-      {config.backgroundStyle === "ambient" && <><div className="kinetic-orb kinetic-orb-a" /><div className="kinetic-orb kinetic-orb-b" /></>}
       <div className="kinetic-noise" />
 
       {/* Network status pill (top-right) */}
@@ -94,6 +96,9 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
       {/* Global network change toasts */}
       <NetworkToast />
+
+      {/* Operator console overlay — hidden until Ctrl+Shift+O */}
+      <OperatorConsole />
     </div>
   );
 }

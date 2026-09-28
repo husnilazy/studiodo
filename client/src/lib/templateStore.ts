@@ -3,7 +3,10 @@ import { persist } from "zustand/middleware";
 import type { Orientation } from "./sessionStore";
 
 export type OutputPreset = "4r" | "2r" | "a4" | "square" | "custom";
-export type TemplateCategory = "minimal" | "wedding" | "birthday" | "corporate" | "seasonal" | "custom";
+// A free-text key (see frameCategoryStore.ts's registry), not a fixed union —
+// the server column is plain text too, so nothing downstream expects a
+// closed set of values.
+export type TemplateCategory = string;
 
 export interface TemplateSlot {
   x: number;

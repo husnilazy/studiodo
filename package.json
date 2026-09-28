@@ -1,7 +1,8 @@
 {
   "name": "studiodo-kiosk",
-  "version": "0.1.1",
+  "version": "0.1.9",
   "description": "STUDIODO Photobooth — Kiosk + Admin, Electron .exe",
+  "author": "Frameless Creative",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -13,27 +14,31 @@
     "build:client": "node ./node_modules/vite/bin/vite.js build --config client/vite.config.ts",
     "build:server": "node ./node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run build:client && npm run build:server",
-    "dist": "npm run build && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
+    "dist": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
+    "dist:publish": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable --publish always",
     "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:push": "node ./node_modules/drizzle-kit/bin.cjs push",
     "db:studio": "node ./node_modules/drizzle-kit/bin.cjs studio",
+    "tenant:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createTenant.ts",
+    "superadmin:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createSuperadmin.ts",
     "test": "vitest run"
   },
   "build": {
     "appId": "com.framelesscreative.studiodo",
     "productName": "STUDIODO",
     "asar": true,
+    "npmRebuild": false,
+    "asarUnpack": [
+      "dist-client/**/*",
+      "node_modules/**/*"
+    ],
     "files": [
       "electron/**/*",
       "dist-client/**/*",
-      "dist-server/**/*",
       "package.json"
     ],
     "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      },
       {
         "from": "native/canon-bridge",
         "to": "canon-bridge",
@@ -43,6 +48,13 @@
           "EDSDK.dll",
           "*.json"
         ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "husnilazy",
+        "repo": "studiodo"
       }
     ],
     "win": {
@@ -66,17 +78,25 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true
     }
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
+    "electron-updater": "^6.8.9",
     "express": "^5.0.1",
     "framer-motion": "^11.11.17",
+    "gifenc": "^1.0.3",
     "googleapis": "^181.0.0",
+    "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.9",
     "postgres": "^3.4.5",
@@ -90,6 +110,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.9.0",
     "@types/qrcode": "^1.5.6",

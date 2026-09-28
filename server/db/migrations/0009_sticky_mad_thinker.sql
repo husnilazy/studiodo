@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "slot_clip_urls" jsonb DEFAULT '[]'::jsonb;

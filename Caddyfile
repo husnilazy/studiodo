@@ -1,0 +1,7 @@
+# Ganti "api.domainkamu.com" dengan domain/subdomain asli sebelum deploy.
+# Caddy otomatis mengurus sertifikat HTTPS (Let's Encrypt) untuk domain ini —
+# domain harus sudah di-pointing (A record) ke IP publik VM sebelum start,
+# supaya proses penerbitan sertifikatnya berhasil.
+api.domainkamu.com {
+	reverse_proxy server:4050
+}
