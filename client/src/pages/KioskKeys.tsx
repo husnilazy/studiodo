@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 const inputClass = "mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-sm outline-none focus:border-accent";
 
@@ -45,64 +44,6 @@ function DiagnosticsSummary({ diagnostics }: { diagnostics?: KioskDiagnostics })
           {item.label}
         </span>
       ))}
-    </div>
-  );
-}
-
-// The auto-updater (electron/main.cjs) already checked GitHub Releases,
-// auto-downloaded, and installed on restart from the start — but nothing
-// anywhere showed that it existed, ran, or found anything, so from an
-// admin's side there was no visible "update feature" at all, just silent
-// background behavior nobody could see or trigger on demand. Hidden
-// entirely outside the Electron app (plain browser admin-in-a-tab) since
-// there's nothing there to update.
-function AppUpdateCard() {
-  const [status, setStatus] = useState<StudiodoUpdaterStatus | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  useEffect(() => {
-    if (!window.studiodo?.getUpdaterStatus) return;
-    window.studiodo.getUpdaterStatus().then(setStatus).catch(() => undefined);
-  }, []);
-
-  if (!window.studiodo?.getUpdaterStatus) return null;
-
-  const checkNow = async () => {
-    setChecking(true);
-    try {
-      setStatus(await window.studiodo!.checkForUpdate());
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const statusLabel = (() => {
-    if (checking || status?.state === "checking") return "Mengecek update...";
-    switch (status?.state) {
-      case "downloading": return `Mengunduh update v${status.version} — ${status.progressPercent ?? 0}%`;
-      case "downloaded": return `Update v${status.version} siap — otomatis terpasang saat aplikasi ditutup & dibuka lagi`;
-      case "available": return `Update v${status.version} ditemukan, sedang diunduh di latar belakang...`;
-      case "not-available": return "Sudah pakai versi terbaru";
-      case "error": return `Gagal cek update: ${status.error}`;
-      default: return "Belum pernah dicek sejak app ini dibuka";
-    }
-  })();
-
-  return (
-    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
-      <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Aplikasi kiosk — komputer ini</p>
-        <p className="mt-1 text-sm font-semibold">Versi {status?.currentVersion ?? "-"}</p>
-        <p className="mt-0.5 text-xs text-white/50">{statusLabel}</p>
-      </div>
-      <button
-        type="button"
-        onClick={checkNow}
-        disabled={checking}
-        className="shrink-0 rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-white/70 hover:border-accent hover:text-white disabled:cursor-wait disabled:opacity-50"
-      >
-        {checking ? "Mengecek..." : "Cek update sekarang"}
-      </button>
     </div>
   );
 }
@@ -264,8 +205,6 @@ export default function KioskKeys() {
           {activeKeyCount} / {kioskLimit ?? "∞"} kiosk aktif{planName ? ` — paket ${planName}` : ""}
           {atLimit && <span className="ml-2 text-amber-300">Sudah mencapai batas paket kamu. Cabut kiosk lain atau upgrade paket untuk menambah.</span>}
         </p>
-
-        <AppUpdateCard />
 
         {newKey && (
           <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">

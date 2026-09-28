@@ -15,6 +15,7 @@ import PaymentSettings from "./PaymentSettings";
 import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
+import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
 const sections: { id: Section; label: string; icon: string }[] = [
@@ -414,6 +415,56 @@ const FINANCE_SUBTABS = [
 ] as const;
 type FinanceSubtab = (typeof FINANCE_SUBTABS)[number]["id"];
 
+// Version + update status used to live buried inside Kiosk -> API Key — an
+// odd spot to look for "is this app up to date" (that page is about managing
+// OTHER kiosks' keys, not this window's own install), and nothing like it
+// showed up in the more conventional place other desktop software puts this
+// (a Help/About menu, or a persistent footer). This app hides its native
+// menu bar entirely (autoHideMenuBar in electron/main.cjs) to stay
+// kiosk-appropriate, so a permanent sidebar footer — visible from every
+// admin section, not just one tab — stands in for that convention instead.
+function AppVersionFooter() {
+  const [status, setStatus] = useState<StudiodoUpdaterStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    if (!window.studiodo?.getUpdaterStatus) return;
+    window.studiodo.getUpdaterStatus().then(setStatus).catch(() => undefined);
+  }, []);
+
+  if (!window.studiodo?.getUpdaterStatus) return null;
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      setStatus(await window.studiodo!.checkForUpdate());
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const statusLabel = (() => {
+    if (checking || status?.state === "checking") return "Mengecek...";
+    switch (status?.state) {
+      case "downloading": return `Update v${status.version} — ${status.progressPercent ?? 0}%`;
+      case "downloaded": return `Update v${status.version} siap, restart untuk pasang`;
+      case "available": return `Update v${status.version} ditemukan...`;
+      case "not-available": return "Versi terbaru";
+      case "error": return "Gagal cek update";
+      default: return "Belum pernah dicek";
+    }
+  })();
+
+  return (
+    <div className="mt-auto border-t border-white/10 pt-4 text-center">
+      <p className="text-[11px] text-white/35">STUDIODO v{status?.currentVersion ?? "-"} — {statusLabel}</p>
+      <button type="button" onClick={checkNow} disabled={checking} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
+        {checking ? "Mengecek..." : "Cek update"}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [section, setSection] = useState<Section>("control");
   const [kioskSubtab, setKioskSubtab] = useState<KioskSubtab>("keys");
@@ -559,6 +610,7 @@ export default function AdminDashboard() {
           <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm text-white/55 transition hover:bg-white/10 hover:text-white"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">🖼</span>Kelola Frame</Link>
         </nav>
         <div className="mt-8 space-y-2 border-t border-white/10 pt-6"><p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-white/30">Aksi cepat</p><Link href="/" className="block rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">← Kembali ke Kiosk</Link><Link href="/admin/customers" className="block rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">Buka CRM detail</Link><button type="button" onClick={logout} className="block w-full rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">Logout</button></div>
+        <AppVersionFooter />
       </aside>
       <main className="min-w-0 flex-1 overflow-y-auto p-5 md:p-10">
         <div className="mx-auto max-w-7xl">
