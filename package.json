@@ -54,7 +54,8 @@
       {
         "provider": "github",
         "owner": "husnilazy",
-        "repo": "studiodo"
+        "repo": "studiodo",
+        "draft": false
       }
     ],
     "win": {
