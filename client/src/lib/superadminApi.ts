@@ -43,6 +43,11 @@ export type SiteContentSection = {
   customized: boolean;
 };
 
+// --- Blog ---
+export type BlogPostSummary = { id: string; slug: string; title: string; status: "draft" | "published"; publishedAt: string | null; updatedAt: string };
+export type BlogPost = BlogPostSummary & { excerpt: string; body: string; author: string | null; createdAt: string };
+export type BlogPostInput = { slug: string; title: string; excerpt: string; body: string; author: string | null; status: "draft" | "published" };
+
 export class SuperadminApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -264,6 +269,12 @@ export const superadminApi = {
     request<{ ok: boolean }>(`/site-content/${key}`, { method: "PUT", body: JSON.stringify(body) }),
   resetSiteContent: (key: string) => request<{ ok: boolean }>(`/site-content/${key}`, { method: "DELETE" }),
   reorderSiteContent: (keys: string[]) => request<{ ok: boolean }>("/site-content/order", { method: "PUT", body: JSON.stringify({ keys }) }),
+
+  getBlogPosts: () => request<BlogPostSummary[]>("/blog"),
+  getBlogPost: (id: string) => request<BlogPost>(`/blog/${id}`),
+  createBlogPost: (body: BlogPostInput) => request<BlogPost>("/blog", { method: "POST", body: JSON.stringify(body) }),
+  updateBlogPost: (id: string, body: BlogPostInput) => request<BlogPost>(`/blog/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBlogPost: (id: string) => request<{ ok: boolean }>(`/blog/${id}`, { method: "DELETE" }),
 
   getTenantApplications: (status: "pending" | "all" = "pending") => request<TenantApplication[]>(`/tenant-applications?status=${status}`),
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),

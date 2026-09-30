@@ -462,3 +462,19 @@ export const billingOrders = pgTable("billing_orders", {
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("billing_orders_tenant_id_idx").on(table.tenantId)]);
+
+// Blog articles for the marketing website, written from the Superadmin dashboard.
+// `body` is Markdown; the website renders it with its own restricted renderer (no raw
+// HTML), so what is stored here is never treated as trusted markup.
+export const blogPosts = pgTable("blog_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  excerpt: text("excerpt").notNull().default(""),
+  body: text("body").notNull().default(""),
+  author: text("author"),
+  status: text("status").notNull().default("draft"), // 'draft' | 'published'
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("blog_posts_status_published_idx").on(table.status, table.publishedAt)]);

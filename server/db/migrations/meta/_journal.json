@@ -120,6 +120,13 @@
       "when": 1790767583219,
       "tag": "0016_billing_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790775366396,
+      "tag": "0017_blog_posts",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
 import { publicContentRouter } from "./routes/siteContent.js";
 import { portalRouter, billingWebhookRouter } from "./routes/portal.js";
+import { publicBlogRouter } from "./routes/blog.js";
 import { client } from "./db/client.js";
 import { logEvent } from "./lib/platformEvents.js";
 
@@ -68,6 +69,7 @@ app.use("/api/superadmin", superadminRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);
 app.use("/api/public", publicPlansRouter);
 app.use("/api/public", publicContentRouter);
+app.use("/api/public", publicBlogRouter);
 app.use("/api/portal", portalRouter);
 app.use("/api/billing", billingWebhookRouter);
 
