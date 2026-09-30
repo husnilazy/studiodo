@@ -4,6 +4,7 @@ import { and, count, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
+import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { getSubscriptionStatus, extendSubscription } from "../lib/subscription.js";
 import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -70,6 +71,41 @@ portalRouter.get("/summary", async (req, res) => {
     recentPayments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     onlinePaymentEnabled: isMidtransConfigured(),
   });
+});
+
+// POST /api/portal/password — { currentPassword, newPassword }. Requires the current password so a stolen
+// session cookie alone can't lock the owner out. Failed attempts are throttled per admin (in-memory, same
+// caveat as the login guard in routes/auth.ts: single-process only).
+const PASSWORD_MAX_ATTEMPTS = 5;
+const PASSWORD_LOCKOUT_MS = 5 * 60 * 1000;
+const passwordAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+portalRouter.post("/password", async (req, res) => {
+  const adminId = req.adminId!;
+  const currentPassword = String(req.body?.currentPassword ?? "");
+  const newPassword = String(req.body?.newPassword ?? "");
+  if (newPassword.length < 8) return res.status(400).json({ error: "Password baru minimal 8 karakter" });
+  if (newPassword.length > 200) return res.status(400).json({ error: "Password baru terlalu panjang" });
+
+  const entry = passwordAttempts.get(adminId) ?? { count: 0, lockedUntil: 0 };
+  if (entry.lockedUntil > Date.now()) {
+    return res.status(429).json({ error: `Terlalu banyak percobaan. Coba lagi dalam ${Math.ceil((entry.lockedUntil - Date.now()) / 60000)} menit.` });
+  }
+
+  const [admin] = await db.select({ email: admins.email, passwordHash: admins.passwordHash }).from(admins).where(eq(admins.id, adminId));
+  if (!admin) return res.status(404).json({ error: "Akun tidak ditemukan" });
+  if (!verifyPassword(currentPassword, admin.passwordHash)) {
+    entry.count += 1;
+    if (entry.count >= PASSWORD_MAX_ATTEMPTS) { entry.lockedUntil = Date.now() + PASSWORD_LOCKOUT_MS; entry.count = 0; }
+    passwordAttempts.set(adminId, entry);
+    return res.status(400).json({ error: "Password saat ini salah" });
+  }
+  if (verifyPassword(newPassword, admin.passwordHash)) return res.status(400).json({ error: "Password baru harus berbeda dari yang lama" });
+
+  passwordAttempts.delete(adminId);
+  await db.update(admins).set({ passwordHash: hashPassword(newPassword) }).where(eq(admins.id, adminId));
+  logEvent({ tenantId: req.tenantId!, category: "auth", action: "password.changed", message: `Password diganti oleh ${admin.email} lewat portal web`, actorType: "tenant_admin", actorLabel: admin.email });
+  res.json({ ok: true });
 });
 
 // GET /api/portal/billing/orders — this tenant's checkout attempts, newest first.
