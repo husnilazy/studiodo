@@ -17,6 +17,7 @@ import {
 } from "@/lib/superadminApi";
 import { SiteContentPanel } from "@/components/SiteContentPanel";
 import { BlogPanel } from "@/components/BlogPanel";
+import { MarketplacePanel } from "@/components/MarketplacePanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -1329,7 +1330,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "settings";
+type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "settings";
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "overview", label: "Ringkasan", icon: "⌘" },
   { id: "tenants", label: "Tenant", icon: "◎" },
@@ -1338,6 +1339,7 @@ const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "plans", label: "Plans", icon: "▣" },
   { id: "website", label: "Konten Website", icon: "❖" },
   { id: "blog", label: "Blog", icon: "✎" },
+  { id: "marketplace", label: "Marketplace", icon: "❒" },
   { id: "settings", label: "Pengaturan", icon: "⚙" },
 ];
 
@@ -1490,6 +1492,8 @@ export default function SuperadminDashboard() {
         {section === "website" && <SiteContentPanel />}
 
         {section === "blog" && <BlogPanel />}
+
+        {section === "marketplace" && <MarketplacePanel />}
 
         {section === "settings" && <PlatformSettingsPanel />}
       </div>

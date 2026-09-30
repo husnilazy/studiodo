@@ -8,6 +8,7 @@ import { signSuperadminToken } from "../lib/jwt.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
 import { siteContentAdminRouter } from "./siteContent.js";
 import { blogAdminRouter } from "./blog.js";
+import { marketplaceAdminRouter } from "./marketplace.js";
 import { extendSubscription } from "../lib/subscription.js";
 import { computeLocked } from "../lib/subscription.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -76,6 +77,7 @@ superadminRouter.get("/me", requireSuperadminAuth, async (req, res) => {
 superadminRouter.use(requireSuperadminAuth);
 superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);
+superadminRouter.use("/marketplace", marketplaceAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of

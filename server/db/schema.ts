@@ -329,6 +329,10 @@ export const templates = pgTable("templates", {
   style: text("style").notNull().default("Custom"),
   outputPreset: text("output_preset").notNull().default("4r"),
   active: boolean("active").notNull().default(true),
+  // Set when the tenant installed this template from the marketplace catalog (null = they made it
+  // themselves). Lets "install" be idempotent; the catalog entry can be removed without touching
+  // installed copies (ON DELETE SET NULL).
+  marketplaceTemplateId: uuid("marketplace_template_id").references(() => marketplaceTemplates.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("templates_tenant_id_idx").on(table.tenantId)]);
 
@@ -478,3 +482,26 @@ export const blogPosts = pgTable("blog_posts", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [index("blog_posts_status_published_idx").on(table.status, table.publishedAt)]);
+
+// Marketplace catalog — frames a superadmin has curated for every tenant to browse and install.
+// Deliberately a snapshot copy (image URL + slot layout) rather than a live pointer at a tenant's
+// template: the source tenant editing or deleting theirs must never change or break what other
+// tenants already installed. Installing copies a row into `templates` for that tenant.
+export const marketplaceTemplates = pgTable("marketplace_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  creatorName: text("creator_name"), // credit shown on the card; null = STUDIODO
+  category: text("category").notNull().default("custom"), // frame category key: minimal | wedding | birthday | corporate | seasonal | custom
+  frameImageUrl: text("frame_image_url").notNull(), // absolute URL
+  slots: jsonb("slots").$type<{ x: number; y: number; w: number; h: number; rotation?: number }[]>().notNull(),
+  canvasWidth: integer("canvas_width").notNull(),
+  canvasHeight: integer("canvas_height").notNull(),
+  orientation: text("orientation").notNull().default("portrait"),
+  outputPreset: text("output_preset").notNull().default("4r"),
+  featured: boolean("featured").notNull().default(false),
+  active: boolean("active").notNull().default(true), // false = hidden from the catalog (still installed where already used)
+  installCount: integer("install_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("marketplace_templates_active_idx").on(table.active, table.featured)]);

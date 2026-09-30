@@ -48,6 +48,16 @@ export type BlogPostSummary = { id: string; slug: string; title: string; status:
 export type BlogPost = BlogPostSummary & { excerpt: string; body: string; author: string | null; createdAt: string };
 export type BlogPostInput = { slug: string; title: string; excerpt: string; body: string; author: string | null; status: "draft" | "published" };
 
+// --- Marketplace catalog ---
+export type MarketplaceCategory = { key: string; label: string };
+export type MarketplaceItem = {
+  id: string; name: string; description: string; creatorName: string | null; category: string; orientation: string;
+  imageUrl: string; canvasWidth: number; canvasHeight: number; slotCount: number; featured: boolean; installCount: number;
+  active: boolean; createdAt: string;
+};
+export type MarketplaceSource = { id: string; name: string; category: string; orientation: string; imageUrl: string; slotCount: number; publishable: boolean };
+export type MarketplaceMeta = { name?: string; description?: string; creatorName?: string | null; category?: string; featured?: boolean; active?: boolean };
+
 export class SuperadminApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -269,6 +279,12 @@ export const superadminApi = {
     request<{ ok: boolean }>(`/site-content/${key}`, { method: "PUT", body: JSON.stringify(body) }),
   resetSiteContent: (key: string) => request<{ ok: boolean }>(`/site-content/${key}`, { method: "DELETE" }),
   reorderSiteContent: (keys: string[]) => request<{ ok: boolean }>("/site-content/order", { method: "PUT", body: JSON.stringify({ keys }) }),
+
+  getMarketplace: () => request<{ categories: MarketplaceCategory[]; items: MarketplaceItem[] }>("/marketplace"),
+  getMarketplaceSources: (tenantId: string) => request<MarketplaceSource[]>(`/marketplace/source-templates?tenantId=${encodeURIComponent(tenantId)}`),
+  publishToMarketplace: (body: MarketplaceMeta & { fromTemplateId: string }) => request<MarketplaceItem>("/marketplace", { method: "POST", body: JSON.stringify(body) }),
+  updateMarketplaceItem: (id: string, body: MarketplaceMeta) => request<MarketplaceItem>(`/marketplace/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteMarketplaceItem: (id: string) => request<{ ok: boolean }>(`/marketplace/${id}`, { method: "DELETE" }),
 
   getBlogPosts: () => request<BlogPostSummary[]>("/blog"),
   getBlogPost: (id: string) => request<BlogPost>(`/blog/${id}`),

@@ -6,6 +6,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { saveUploadedFile } from "../storage.js";
+import { resolveFrameUrl } from "../lib/frameUrl.js";
 
 export const framesRouter = Router();
 
@@ -35,12 +36,6 @@ async function ensureTenantSettingsRow(tenantId: string) {
   if (!existing) await db.insert(tenantSettings).values({ tenantId });
 }
 
-function resolveFrameUrl(value: unknown): string {
-  const url = String(value ?? "");
-  if (!url || /^(?:data:|https?:|blob:|file:)/i.test(url)) return url;
-  const baseUrl = String(process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-  return baseUrl ? `${baseUrl}/${url.replace(/^\/+/, "")}` : url;
-}
 
 // Same fix as packages.ts's resolveThumbnailUrl — the WYSIWYG frame editor
 // hands over the uploaded frame graphic as a data: URI (simplest upload UX),
