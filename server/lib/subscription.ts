@@ -69,3 +69,20 @@ export async function getSubscriptionStatus(tenantId: string): Promise<Subscript
 
   return { locked, status, subscriptionEndsAt, gracePeriodDays, graceDaysRemaining };
 }
+
+// Shared by the superadmin /extend + payment-recording routes and the Midtrans
+// billing webhook — extends from whichever is later, the tenant's current expiry
+// or now, so renewing early never wastes remaining paid/trial days. Returns null
+// if the tenant doesn't exist.
+export async function extendSubscription(tenantId: string, days: number) {
+  const [tenant] = await db.select({ subscriptionEndsAt: tenants.subscriptionEndsAt }).from(tenants).where(eq(tenants.id, tenantId));
+  if (!tenant) return null;
+
+  const now = Date.now();
+  const currentEnd = tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).getTime() : now;
+  const base = Math.max(currentEnd, now);
+  const nextEnd = new Date(base + days * DAY_MS);
+
+  const [row] = await db.update(tenants).set({ subscriptionEndsAt: nextEnd }).where(eq(tenants.id, tenantId)).returning();
+  return row;
+}

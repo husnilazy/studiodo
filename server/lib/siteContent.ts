@@ -1,0 +1,269 @@
+// Schema + defaults for the marketing website's editable sections. The web app
+// (studiodo-web) renders whatever `resolveContent()` returns; the Superadmin
+// "Konten Website" tab renders a generic form from these field descriptors, so
+// adding a field or a whole section is a change to this one file.
+
+export type FieldDef =
+  | { key: string; label: string; type: "text"; max?: number; hint?: string }
+  | { key: string; label: string; type: "textarea"; max?: number; hint?: string }
+  | { key: string; label: string; type: "list"; itemLabel: string; itemFields: FieldDef[]; maxItems?: number };
+
+export type SectionDef = {
+  key: string;
+  label: string;
+  description: string;
+  /** "site" is global (footer/contact) — always on, not reorderable. */
+  fixed?: boolean;
+  fields: FieldDef[];
+  defaults: Record<string, unknown>;
+};
+
+export const SECTION_DEFS: SectionDef[] = [
+  {
+    key: "hero",
+    label: "Hero (bagian atas)",
+    description: "Headline utama dan tombol ajakan di paling atas halaman.",
+    fields: [
+      { key: "badge", label: "Lencana kecil", type: "text", max: 80 },
+      { key: "titleLine1", label: "Judul baris 1", type: "text", max: 60 },
+      { key: "titleLine2", label: "Judul baris 2 (tebal)", type: "text", max: 60 },
+      { key: "subtitle", label: "Subjudul", type: "textarea", max: 300 },
+      { key: "primaryCta", label: "Tombol utama", type: "text", max: 40 },
+      { key: "secondaryCta", label: "Tombol kedua", type: "text", max: 40 },
+      { key: "bullets", label: "Poin di bawah tombol", type: "list", itemLabel: "Poin", maxItems: 5, itemFields: [{ key: "text", label: "Teks", type: "text", max: 60 }] },
+    ],
+    defaults: {
+      badge: "Platform photobooth untuk pemilik booth",
+      titleLine1: "Kelola booth foto,",
+      titleLine2: "tanpa ribet.",
+      subtitle: "QRIS otomatis, template dari kreator, galeri cloud, dan dashboard real-time untuk semua booth Anda.",
+      primaryCta: "Mulai Trial Gratis",
+      secondaryCta: "Lihat Demo",
+      bullets: [{ text: "Tanpa kartu kredit" }, { text: "Setup 15 menit" }, { text: "Windows 10/11" }],
+    },
+  },
+  {
+    key: "trust",
+    label: "Logo klien",
+    description: "Baris nama/logo bisnis yang memakai STUDIODO. Kosongkan daftar untuk menyembunyikan baris logo.",
+    fields: [
+      { key: "caption", label: "Keterangan", type: "text", max: 120 },
+      { key: "logos", label: "Klien", type: "list", itemLabel: "Klien", maxItems: 10, itemFields: [{ key: "name", label: "Nama", type: "text", max: 50 }] },
+    ],
+    defaults: { caption: "Dipercaya pemilik booth di [JUMLAH] kota", logos: [{ name: "[Logo 1]" }, { name: "[Logo 2]" }, { name: "[Logo 3]" }, { name: "[Logo 4]" }, { name: "[Logo 5]" }] },
+  },
+  {
+    key: "features",
+    label: "Fitur",
+    description: "Kartu fitur. Kartu terakhir tampil dengan gaya gelap sebagai sorotan.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "items", label: "Fitur", type: "list", itemLabel: "Fitur", maxItems: 9, itemFields: [{ key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "textarea", max: 200 }] },
+    ],
+    defaults: {
+      eyebrow: "Fitur",
+      title: "Semua yang booth Anda butuhkan, dalam satu tempat.",
+      items: [
+        { title: "QRIS otomatis", body: "Pelanggan bayar langsung dari layar kiosk, dana masuk otomatis." },
+        { title: "Voucher promo", body: "Buat kode diskon dan pantau performanya per event." },
+        { title: "Screen Builder", body: "Atur tampilan kiosk sesuai brand Anda tanpa coding." },
+        { title: "Kontrol kamera live", body: "ISO, shutter, aperture, dan white balance dari dashboard." },
+        { title: "Foto, GIF, dan video", body: "Galeri cloud dengan link share dan cetak tambahan." },
+        { title: "Satu akun, banyak kiosk", body: "Pantau semua lokasi dan update otomatis dari satu dashboard." },
+      ],
+    },
+  },
+  {
+    key: "howItWorks",
+    label: "Cara kerja",
+    description: "Langkah-langkah dari daftar sampai booth jalan.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "steps", label: "Langkah", type: "list", itemLabel: "Langkah", maxItems: 6, itemFields: [{ key: "title", label: "Judul", type: "text", max: 40 }, { key: "body", label: "Deskripsi", type: "textarea", max: 160 }] },
+    ],
+    defaults: {
+      eyebrow: "Cara kerja",
+      title: "Empat langkah, booth Anda jalan.",
+      steps: [
+        { title: "Daftar", body: "Isi form singkat, tim kami aktifkan akun tenant Anda." },
+        { title: "Install", body: "Unduh aplikasi Windows, pasangkan dengan kunci kiosk." },
+        { title: "Atur", body: "Pilih template, paket, harga, dan tampilan kiosk." },
+        { title: "Jalan", body: "Terima pembayaran dan pantau omzet dari dashboard." },
+      ],
+    },
+  },
+  {
+    key: "templates",
+    label: "Marketplace template",
+    description: "Judul dan kategori pada bagian template. Kartu template masih contoh sampai marketplace dibuka.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "tags", label: "Kategori", type: "list", itemLabel: "Kategori", maxItems: 10, itemFields: [{ key: "text", label: "Nama", type: "text", max: 30 }] },
+    ],
+    defaults: {
+      eyebrow: "Marketplace template",
+      title: "Frame dari kreator, siap pakai di booth Anda.",
+      tags: [{ text: "Semua" }, { text: "Wedding" }, { text: "Ulang Tahun" }, { text: "Korporat" }, { text: "Wisuda" }, { text: "Premium" }],
+    },
+  },
+  {
+    key: "pricing",
+    label: "Harga",
+    description: "Judul bagian harga. Daftar paket diambil otomatis dari menu Plans.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+    ],
+    defaults: { eyebrow: "Harga", title: "Bayar per kiosk, batal kapan saja." },
+  },
+  {
+    key: "community",
+    label: "Komunitas",
+    description: "Teks komunitas dan daftar manfaat.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "body", label: "Paragraf", type: "textarea", max: 400 },
+      { key: "perks", label: "Manfaat", type: "list", itemLabel: "Manfaat", maxItems: 6, itemFields: [{ key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "text", max: 100 }] },
+    ],
+    defaults: {
+      eyebrow: "Komunitas",
+      title: "Tumbuh bareng sesama pemilik booth.",
+      body: "Bagikan tips, tanya jawab, dan temukan pelanggan lewat peta booth publik. Kreator terbaik tampil di papan peringkat.",
+      perks: [
+        { title: "Forum dan grup diskusi", body: "Tanya jawab teknis dan bisnis booth" },
+        { title: "Peta booth STUDIODO", body: "Pelanggan menemukan booth di kotanya" },
+        { title: "Pusat bantuan dan changelog", body: "Panduan, video, dan catatan rilis" },
+      ],
+    },
+  },
+  {
+    key: "testimonials",
+    label: "Testimoni",
+    description: "Testimoni pelanggan nyata. Kosongkan daftar untuk menyembunyikan bagian ini.",
+    fields: [
+      { key: "title", label: "Judul", type: "text", max: 80 },
+      { key: "items", label: "Testimoni", type: "list", itemLabel: "Testimoni", maxItems: 9, itemFields: [{ key: "quote", label: "Kutipan", type: "textarea", max: 400 }, { key: "name", label: "Nama", type: "text", max: 60 }, { key: "business", label: "Nama booth", type: "text", max: 60 }, { key: "city", label: "Kota", type: "text", max: 40 }] },
+    ],
+    defaults: {
+      title: "Kata pemilik booth.",
+      items: [
+        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
+        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
+        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
+      ],
+    },
+  },
+  {
+    key: "faq",
+    label: "FAQ",
+    description: "Pertanyaan yang sering muncul.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "items", label: "Pertanyaan", type: "list", itemLabel: "Pertanyaan", maxItems: 15, itemFields: [{ key: "q", label: "Pertanyaan", type: "text", max: 150 }, { key: "a", label: "Jawaban", type: "textarea", max: 800 }] },
+    ],
+    defaults: {
+      eyebrow: "FAQ",
+      title: "Pertanyaan yang sering muncul.",
+      items: [
+        { q: "Perangkat apa yang dibutuhkan?", a: "[Spesifikasi PC minimum, kamera dan printer yang didukung.]" },
+        { q: "Apakah bisa dipakai tanpa internet?", a: "[Jawaban.]" },
+        { q: "Bagaimana pembayaran QRIS masuk ke rekening saya?", a: "[Jawaban.]" },
+        { q: "Bisa berhenti berlangganan kapan saja?", a: "[Jawaban.]" },
+        { q: "Bagaimana cara menjadi kreator template?", a: "[Jawaban.]" },
+      ],
+    },
+  },
+  {
+    key: "cta",
+    label: "Ajakan penutup",
+    description: "Blok besar di akhir halaman.",
+    fields: [
+      { key: "title", label: "Judul", type: "text", max: 100 },
+      { key: "body", label: "Teks", type: "textarea", max: 200 },
+      { key: "primaryCta", label: "Tombol utama", type: "text", max: 40 },
+      { key: "secondaryCta", label: "Tombol kedua", type: "text", max: 40 },
+    ],
+    defaults: { title: "Siap buka booth berikutnya?", body: "Coba semua fitur gratis 7 hari. Tanpa kartu kredit.", primaryCta: "Mulai Trial Gratis", secondaryCta: "Konsultasi via WhatsApp" },
+  },
+  {
+    key: "site",
+    label: "Pengaturan umum situs",
+    description: "Kontak dan teks footer yang dipakai di seluruh halaman.",
+    fixed: true,
+    fields: [
+      { key: "tagline", label: "Teks footer", type: "text", max: 160 },
+      { key: "whatsappNumber", label: "Nomor WhatsApp (628…, tanpa + atau spasi)", type: "text", max: 20, hint: "Dipakai untuk tombol konsultasi. Kosongkan untuk menyembunyikan." },
+      { key: "supportEmail", label: "Email dukungan", type: "text", max: 100 },
+    ],
+    defaults: { tagline: "Platform photobooth oleh Frameless Creative.", whatsappNumber: "", supportEmail: "" },
+  },
+];
+
+export const SECTION_KEYS = SECTION_DEFS.map((d) => d.key);
+export function getDef(key: string): SectionDef | undefined {
+  return SECTION_DEFS.find((d) => d.key === key);
+}
+
+const DEFAULT_TEXT_MAX = 300;
+const DEFAULT_TEXTAREA_MAX = 1200;
+const DEFAULT_LIST_MAX = 12;
+
+function sanitizeFields(fields: FieldDef[], input: unknown, path: string): Record<string, unknown> {
+  const src = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const f of fields) {
+    const raw = src[f.key];
+    if (f.type === "list") {
+      if (raw !== undefined && !Array.isArray(raw)) throw new Error(`${path}${f.label}: harus berupa daftar`);
+      const items = (raw ?? []) as unknown[];
+      const max = f.maxItems ?? DEFAULT_LIST_MAX;
+      if (items.length > max) throw new Error(`${path}${f.label}: maksimal ${max} item`);
+      out[f.key] = items.map((it, i) => sanitizeFields(f.itemFields, it, `${f.label} #${i + 1} → `));
+    } else {
+      if (raw !== undefined && typeof raw !== "string") throw new Error(`${path}${f.label}: harus berupa teks`);
+      const max = f.max ?? (f.type === "textarea" ? DEFAULT_TEXTAREA_MAX : DEFAULT_TEXT_MAX);
+      const text = String(raw ?? "").trim();
+      if (text.length > max) throw new Error(`${path}${f.label}: maksimal ${max} karakter`);
+      out[f.key] = text;
+    }
+  }
+  return out;
+}
+
+/** Validate + normalize a section's data. Throws Error(message) with a user-facing Indonesian message. */
+export function sanitizeSectionData(def: SectionDef, input: unknown): Record<string, unknown> {
+  const cleaned = sanitizeFields(def.fields, input, "");
+  if (def.key === "site") {
+    const wa = String(cleaned.whatsappNumber ?? "");
+    if (wa && !/^\d{8,15}$/.test(wa)) throw new Error("Nomor WhatsApp harus berupa angka saja (8–15 digit), mis. 6281234567890");
+  }
+  return cleaned;
+}
+
+export type StoredRow = { key: string; data: Record<string, unknown>; enabled: boolean; sortOrder: number | null };
+
+/** Merge stored rows over defaults into the ordered list the public site renders. */
+export function resolveContent(rows: StoredRow[]) {
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const merged = SECTION_DEFS.map((def, index) => {
+    const row = byKey.get(def.key);
+    return {
+      def,
+      enabled: def.fixed ? true : (row?.enabled ?? true),
+      order: row?.sortOrder ?? index,
+      // A stored row replaces defaults field-by-field so a newly added field still shows its default.
+      data: { ...def.defaults, ...(row?.data ?? {}) },
+      customized: !!row,
+    };
+  });
+  const site = merged.find((m) => m.def.key === "site")!;
+  const sections = merged
+    .filter((m) => !m.def.fixed)
+    .sort((a, b) => a.order - b.order);
+  return { site, sections };
+}

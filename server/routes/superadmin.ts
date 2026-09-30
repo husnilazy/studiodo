@@ -6,6 +6,8 @@ import { admins, kioskKeys, packages, platformEvents, platformSettings, plans, s
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signSuperadminToken } from "../lib/jwt.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
+import { siteContentAdminRouter } from "./siteContent.js";
+import { extendSubscription } from "../lib/subscription.js";
 import { computeLocked } from "../lib/subscription.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
@@ -71,6 +73,7 @@ superadminRouter.get("/me", requireSuperadminAuth, async (req, res) => {
 });
 
 superadminRouter.use(requireSuperadminAuth);
+superadminRouter.use("/site-content", siteContentAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of
@@ -262,22 +265,6 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
   if (patch.plan !== undefined) await syncTenantFeaturesToPlan(row.id);
   res.json(row);
 });
-
-// Shared by /extend and the payment-recording route below — extends from
-// whichever is later, the tenant's current expiry or now, so renewing early
-// never wastes remaining paid/trial days. Returns null if the tenant doesn't exist.
-async function extendSubscription(tenantId: string, days: number) {
-  const [tenant] = await db.select({ subscriptionEndsAt: tenants.subscriptionEndsAt }).from(tenants).where(eq(tenants.id, tenantId));
-  if (!tenant) return null;
-
-  const now = Date.now();
-  const currentEnd = tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).getTime() : now;
-  const base = Math.max(currentEnd, now);
-  const nextEnd = new Date(base + days * 24 * 60 * 60 * 1000);
-
-  const [row] = await db.update(tenants).set({ subscriptionEndsAt: nextEnd }).where(eq(tenants.id, tenantId)).returning();
-  return row;
-}
 
 // POST /api/superadmin/tenants/:id/extend — { days } — quick nudge with no
 // billing record (e.g. a goodwill trial extension). For an actual payment, use

@@ -16,6 +16,9 @@ import { authRouter } from "./routes/auth.js";
 import { kioskKeysRouter } from "./routes/kioskKeys.js";
 import { superadminRouter } from "./routes/superadmin.js";
 import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
+import { publicPlansRouter } from "./routes/publicPlans.js";
+import { publicContentRouter } from "./routes/siteContent.js";
+import { portalRouter, billingWebhookRouter } from "./routes/portal.js";
 import { client } from "./db/client.js";
 import { logEvent } from "./lib/platformEvents.js";
 
@@ -63,6 +66,10 @@ app.use("/api/auth", authRouter);
 app.use("/api/kiosk-keys", kioskKeysRouter);
 app.use("/api/superadmin", superadminRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);
+app.use("/api/public", publicPlansRouter);
+app.use("/api/public", publicContentRouter);
+app.use("/api/portal", portalRouter);
+app.use("/api/billing", billingWebhookRouter);
 
 // The Electron kiosk loads its own bundled client locally (file://) and
 // never hits this — but the customer-facing public gallery page

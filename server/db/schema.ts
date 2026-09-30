@@ -427,3 +427,38 @@ export const screenLayouts = pgTable("screen_layouts", {
   index("screen_layouts_tenant_id_idx").on(table.tenantId),
   unique("screen_layouts_tenant_screen_orientation_unique").on(table.tenantId, table.screenKey, table.orientation),
 ]);
+
+// Editable marketing-website content (studiodo-web landing page), one row per
+// section/module. A missing row means "use the built-in defaults" (see
+// server/lib/siteContent.ts), so a fresh database renders the full landing page
+// with zero setup and a superadmin only stores what they actually changed.
+// `data` is validated against the section's field schema on every write — it is
+// never trusted as arbitrary JSON, because the public site renders it.
+export const siteContent = pgTable("site_content", {
+  key: text("key").primaryKey(), // 'hero' | 'features' | … | 'site' (see SECTION_DEFS)
+  data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+  enabled: boolean("enabled").notNull().default(true),
+  sortOrder: integer("sort_order"), // null = default position
+  updatedBy: text("updated_by"), // superadmin email
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Online subscription payments (Midtrans Snap) — one row per checkout attempt. The
+// webhook flips `status` pending → paid exactly once (guarded by an UPDATE … WHERE
+// status = 'pending'), and only then extends the tenant's subscription and records
+// the tenant_payments row, so a retried/duplicated notification never double-extends.
+export const billingOrders = pgTable("billing_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: text("order_id").notNull().unique(), // sent to Midtrans as order_id
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  planId: uuid("plan_id").references(() => plans.id, { onDelete: "set null" }),
+  planName: text("plan_name").notNull(), // snapshot
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // snapshot — what was actually charged
+  periodDays: integer("period_days").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending' | 'paid' | 'failed' | 'expired'
+  snapToken: text("snap_token"),
+  redirectUrl: text("redirect_url"),
+  paymentType: text("payment_type"), // as reported by Midtrans, e.g. 'qris' | 'bank_transfer'
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("billing_orders_tenant_id_idx").on(table.tenantId)]);

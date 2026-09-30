@@ -26,6 +26,23 @@ export function setSuperadminToken(token: string | null) {
   }
 }
 
+
+// --- Marketing-website content (CMS) — schema comes from server/lib/siteContent.ts ---
+export type SiteContentField =
+  | { key: string; label: string; type: "text" | "textarea"; max?: number; hint?: string }
+  | { key: string; label: string; type: "list"; itemLabel: string; itemFields: SiteContentField[]; maxItems?: number };
+export type SiteContentSection = {
+  key: string;
+  label: string;
+  description: string;
+  fixed: boolean;
+  fields: SiteContentField[];
+  defaults: Record<string, unknown>;
+  data: Record<string, unknown>;
+  enabled: boolean;
+  customized: boolean;
+};
+
 export class SuperadminApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -241,6 +258,12 @@ export const superadminApi = {
     return request<PlatformEvent[]>(`/events${qs ? `?${qs}` : ""}`);
   },
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
+
+  getSiteContent: () => request<SiteContentSection[]>("/site-content"),
+  saveSiteContent: (key: string, body: { data?: Record<string, unknown>; enabled?: boolean }) =>
+    request<{ ok: boolean }>(`/site-content/${key}`, { method: "PUT", body: JSON.stringify(body) }),
+  resetSiteContent: (key: string) => request<{ ok: boolean }>(`/site-content/${key}`, { method: "DELETE" }),
+  reorderSiteContent: (keys: string[]) => request<{ ok: boolean }>("/site-content/order", { method: "PUT", body: JSON.stringify({ keys }) }),
 
   getTenantApplications: (status: "pending" | "all" = "pending") => request<TenantApplication[]>(`/tenant-applications?status=${status}`),
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
