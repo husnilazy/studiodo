@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, FILTER_CSS, FILTER_LABELS, type CameraFilter } from "@/lib/sessionStore";
 import { isEventActive, useBoothConfig } from "@/lib/boothConfigStore";
-import { captureFromTether, focusTetherCamera, checkTetherBridge } from "@/lib/camera";
+import { captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
 import { renderTemplate } from "@/lib/output";
 import { getNextRoute } from "@/lib/kioskFlow";
 import { useTemplateLibrary } from "@/lib/templateStore";
@@ -161,6 +161,7 @@ export default function SesiFoto() {
   const [capturedSlot, setCapturedSlot] = useState<number | null>(null);
   const [liveViewUrl, setLiveViewUrl] = useState<string | null>(null);
   const [liveViewLost, setLiveViewLost] = useState(false);
+  const [liveViewStarting, setLiveViewStarting] = useState(false);
   // The live preview box's shape matches whatever the camera actually streams
   // (read off the feed itself) instead of a hardcoded 4:3/3:4 guess — a Canon's
   // live view is commonly 3:2 or 16:9, not 4:3, and forcing 4:3 on a feed that
@@ -313,13 +314,15 @@ export default function SesiFoto() {
     const check = async () => {
       const result = await checkTetherBridge(config.tetherBridgeUrl);
       if (cancelled) return;
-      const ok = Boolean(result.ok && result.digicamReachable);
+      const ok = Boolean(result.ok && result.digicamReachable && result.cameraConnected !== false);
       setCameraReady(ok);
       setCameraError(ok
         ? null
-        : (result.digicamReachable === false
-          ? "digiCamControl berjalan, tetapi kamera Canon tidak terdeteksi. Periksa kabel USB/koneksi kamera."
-          : "Bridge kamera tidak terjangkau. Pastikan digiCamControl dan bridge-nya berjalan."));
+        : (result.ok && result.digicamReachable
+          ? "Kamera Canon tidak terdeteksi. Periksa kabel USB dan pastikan kamera menyala."
+          : (result.digicamReachable === false
+            ? "digiCamControl belum berjalan. Buka digiCamControl dan aktifkan webserver-nya."
+            : "Bridge kamera tidak terjangkau. Pastikan digiCamControl dan bridge-nya berjalan.")));
     };
 
     check();
@@ -336,6 +339,14 @@ export default function SesiFoto() {
     const bridgeUrl = config.tetherBridgeUrl.replace(/\/$/, "");
 
     const refreshLiveView = async () => {
+      // Live view is only switched on for the duration of a session (the
+      // camera overheats if it streams all day) — ask the bridge to start it
+      // and wait for the first frame before polling. A failed start isn't
+      // fatal: polling below still picks up a feed that was already running.
+      setLiveViewStarting(true);
+      await startTetherLiveView(bridgeUrl);
+      if (controller.signal.aborted) return;
+      setLiveViewStarting(false);
       while (!controller.signal.aborted) {
         setLiveViewUrl(`${bridgeUrl}/liveview.jpg?ts=${Date.now()}`);
         // Back off once the feed is confirmed lost — no point hammering a
@@ -349,6 +360,8 @@ export default function SesiFoto() {
     return () => {
       controller.abort();
       setLiveViewUrl(null);
+      setLiveViewStarting(false);
+      stopTetherLiveView(bridgeUrl);
     };
   }, [config.cameraMode, config.tetherBridgeUrl]);
 
@@ -965,7 +978,7 @@ export default function SesiFoto() {
               {!previewReady && !cameraError && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
                   <div className="h-10 w-10 rounded-full border-2 border-fg/20 border-t-accent animate-spin" />
-                  <span className="mt-4 text-sm text-fg/60">Menyiapkan kamera...</span>
+                  <span className="mt-4 text-sm text-fg/60">{liveViewStarting ? "Menyalakan live view kamera..." : "Menyiapkan kamera..."}</span>
                 </div>
               )}
               {cameraError && (

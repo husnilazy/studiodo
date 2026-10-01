@@ -7,6 +7,27 @@ export interface TetherCaptureOptions {
   orientation: Orientation;
 }
 
+/**
+ * Live view only runs while a session needs it (the camera body overheats if
+ * it streams all day). Failures are non-fatal: a bridge that lacks these
+ * endpoints (e.g. the old canon-bridge.exe) just keeps whatever live view it has.
+ */
+export async function startTetherLiveView(bridgeUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/liveview/start`, { method: "POST", signal: AbortSignal.timeout(20000) });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { ready?: boolean };
+    return Boolean(payload.ready);
+  } catch {
+    return false;
+  }
+}
+
+export function stopTetherLiveView(bridgeUrl: string): void {
+  // keepalive so the request still goes out when the page is being torn down.
+  fetch(`${bridgeUrl.replace(/\/$/, "")}/liveview/stop`, { method: "POST", keepalive: true }).catch(() => {});
+}
+
 export async function focusTetherCamera(bridgeUrl: string): Promise<void> {
   const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/focus`, {
     method: "POST",
@@ -90,6 +111,8 @@ export async function setCameraProperties(bridgeUrl: string, values: Record<stri
 export interface TetherBridgeHealth {
   ok: boolean;
   digicamReachable?: boolean;
+  /** Undefined from older bridges that don't report it — treat as connected. */
+  cameraConnected?: boolean;
   digicamUrl?: string;
   error?: string;
 }
@@ -102,8 +125,8 @@ export async function checkTetherBridge(bridgeUrl: string): Promise<TetherBridge
   try {
     const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(4000) });
     if (!response.ok) return { ok: false, error: `Bridge merespons status ${response.status}` };
-    const payload = (await response.json()) as { ok?: boolean; digicamReachable?: boolean; digicamUrl?: string };
-    return { ok: Boolean(payload.ok), digicamReachable: payload.digicamReachable, digicamUrl: payload.digicamUrl };
+    const payload = (await response.json()) as { ok?: boolean; digicamReachable?: boolean; cameraConnected?: boolean; digicamUrl?: string };
+    return { ok: Boolean(payload.ok), digicamReachable: payload.digicamReachable, cameraConnected: payload.cameraConnected, digicamUrl: payload.digicamUrl };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Bridge tidak terjangkau" };
   }

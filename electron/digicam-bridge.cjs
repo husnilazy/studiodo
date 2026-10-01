@@ -4,10 +4,13 @@
 // webserver diaktifkan di Settings > Webserver) ke kontrak HTTP yang dipakai
 // client/src/lib/camera.ts:
 //
-//   GET  /health      -> { ok, digicamReachable }
+//   GET  /health      -> { ok, digicamReachable, cameraConnected }
 //   POST /capture     -> { slotIndex, filter, orientation } => image/jpeg
 //   GET  /properties  -> { [name]: { value, choices } } (ISO/shutter/aperture/WB)
 //   POST /properties  -> { [name]: value } => { results: { [name]: { ok, error? } } }
+//   POST /liveview/start -> { ready }  (nyalakan live view, tunggu frame pertama)
+//   POST /liveview/stop  -> 204        (matikan live view supaya kamera tidak panas)
+//   GET  /liveview.jpg   -> satu frame live view
 //
 // digiCamControl HARUS sudah berjalan sendiri (proses .exe terpisah) dengan
 // webserver aktif (default port 5513). Bridge ini TIDAK menjalankan
@@ -30,6 +33,7 @@
 
 const http = require("http");
 const net = require("net");
+const crypto = require("crypto");
 const { URL } = require("url");
 
 const DIGICAM_URL = (process.env.DIGICAM_URL || "http://127.0.0.1:5513").replace(/\/$/, "");
@@ -188,6 +192,22 @@ async function checkDigicamReachable() {
   }
 }
 
+// digiCamControl answering on its port only means the app is open — not that a
+// camera is plugged in. Verified live: "slc=list&param1=cameras" returns the
+// connected camera's serial number (one per line), and just "OK" when none is
+// connected. Anything else (errors, empty) counts as not connected.
+async function checkCameraConnected() {
+  try {
+    const raw = await digicamSlc("list", "cameras");
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .some((line) => line && line.toUpperCase() !== "OK" && !/error|exception|object reference|wrong|not found/i.test(line));
+  } catch {
+    return false;
+  }
+}
+
 // digiCamControl occasionally answers a command with a transient 5xx/timeout
 // while it's still busy finishing the previous one (autofocus settling,
 // writing the last file, USB re-negotiation) — a couple of quick retries
@@ -272,11 +292,142 @@ async function downloadImage(filename) {
   }, 3, 300);
 }
 
+// --- Live view on demand ---------------------------------------------------
+// Live view keeps the Canon sensor powered and running continuously, which is
+// what makes the body overheat on a booth that sits on it all day. So the
+// kiosk asks for it explicitly (POST /liveview/start when a photo session
+// begins, /liveview/stop when it ends) instead of it being left on.
+//
+// digiCamControl's own web UI (WebServer/liveview.html + cmd.html, shipped in
+// its install folder) turns live view on with "?CMD=LiveViewWnd_Show" and off
+// with "?CMD=LiveViewWnd_Hide" — /liveview.jpg only returns frames while that
+// window is open, and an empty 200 otherwise. NOTE: those command names come
+// from that shipped web UI, not from a tethered-camera test (no camera was
+// connected when this was written) — if live view never starts, check them first.
+//
+// Safety net: if the kiosk crashes or navigates away without calling /stop, a
+// watchdog turns live view off once nobody has fetched a frame for a while.
+const LIVEVIEW_START_TIMEOUT_MS = Number(process.env.DIGICAM_LIVEVIEW_START_TIMEOUT_MS || 12000);
+const LIVEVIEW_IDLE_STOP_MS = Number(process.env.DIGICAM_LIVEVIEW_IDLE_STOP_MS || 20000);
+const LIVEVIEW_HEAL_COOLDOWN_MS = 6000;
+const LIVEVIEW_STALE_MS = 3000;
+
+let liveViewDesired = false;
+let liveViewLastSeen = 0;
+let liveViewLastHeal = 0;
+let liveViewLastChange = 0;
+let liveViewShown = false;
+let liveViewLastHash = null;
+let liveViewWatchdog = null;
+let liveViewChain = Promise.resolve();
+let onLiveViewShown = null;
+
+// Start/stop calls can arrive back-to-back (React dev double-mount, quick
+// session restart) — run them strictly in order so a late "hide" can never
+// land after a newer "show".
+function liveViewSerial(task) {
+  const run = liveViewChain.then(task, task);
+  liveViewChain = run.catch(() => {});
+  return run;
+}
+
+// Verified live (Canon EOS 1300D): while the live view window is HIDDEN,
+// /liveview.jpg keeps serving the last frame it ever had (byte-identical, 200
+// OK) — so "a frame came back" does NOT mean live view is running. Only a
+// frame whose bytes keep changing does (sensor noise alone changes every frame).
+async function fetchLiveViewFrame() {
+  try {
+    const response = await digicamGet("/liveview.jpg");
+    if (response.statusCode !== 200 || response.body.length === 0) return null;
+    return crypto.createHash("md5").update(response.body).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+function armLiveViewWatchdog() {
+  if (liveViewWatchdog) return;
+  liveViewWatchdog = setInterval(() => {
+    if (liveViewDesired && Date.now() - liveViewLastSeen > LIVEVIEW_IDLE_STOP_MS) {
+      console.log("[digicam-bridge] live view idle, mematikan otomatis");
+      stopLiveView().catch(() => {});
+    }
+  }, 5000);
+  liveViewWatchdog.unref?.();
+}
+
+function startLiveView() {
+  liveViewDesired = true;
+  liveViewLastSeen = Date.now();
+  armLiveViewWatchdog();
+  return liveViewSerial(async () => {
+    liveViewDesired = true;
+    // Baseline BEFORE showing, so a stale frame can't be mistaken for a live one.
+    let lastHash = await fetchLiveViewFrame();
+    if (!liveViewShown) {
+      await digicamGet("/?CMD=LiveViewWnd_Show");
+      liveViewShown = true;
+      // The digiCamControl live view window opens on top of everything — put
+      // the kiosk back in front so customers never see the operator window.
+      onLiveViewShown?.();
+    }
+    const deadline = Date.now() + LIVEVIEW_START_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (!liveViewDesired) return { ready: false };
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const hash = await fetchLiveViewFrame();
+      if (hash && lastHash && hash !== lastHash) {
+        liveViewLastChange = Date.now();
+        onLiveViewShown?.();
+        return { ready: true };
+      }
+      lastHash = hash || lastHash;
+    }
+    return { ready: false };
+  });
+}
+
+function stopLiveView() {
+  liveViewDesired = false;
+  return liveViewSerial(async () => {
+    // A start queued after this stop wins — don't hide what it just showed.
+    if (liveViewDesired) return;
+    try {
+      await digicamGet("/?CMD=LiveViewWnd_Hide");
+      liveViewShown = false;
+    } catch (error) {
+      console.error("[digicam-bridge] gagal mematikan live view:", error);
+    }
+  });
+}
+
+// If the kiosk still wants live view but the frames have stopped changing
+// (window closed by hand, camera dropped out of live view), cycle the window
+// — rate-limited so a genuinely dead camera isn't hammered with commands.
+function healLiveViewIfStale() {
+  if (!liveViewDesired || Date.now() - liveViewLastChange < LIVEVIEW_STALE_MS) return;
+  if (Date.now() - liveViewLastHeal < LIVEVIEW_HEAL_COOLDOWN_MS) return;
+  liveViewLastHeal = Date.now();
+  liveViewShown = false;
+  digicamGet("/?CMD=LiveViewWnd_Hide").catch(() => {}).finally(() => startLiveView().catch(() => {}));
+}
+
 async function handleLiveView(res) {
+  if (liveViewDesired) liveViewLastSeen = Date.now();
   try {
     const response = await digicamGet("/liveview.jpg");
     if (response.statusCode !== 200 || response.body.length === 0) {
+      healLiveViewIfStale();
       throw new Error(`Live view digiCamControl tidak tersedia (status ${response.statusCode})`);
+    }
+    if (liveViewDesired) {
+      const hash = crypto.createHash("md5").update(response.body).digest("hex");
+      if (hash !== liveViewLastHash) {
+        liveViewLastHash = hash;
+        liveViewLastChange = Date.now();
+      } else {
+        healLiveViewIfStale();
+      }
     }
     res.writeHead(200, {
       "Content-Type": "image/jpeg",
@@ -322,7 +473,8 @@ async function handleFocus(res) {
   }
 }
 
-function startDigicamBridge() {
+function startDigicamBridge(options = {}) {
+  if (typeof options.onLiveViewShown === "function") onLiveViewShown = options.onLiveViewShown;
   if (server) return { available: true, port: BRIDGE_PORT, alreadyRunning: true };
 
   server = http.createServer((req, res) => {
@@ -337,15 +489,37 @@ function startDigicamBridge() {
     }
 
     if (req.method === "GET" && req.url === "/health") {
-      checkDigicamReachable().then((digicamReachable) => {
+      checkDigicamReachable().then(async (digicamReachable) => {
+        const cameraConnected = digicamReachable ? await checkCameraConnected() : false;
         res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-        res.end(JSON.stringify({ ok: true, digicamReachable, digicamUrl: DIGICAM_URL }));
+        res.end(JSON.stringify({ ok: true, digicamReachable, cameraConnected, digicamUrl: DIGICAM_URL }));
       });
       return;
     }
 
     if (req.method === "GET" && req.url?.startsWith("/liveview.jpg")) {
       handleLiveView(res);
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/liveview/start") {
+      startLiveView()
+        .then((result) => {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(result));
+        })
+        .catch((error) => {
+          res.writeHead(502, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Live view gagal dinyalakan" }));
+        });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/liveview/stop") {
+      stopLiveView().finally(() => {
+        res.writeHead(204, { "Access-Control-Allow-Origin": "*" });
+        res.end();
+      });
       return;
     }
 
@@ -411,6 +585,7 @@ function startDigicamBridge() {
 }
 
 function stopDigicamBridge() {
+  if (liveViewDesired) stopLiveView().catch(() => {});
   if (server) {
     server.close();
     server = null;

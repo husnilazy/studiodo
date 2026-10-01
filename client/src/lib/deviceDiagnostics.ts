@@ -27,6 +27,7 @@ export async function checkCamera(cameraMode: CameraMode, tetherBridgeUrl: strin
     const health = await checkTetherBridge(tetherBridgeUrl);
     if (!health.ok) return { status: "fail", detail: health.error ?? "Bridge kamera tidak terjangkau." };
     if (health.digicamReachable === false) return { status: "warn", detail: "Bridge jalan, tapi digiCamControl belum terhubung." };
+    if (health.cameraConnected === false) return { status: "fail", detail: "digiCamControl jalan, tapi kamera Canon tidak terdeteksi (cek kabel USB)." };
     return { status: "ok", detail: "Bridge kamera & digiCamControl terhubung." };
   }
   try {

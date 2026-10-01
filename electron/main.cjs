@@ -158,6 +158,15 @@ function openExternalLinksIn(win) {
   });
 }
 
+// digiCamControl's live view window pops up in front of everything when the
+// bridge turns live view on — pull the (fullscreen) kiosk back on top.
+function bringKioskToFront() {
+  if (!kioskWin || kioskWin.isDestroyed()) return;
+  kioskWin.show();
+  kioskWin.focus();
+  kioskWin.moveTop();
+}
+
 function createKioskWindow() {
   const { width, height } = screen.getPrimaryDisplay().bounds;
   kioskWin = new BrowserWindow({
@@ -308,7 +317,7 @@ app.whenReady().then(() => {
   console.log(`[startup] app ready isDev=${isDev} version=${app.getVersion()}`);
   startCanonBridge();
   if (process.env.DIGICAM_BRIDGE_ENABLED !== "false") {
-    startDigicamBridge();
+    startDigicamBridge({ onLiveViewShown: bringKioskToFront });
   }
   createKioskWindow();
   setupAutoUpdater();
@@ -380,7 +389,7 @@ ipcMain.handle("digicam:bridgeStatus", () => ({
 ipcMain.handle("digicam:restartBridge", () => {
   try {
     stopDigicamBridge();
-    startDigicamBridge();
+    startDigicamBridge({ onLiveViewShown: bringKioskToFront });
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Gagal restart bridge kamera" };

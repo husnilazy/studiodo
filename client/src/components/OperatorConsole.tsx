@@ -238,7 +238,7 @@ function CameraPanel() {
             )}
             {health && (
               <span className={`text-xs ${health.ok ? "text-emerald-300" : "text-red-300"}`}>
-                {health.ok ? `Bridge terhubung${health.digicamReachable === false ? " (digiCamControl belum aktif)" : ""}` : health.error}
+                {health.ok ? `Bridge terhubung${health.digicamReachable === false ? " (digiCamControl belum aktif)" : health.cameraConnected === false ? " (kamera tidak terdeteksi)" : ""}` : health.error}
               </span>
             )}
           </div>

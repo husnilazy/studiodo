@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
-import { checkTetherBridge, getCameraProperties, setCameraProperties, type TetherBridgeHealth, type CameraProperties } from "@/lib/camera";
+import { checkTetherBridge, getCameraProperties, setCameraProperties, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth, type CameraProperties } from "@/lib/camera";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
@@ -162,9 +162,14 @@ function AdminLiveView({ bridgeUrl, enabled }: { bridgeUrl: string; enabled: boo
         await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
     };
-    refresh();
+    // Live view is off by default now — switch it on while this monitor is
+    // open, and off again when it closes so the camera can cool down.
+    startTetherLiveView(bridgeUrl).then(() => {
+      if (!controller.signal.aborted) refresh();
+    });
     return () => {
       controller.abort();
+      stopTetherLiveView(bridgeUrl);
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       setImageUrl(null);
     };
@@ -265,6 +270,8 @@ export default function CameraSettings() {
               <p className="mt-2 text-xs">
                 {bridgeHealth === null ? (
                   <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
+                ) : bridgeHealth.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected === false ? (
+                  <span className="text-amber-300">● digiCamControl jalan, tapi kamera Canon tidak terdeteksi. Periksa kabel USB dan pastikan kamera menyala.</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable ? (
                   <span className="text-emerald-300">● Bridge aktif, digiCamControl terhubung ({bridgeHealth.digicamUrl})</span>
                 ) : bridgeHealth.ok ? (
@@ -294,9 +301,9 @@ export default function CameraSettings() {
         </div>
       </section>
 
-      <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable)} />
+      <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
 
-      <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable)} />
+      <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
     </div>
   );
 }
