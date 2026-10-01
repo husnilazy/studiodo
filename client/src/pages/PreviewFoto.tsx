@@ -332,6 +332,13 @@ export default function PreviewFoto() {
                   </button>
                 ))}
               </div>
+              <div className="flex shrink-0 items-center gap-2" title="Cermin = sama seperti yang kamu lihat di layar saat berfoto">
+                <span className="hidden text-xs font-semibold text-muted sm:inline">Hasil:</span>
+                <div className="inline-flex rounded-full border border-fg/10 bg-canvas/60 p-1 text-xs font-semibold">
+                  <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                  <button type="button" onClick={() => setOutputMirrored(false)} aria-pressed={!outputMirrored} className={`rounded-full px-3.5 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
+                </div>
+              </div>
               {features.retake && (
                 <button type="button" onClick={() => redo(selectedPhoto)} disabled={retakesLeft <= 0} className="k-btn shrink-0 !min-h-0 !px-4 !py-2.5 !text-sm">
                   <Icon name="refresh" className="h-4 w-4" />

@@ -1009,14 +1009,6 @@ export default function SesiFoto() {
                   <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-emerald-300/40 bg-black/60 px-3 py-1 text-xs text-emerald-200 backdrop-blur-sm">
                     LIVE VIEW
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => useKioskSession.getState().setMirrorLiveView(!useKioskSession.getState().mirrorLiveView)}
-                    className="absolute right-4 top-4 z-20 rounded-xl border border-white/20 bg-black/65 px-3 py-2 text-xs font-semibold text-white backdrop-blur-sm transition hover:border-accent hover:bg-black/80"
-                    aria-pressed={mirrorLiveView}
-                  >
-                    Mirror {mirrorLiveView ? "On" : "Off"}
-                  </button>
                 </div>
               ) : (
                 <video
@@ -1029,6 +1021,15 @@ export default function SesiFoto() {
                   style={{ filter: FILTER_CSS[filter], transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
                 />
               )}
+              <button
+                type="button"
+                onClick={() => useKioskSession.getState().setMirrorLiveView(!useKioskSession.getState().mirrorLiveView)}
+                aria-pressed={mirrorLiveView}
+                className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-full border border-white/25 bg-black/55 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/70"
+              >
+                <Icon name="mirror" className="h-4 w-4" />
+                Cermin {mirrorLiveView ? "aktif" : "mati"}
+              </button>
               {flash && <div className="pointer-events-none absolute inset-0 animate-flash bg-white" />}
               {capturing && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center">
