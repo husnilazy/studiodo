@@ -5,16 +5,12 @@ import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
-import { getSubscriptionStatus, extendSubscription } from "../lib/subscription.js";
-import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
+import { getSubscriptionStatus } from "../lib/subscription.js";
 import { logEvent } from "../lib/platformEvents.js";
-import {
-  createSnapTransaction,
-  isMidtransConfigured,
-  outcomeFromNotification,
-  verifyNotificationSignature,
-  type MidtransNotification,
-} from "../lib/midtrans.js";
+import { createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
+import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
+import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
+import { settleOrder } from "../lib/billing.js";
 
 // --- Tenant portal API (web dashboard for tenant admins) — tenant-admin JWT, same as /api/auth ---
 
@@ -69,7 +65,7 @@ portalRouter.get("/summary", async (req, res) => {
     })),
     last30Days: { sessions: Number(stats?.sessions ?? 0), revenue: Number(stats?.revenue ?? 0) },
     recentPayments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
-    onlinePaymentEnabled: isMidtransConfigured(),
+    onlinePaymentEnabled: (await usableGateways()).length > 0,
   });
 });
 
@@ -118,9 +114,12 @@ portalRouter.get("/billing/orders", async (req, res) => {
   res.json(rows.map((r) => ({ ...r, amount: Number(r.amount) })));
 });
 
-// POST /api/portal/billing/checkout — { planSlug } → { redirectUrl } to Midtrans' hosted payment page.
+// POST /api/portal/billing/checkout — { planSlug } → { redirectUrl } to a gateway's hosted payment page.
+// Tries the enabled gateways in priority order (Superadmin → Pengaturan → Pembayaran langganan): if one is down or
+// rejects the request, the next is used. If none works the tenant is told to contact STUDIODO instead.
 portalRouter.post("/billing/checkout", async (req, res) => {
-  if (!isMidtransConfigured()) {
+  const gateways = await usableGateways();
+  if (gateways.length === 0) {
     return res.status(503).json({ error: "Pembayaran online belum diaktifkan. Hubungi admin STUDIODO untuk perpanjang langganan." });
   }
   const planSlug = String(req.body?.planSlug ?? "");
@@ -136,82 +135,99 @@ portalRouter.post("/billing/checkout", async (req, res) => {
   const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
   if (!admin || !tenant) return res.status(404).json({ error: "Akun tidak ditemukan" });
 
-  const orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-  try {
-    const snap = await createSnapTransaction({
-      orderId,
-      grossAmount: amount,
-      itemName: `${plan.name} (${periodDays} hari)`,
-      customerEmail: admin.email,
-      customerName: tenant.name,
-      finishUrl: process.env.PORTAL_BASE_URL ? `${process.env.PORTAL_BASE_URL.replace(/\/$/, "")}/portal/tagihan?status=selesai` : undefined,
-    });
-    await db.insert(billingOrders).values({
-      orderId, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
-      snapToken: snap.token, redirectUrl: snap.redirectUrl,
-    });
-    logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} dibuat: ${plan.name}, Rp ${amount.toLocaleString("id-ID")}`, actorType: "tenant_admin", actorLabel: admin.email });
-    res.status(201).json({ redirectUrl: snap.redirectUrl, orderId });
-  } catch (e) {
-    logEvent({ tenantId, level: "error", category: "billing", action: "checkout.failed", message: `Checkout gagal untuk "${tenant.name}": ${e instanceof Error ? e.message : String(e)}`, actorType: "system" });
-    res.status(502).json({ error: "Gagal membuat pembayaran. Coba lagi beberapa saat lagi." });
+  const finishUrl = process.env.PORTAL_BASE_URL ? `${process.env.PORTAL_BASE_URL.replace(/\/$/, "")}/portal/tagihan?status=selesai` : undefined;
+  const itemName = `${plan.name} (${periodDays} hari)`;
+
+  for (const gw of gateways) {
+    // A fresh order id per attempt: a gateway that failed mid-way may already have recorded the previous one.
+    const orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    try {
+      let redirectUrl: string;
+      let snapToken: string | null = null;
+      let providerRef: string | null = null;
+      if (gw.provider === "midtrans") {
+        const snap = await createSnapTransaction({ serverKey: gw.secretKey!, production: gw.environment === "production" }, {
+          orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl,
+        });
+        redirectUrl = snap.redirectUrl;
+        snapToken = snap.token;
+      } else {
+        const invoice = await createXenditInvoice({ secretKey: gw.secretKey! }, { orderId, amount, description: `STUDIODO — ${itemName}`, customerEmail: admin.email, finishUrl });
+        redirectUrl = invoice.redirectUrl;
+        providerRef = invoice.invoiceId;
+      }
+      await db.insert(billingOrders).values({
+        orderId, provider: gw.provider, providerRef, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
+        snapToken, redirectUrl,
+      });
+      logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, Rp ${amount.toLocaleString("id-ID")}`, actorType: "tenant_admin", actorLabel: admin.email });
+      return res.status(201).json({ redirectUrl, orderId, provider: gw.provider });
+    } catch (e) {
+      logEvent({ tenantId, level: gateways.indexOf(gw) < gateways.length - 1 ? "warning" : "error", category: "billing", action: "checkout.gateway_failed", message: `Checkout via ${gw.provider} gagal untuk "${tenant.name}": ${e instanceof Error ? e.message : String(e)}${gateways.indexOf(gw) < gateways.length - 1 ? " — mencoba gateway berikutnya" : ""}`, actorType: "system" });
+    }
   }
+  res.status(502).json({ error: "Gagal membuat pembayaran. Coba lagi beberapa saat lagi, atau hubungi admin STUDIODO." });
 });
 
-// --- Midtrans webhook — PUBLIC (Midtrans calls it), authenticated by the signature instead ---
+// --- Gateway webhooks — PUBLIC (the gateways call them), each authenticated by its own mechanism ---
 
 export const billingWebhookRouter = Router();
 
-// POST /api/billing/midtrans/notification
+// Webhooks are accepted whenever a key exists, even if the gateway was switched off in the meantime —
+// a customer may well have paid just before it was disabled, and that payment must still be honoured.
+
+// POST /api/billing/midtrans/notification — authenticated by the SHA512 signature
 billingWebhookRouter.post("/midtrans/notification", async (req, res) => {
-  if (!isMidtransConfigured()) return res.status(503).json({ error: "Midtrans belum dikonfigurasi" });
+  const cfg = await loadGateway("midtrans");
+  if (!cfg.secretKey) return res.status(503).json({ error: "Midtrans belum dikonfigurasi" });
 
   const n = (req.body ?? {}) as MidtransNotification;
-  if (!verifyNotificationSignature(n)) {
+  if (!verifyNotificationSignature(cfg.secretKey, n)) {
     logEvent({ level: "warning", category: "billing", action: "webhook.bad_signature", message: `Notifikasi Midtrans dengan signature tidak valid (order ${String(n.order_id ?? "?").slice(0, 60)})`, actorType: "system" });
+    void noteWebhook("midtrans", "signature ditolak").catch(() => undefined);
     return res.status(403).json({ error: "Signature tidak valid" });
   }
 
   const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, String(n.order_id)));
-  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (!order || order.provider !== "midtrans") return res.status(404).json({ error: "Order tidak ditemukan" });
 
   // The signature covers gross_amount, but also confirm it matches what we charged — never
   // extend a subscription because a differently-priced payment happened to carry a valid order id.
   if (Math.round(Number(n.gross_amount)) !== Math.round(Number(order.amount))) {
     logEvent({ tenantId: order.tenantId, level: "error", category: "billing", action: "webhook.amount_mismatch", message: `Nominal notifikasi ${n.gross_amount} tidak cocok dengan order ${order.orderId} (${order.amount})`, actorType: "system" });
+    void noteWebhook("midtrans", `nominal tidak cocok (${order.orderId})`).catch(() => undefined);
     return res.status(400).json({ error: "Nominal tidak cocok" });
   }
 
-  const outcome = outcomeFromNotification(n);
+  const result = await settleOrder(order, outcomeFromNotification(n), n.payment_type ?? null);
+  void noteWebhook("midtrans", `${result} · ${order.orderId}`).catch(() => undefined);
+  res.json({ ok: true });
+});
 
-  if (outcome === "paid") {
-    // Guarded transition: only the first notification wins, so retries never double-extend.
-    const [claimed] = await db.update(billingOrders)
-      .set({ status: "paid", paidAt: new Date(), paymentType: n.payment_type ?? null })
-      .where(and(eq(billingOrders.id, order.id), ne(billingOrders.status, "paid")))
-      .returning();
-    if (claimed) {
-      if (order.planId) {
-        const [plan] = await db.select({ slug: plans.slug }).from(plans).where(eq(plans.id, order.planId));
-        if (plan) {
-          await db.update(tenants).set({ plan: plan.slug }).where(eq(tenants.id, order.tenantId));
-          await syncTenantFeaturesToPlan(order.tenantId);
-        }
-      }
-      const tenant = await extendSubscription(order.tenantId, order.periodDays);
-      await db.insert(tenantPayments).values({
-        tenantId: order.tenantId, planId: order.planId, planName: order.planName, amount: order.amount,
-        method: "midtrans", periodDays: order.periodDays, note: `Midtrans ${order.orderId}${n.payment_type ? ` (${n.payment_type})` : ""}`, recordedBy: "midtrans",
-      });
-      logEvent({
-        tenantId: order.tenantId, category: "billing", action: "payment.received",
-        message: `Pembayaran online Rp ${Number(order.amount).toLocaleString("id-ID")} diterima untuk "${tenant?.name ?? order.tenantId}" (${order.periodDays} hari, ${order.planName})`,
-        actorType: "system", metadata: { orderId: order.orderId, paymentType: n.payment_type ?? null },
-      });
-    }
-  } else if (outcome === "failed" || outcome === "expired") {
-    await db.update(billingOrders).set({ status: outcome }).where(and(eq(billingOrders.id, order.id), eq(billingOrders.status, "pending")));
+// POST /api/billing/xendit/notification — authenticated by the static x-callback-token header
+billingWebhookRouter.post("/xendit/notification", async (req, res) => {
+  const cfg = await loadGateway("xendit");
+  if (!cfg.webhookToken) return res.status(503).json({ error: "Xendit belum dikonfigurasi" });
+
+  if (!verifyCallbackToken(cfg.webhookToken, req.header("x-callback-token") ?? undefined)) {
+    logEvent({ level: "warning", category: "billing", action: "webhook.bad_signature", message: "Notifikasi Xendit dengan callback token tidak valid", actorType: "system" });
+    void noteWebhook("xendit", "token ditolak").catch(() => undefined);
+    return res.status(403).json({ error: "Token tidak valid" });
   }
 
+  const cb = (req.body ?? {}) as XenditInvoiceCallback;
+  const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, String(cb.external_id ?? "")));
+  if (!order || order.provider !== "xendit") return res.status(404).json({ error: "Order tidak ditemukan" });
+
+  const outcome = outcomeFromInvoice(cb);
+  // For a paid invoice, the amount actually paid must match the order (Xendit reports paid_amount; amount is the invoice total).
+  if (outcome === "paid" && Math.round(Number(cb.paid_amount ?? cb.amount)) !== Math.round(Number(order.amount))) {
+    logEvent({ tenantId: order.tenantId, level: "error", category: "billing", action: "webhook.amount_mismatch", message: `Nominal Xendit ${cb.paid_amount ?? cb.amount} tidak cocok dengan order ${order.orderId} (${order.amount})`, actorType: "system" });
+    void noteWebhook("xendit", `nominal tidak cocok (${order.orderId})`).catch(() => undefined);
+    return res.status(400).json({ error: "Nominal tidak cocok" });
+  }
+
+  const result = await settleOrder(order, outcome, cb.payment_channel ?? cb.payment_method ?? null);
+  void noteWebhook("xendit", `${result} · ${order.orderId}`).catch(() => undefined);
   res.json({ ok: true });
 });

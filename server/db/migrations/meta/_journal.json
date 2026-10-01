@@ -162,6 +162,13 @@
       "when": 1790825208760,
       "tag": "0022_blog_category_cover",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790840051333,
+      "tag": "0023_payment_gateways",
+      "breakpoints": true
     }
   ]
 }

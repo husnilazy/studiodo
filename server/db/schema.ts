@@ -464,6 +464,8 @@ export const siteContent = pgTable("site_content", {
 export const billingOrders = pgTable("billing_orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   orderId: text("order_id").notNull().unique(), // sent to Midtrans as order_id
+  provider: text("provider").notNull().default("midtrans"), // which gateway created this checkout
+  providerRef: text("provider_ref"), // gateway-side id (Xendit invoice id)
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   planId: uuid("plan_id").references(() => plans.id, { onDelete: "set null" }),
   planName: text("plan_name").notNull(), // snapshot
@@ -548,4 +550,25 @@ export const siteAssets = pgTable("site_assets", {
   size: integer("size").notNull(),
   uploadedBy: text("uploaded_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Platform-level payment gateways used to collect STUDIODO subscription fees from tenants (NOT the
+// tenant's own Xendit account for kiosk sales — that lives in tenant_settings). One row per provider.
+// Secrets are stored encrypted (lib/secretBox.ts) and are write-only through the API: they are never
+// returned, only a masked tail. A provider with no stored key falls back to its environment variables.
+export const paymentGateways = pgTable("payment_gateways", {
+  provider: text("provider").primaryKey(), // 'midtrans' | 'xendit'
+  enabled: boolean("enabled").notNull().default(false),
+  priority: integer("priority").notNull().default(100), // lower = tried first at checkout
+  environment: text("environment").notNull().default("sandbox"), // 'sandbox' | 'production' (Midtrans; Xendit keys are self-describing)
+  secretKeyEnc: text("secret_key_enc"),
+  secretKeyLast4: text("secret_key_last4"),
+  webhookTokenEnc: text("webhook_token_enc"), // Xendit callback verification token
+  lastTestAt: timestamp("last_test_at"),
+  lastTestOk: boolean("last_test_ok"),
+  lastTestMessage: text("last_test_message"),
+  lastWebhookAt: timestamp("last_webhook_at"),
+  lastWebhookResult: text("last_webhook_result"), // short human note, e.g. "paid SDO-…" or "signature ditolak"
+  updatedBy: text("updated_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

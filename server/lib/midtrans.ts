@@ -1,43 +1,32 @@
 import crypto from "node:crypto";
 
-// Midtrans Snap client for STUDIODO's own subscription billing (tenants paying the
-// platform). Deliberately separate from the Xendit setup in routes/payment.ts,
-// which is a tenant's kiosk collecting money from its own customers.
-//
-// Configured only through env: MIDTRANS_SERVER_KEY (required to enable online
-// payment) and MIDTRANS_IS_PRODUCTION=true for the live endpoint (default sandbox).
+// Midtrans Snap client for STUDIODO's own subscription billing (tenants paying the platform).
+// Deliberately separate from the Xendit setup in routes/payment.ts, which is a tenant's kiosk collecting
+// money from its own customers. Credentials come from lib/gateways.ts (Superadmin settings, with env fallback);
+// nothing in here reads process.env directly.
 
-export function isMidtransConfigured(): boolean {
-  return !!process.env.MIDTRANS_SERVER_KEY;
-}
+export type MidtransCfg = { serverKey: string; production: boolean };
 
-function serverKey(): string {
-  const key = process.env.MIDTRANS_SERVER_KEY;
-  if (!key) throw new Error("MIDTRANS_SERVER_KEY belum diatur");
-  return key;
-}
-
-function snapBase(): string {
-  return process.env.MIDTRANS_IS_PRODUCTION === "true" ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";
-}
+const snapBase = (cfg: MidtransCfg) => (cfg.production ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com");
+const coreBase = (cfg: MidtransCfg) => (cfg.production ? "https://api.midtrans.com" : "https://api.sandbox.midtrans.com");
+const basicAuth = (cfg: MidtransCfg) => `Basic ${Buffer.from(`${cfg.serverKey}:`).toString("base64")}`;
 
 export type SnapTransaction = { token: string; redirectUrl: string };
 
-export async function createSnapTransaction(input: {
-  orderId: string;
-  grossAmount: number; // whole rupiah — Midtrans rejects decimals for IDR
-  itemName: string;
-  customerEmail: string;
-  customerName: string;
-  finishUrl?: string;
-}): Promise<SnapTransaction> {
-  const res = await fetch(`${snapBase()}/snap/v1/transactions`, {
+export async function createSnapTransaction(
+  cfg: MidtransCfg,
+  input: {
+    orderId: string;
+    grossAmount: number; // whole rupiah — Midtrans rejects decimals for IDR
+    itemName: string;
+    customerEmail: string;
+    customerName: string;
+    finishUrl?: string;
+  },
+): Promise<SnapTransaction> {
+  const res = await fetch(`${snapBase(cfg)}/snap/v1/transactions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Basic ${Buffer.from(`${serverKey()}:`).toString("base64")}`,
-    },
+    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: basicAuth(cfg) },
     body: JSON.stringify({
       transaction_details: { order_id: input.orderId, gross_amount: input.grossAmount },
       item_details: [{ id: input.orderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
@@ -53,6 +42,24 @@ export async function createSnapTransaction(input: {
   return { token: body.token, redirectUrl: body.redirect_url };
 }
 
+/**
+ * Verifies the credentials without creating anything: asks for the status of an order that cannot exist.
+ * Valid key → Midtrans answers 404 ("transaction doesn't exist"); wrong key or wrong environment → 401.
+ */
+export async function testMidtrans(cfg: MidtransCfg): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(`${coreBase(cfg)}/v2/studiodo-connection-test-${Date.now()}/status`, {
+      headers: { Accept: "application/json", Authorization: basicAuth(cfg) },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status === 404) return { ok: true, message: `Kunci valid untuk mode ${cfg.production ? "produksi" : "sandbox"}.` };
+    if (res.status === 401) return { ok: false, message: `Kunci ditolak Midtrans. Pastikan Server Key sesuai dengan mode ${cfg.production ? "produksi" : "sandbox"}.` };
+    return { ok: false, message: `Respons tak terduga dari Midtrans (HTTP ${res.status}).` };
+  } catch (e) {
+    return { ok: false, message: `Tidak dapat menghubungi Midtrans: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 export type MidtransNotification = {
   order_id?: string;
   status_code?: string;
@@ -64,9 +71,9 @@ export type MidtransNotification = {
 };
 
 /** Midtrans signs notifications as SHA512(order_id + status_code + gross_amount + server_key). */
-export function verifyNotificationSignature(n: MidtransNotification): boolean {
+export function verifyNotificationSignature(serverKey: string, n: MidtransNotification): boolean {
   if (!n.order_id || !n.status_code || !n.gross_amount || !n.signature_key) return false;
-  const expected = crypto.createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${serverKey()}`).digest("hex");
+  const expected = crypto.createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${serverKey}`).digest("hex");
   const a = Buffer.from(expected);
   const b = Buffer.from(String(n.signature_key));
   return a.length === b.length && crypto.timingSafeEqual(a, b);

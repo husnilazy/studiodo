@@ -67,6 +67,29 @@ export type CreatorSubmission = {
   status: "new" | "reviewing" | "accepted" | "rejected"; note: string | null; reviewedBy: string | null; reviewedAt: string | null; createdAt: string;
 };
 
+// --- Subscription payment gateways (Midtrans / Xendit) ---
+export type GatewayInfo = {
+  provider: "midtrans" | "xendit";
+  label: string;
+  enabled: boolean;
+  priority: number;
+  environment: "sandbox" | "production";
+  hasKey: boolean;
+  keySource: "database" | "environment" | "none";
+  keyTail: string | null;
+  hasWebhookToken: boolean;
+  needsWebhookToken: boolean;
+  webhookUrl: string;
+  lastTest: { at: string; ok: boolean; message: string } | null;
+  lastWebhook: { at: string; result: string } | null;
+  orders30d: { paid: number; pending: number; failed: number; expired: number };
+};
+export type GatewaysOverview = { gateways: GatewayInfo[]; checkoutOrder: string[]; whatsappFallback: boolean };
+export type GatewayPatch = {
+  enabled?: boolean; priority?: number; environment?: "sandbox" | "production";
+  secretKey?: string; clearSecretKey?: boolean; webhookToken?: string; clearWebhookToken?: boolean;
+};
+
 export class SuperadminApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -283,6 +306,11 @@ export const superadminApi = {
   },
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
 
+  getPaymentGateways: () => request<GatewaysOverview>("/payment-gateways"),
+  savePaymentGateway: (provider: string, body: GatewayPatch) =>
+    request<GatewayInfo>(`/payment-gateways/${provider}`, { method: "PUT", body: JSON.stringify(body) }),
+  testPaymentGateway: (provider: string) =>
+    request<{ ok: boolean; message: string }>(`/payment-gateways/${provider}/test`, { method: "POST" }),
   uploadSiteAsset: (filename: string, dataBase64: string) =>
     request<{ id: string; url: string }>("/assets", { method: "POST", body: JSON.stringify({ filename, dataBase64 }) }),
   getSiteContent: () => request<SiteContentSection[]>("/site-content"),

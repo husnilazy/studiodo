@@ -19,6 +19,7 @@ import { SiteContentPanel } from "@/components/SiteContentPanel";
 import { BlogPanel } from "@/components/BlogPanel";
 import { MarketplacePanel } from "@/components/MarketplacePanel";
 import { CreatorsPanel } from "@/components/CreatorsPanel";
+import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -1499,7 +1500,12 @@ export default function SuperadminDashboard() {
 
         {section === "creators" && <CreatorsPanel />}
 
-        {section === "settings" && <PlatformSettingsPanel />}
+        {section === "settings" && (
+          <div className="grid gap-6">
+            <PlatformSettingsPanel />
+            <PaymentGatewaysPanel />
+          </div>
+        )}
       </div>
     </div>
   );
