@@ -1,6 +1,6 @@
 {
   "name": "studiodo-kiosk",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "STUDIODO Photobooth — Kiosk + Admin, Electron .exe",
   "author": "Frameless Creative",
   "main": "electron/main.cjs",
@@ -55,7 +55,7 @@
         "provider": "github",
         "owner": "husnilazy",
         "repo": "studiodo",
-        "draft": false
+        "releaseType": "release"
       }
     ],
     "win": {
