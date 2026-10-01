@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { eq, inArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { siteContent, superadmins } from "../db/schema.js";
+import { kioskKeys, sessions, siteContent, superadmins, tenants } from "../db/schema.js";
 import { SECTION_DEFS, SECTION_KEYS, getDef, resolveContent, sanitizeSectionData, type StoredRow } from "../lib/siteContent.js";
 import { logEvent } from "../lib/platformEvents.js";
 
@@ -23,6 +23,26 @@ publicContentRouter.get("/content", async (_req, res) => {
     site: site.data,
     sections: sections.filter((s) => s.enabled).map((s) => ({ key: s.def.key, data: s.data })),
   });
+});
+
+// GET /api/public/stats — PUBLIC aggregate counters for the landing page (no per-tenant data).
+// Cached in memory for 5 minutes: it runs on every landing-page render and counts whole tables.
+let statsCache: { at: number; body: Record<string, number> } | null = null;
+publicContentRouter.get("/stats", async (_req, res) => {
+  if (!statsCache || Date.now() - statsCache.at > 5 * 60 * 1000) {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const onlineSince = new Date(Date.now() - 5 * 60 * 1000);
+    const [[t], [k], [o], [s]] = await Promise.all([
+      db.select({ n: count() }).from(tenants),
+      db.select({ n: count() }).from(kioskKeys).where(and(isNull(kioskKeys.revokedAt), gte(kioskKeys.lastUsedAt, since))),
+      db.select({ n: count() }).from(kioskKeys).where(and(isNull(kioskKeys.revokedAt), gte(kioskKeys.lastUsedAt, onlineSince))),
+      db.select({ n: count() }).from(sessions).where(and(eq(sessions.paymentStatus, "success"), gte(sessions.createdAt, since))),
+    ]);
+    // "kiosks" = kiosks that actually reported in during the last 30 days — never counts dormant/test keys.
+    statsCache = { at: Date.now(), body: { tenants: Number(t?.n ?? 0), kiosks: Number(k?.n ?? 0), kiosksOnline: Number(o?.n ?? 0), sessions30d: Number(s?.n ?? 0) } };
+  }
+  res.set("Cache-Control", "public, max-age=300");
+  res.json(statsCache.body);
 });
 
 // --- Superadmin: mounted under /api/superadmin/site-content (auth applied by the parent router)
