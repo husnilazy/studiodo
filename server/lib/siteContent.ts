@@ -126,7 +126,7 @@ export const SECTION_DEFS: SectionDef[] = [
   {
     key: "templates",
     label: "Marketplace template",
-    description: "Judul dan kategori pada bagian template. Kartu template masih contoh sampai marketplace dibuka.",
+    description: "Judul dan kategori pada bagian template. Kartu template diambil otomatis dari menu Marketplace; bila katalog kosong, tampil pesan \"segera hadir\".",
     fields: [
       { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
       { key: "title", label: "Judul", type: "text", max: 120 },

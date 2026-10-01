@@ -112,6 +112,8 @@ export function MarketplacePanel() {
       <p className="mt-1 text-sm text-white/45">Template yang diterbitkan tampil di halaman /template dan bisa dipasang tenant dengan satu klik dari dashboard mereka.</p>
       {error && <p role="alert" className="mt-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
 
+      {!data && !error && <p role="status" className="mt-5 text-sm text-white/50">Memuat marketplace…</p>}
+
       {data && <div className="mt-5"><PublishForm categories={data.categories} onPublished={load} /></div>}
 
       {data && (

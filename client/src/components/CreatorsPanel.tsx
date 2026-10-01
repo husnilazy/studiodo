@@ -82,7 +82,7 @@ export function CreatorsPanel() {
         ))}
       </div>
       <div className="mt-5 grid gap-3">
-        {items === null ? null : shown.length === 0 ? <p className="text-sm text-white/45">Tidak ada pendaftaran.</p> : shown.map((i) => <Row key={i.id} item={i} onChanged={load} />)}
+        {items === null ? (error ? null : <p role="status" className="text-sm text-white/50">Memuat pendaftaran…</p>) : shown.length === 0 ? <p className="text-sm text-white/45">Tidak ada pendaftaran.</p> : shown.map((i) => <Row key={i.id} item={i} onChanged={load} />)}
       </div>
     </section>
   );

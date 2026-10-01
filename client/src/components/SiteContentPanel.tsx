@@ -198,7 +198,7 @@ export function SiteContentPanel() {
   useEffect(load, []);
 
   if (error) return <p className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</p>;
-  if (!sections) return null;
+  if (!sections) return <p role="status" className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-sm text-white/50">Memuat konten website…</p>;
 
   const reorderable = sections.filter((s) => !s.fixed);
   const fixed = sections.filter((s) => s.fixed);

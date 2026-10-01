@@ -128,7 +128,9 @@ export function BlogPanel() {
       <div className="mt-5">
         {editing !== null ? (
           <Editor postId={editing} onClose={(changed) => { setEditing(null); if (changed) load(); }} />
-        ) : posts === null ? null : posts.length === 0 ? (
+        ) : posts === null ? (
+          <p role="status" className="text-sm text-white/50">Memuat artikel…</p>
+        ) : posts.length === 0 ? (
           <p className="text-sm text-white/45">Belum ada artikel. Klik “Artikel baru” untuk mulai menulis.</p>
         ) : (
           <div className="grid gap-3">
