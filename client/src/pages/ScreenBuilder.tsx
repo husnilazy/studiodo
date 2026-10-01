@@ -293,7 +293,7 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
 
   if (screenBuilderLocked) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-[#0b0b10] px-6 text-center text-white">
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-canvas px-6 text-center text-fg">
         <p className="text-xs uppercase tracking-[.16em] text-accent">Screen Builder</p>
         <h1 className="font-display text-2xl font-semibold">Fitur ini tidak termasuk paket kamu saat ini</h1>
         <p className="max-w-md text-sm text-fg/50">
@@ -305,7 +305,7 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[#0b0b10] text-white">
+    <div className="flex h-screen flex-col bg-canvas text-fg">
       <header className="flex shrink-0 items-center justify-between border-b border-fg/10 px-5 py-3">
         <div className="flex items-center gap-4">
           <Link href="/admin" className="text-sm text-fg/50 hover:text-fg">← Kembali</Link>
@@ -359,7 +359,7 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
           ))}
         </aside>
 
-        <main ref={canvasWrapRef} className="relative flex min-h-0 items-center justify-center overflow-auto bg-black/40 p-8">
+        <main ref={canvasWrapRef} className="relative flex min-h-0 items-center justify-center overflow-auto bg-fg/[0.06] p-8">
           {loading ? (
             <p className="text-sm text-fg/40">Memuat…</p>
           ) : (

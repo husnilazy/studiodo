@@ -9,6 +9,8 @@ import { resetR2Client } from "../storage.js";
 import { resetDriveClient } from "../lib/gdrive.js";
 import { validateFlowOrder } from "../lib/kioskFlowRules.js";
 import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { saveUploadedFile } from "../storage.js";
+import { resolveFrameUrl } from "../lib/frameUrl.js";
 
 export const configRouter = Router();
 
@@ -87,8 +89,106 @@ configRouter.get("/tenant", requireAnyAuth, async (req, res) => {
     stripLayout: tenantSettings.stripLayout,
     stripTemplate: tenantSettings.stripTemplate,
     kioskFlow: tenantSettings.kioskFlow,
+    kioskConfig: tenantSettings.kioskConfig,
   }).from(tenantSettings).where(eq(tenantSettings.tenantId, req.tenantId!));
   res.json(config ?? {});
+});
+
+// --- Kiosk design config (customizer) ---------------------------------------------------------------------
+// Whitelist of what the dashboard may save. Anything else in the body is dropped, so this column can never be
+// used as a free-form blob. Device-specific settings (camera mode, tether URL, printer) are deliberately NOT in
+// here: one tenant can run several booths with different hardware, and each keeps its own.
+const KIOSK_CONFIG_STRINGS = [
+  "brandName", "tagline", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "websiteUrl", "address",
+  "accentColor", "backgroundColor", "surfaceColor", "textColor", "mutedTextColor", "fontFamily", "themeMode", "fontPairing",
+  "eventName", "eventDescription", "eventStartAt", "eventEndAt", "buttonStyle", "kioskDensity", "sessionLayout", "backgroundStyle",
+  "backgroundGradientStart", "backgroundGradientEnd", "promoText", "idleStartText", "idleHeadline", "idleSubheadline",
+  "packageHeadline", "orientationHeadline", "paymentHeadline", "captureHeadline", "previewHeadline", "frameHeadline", "resultHeadline",
+  "idleCoverType", "captureVibe", "stripLayout", "stripTemplate",
+] as const;
+const KIOSK_CONFIG_NUMBERS = ["logoScale", "keyboardScale", "countdownSeconds", "sessionTimerMinutes", "eventSessionTimerMinutes", "eventMaxPhotosPerSession", "maxPhotosPerSession", "printCopies"] as const;
+const KIOSK_CONFIG_BOOLS = [
+  "eventEnabled", "eventFreeEntry", "eventTimerEnabled", "eventHasGif", "eventHasVideo", "backgroundGradientEnabled", "animationsEnabled",
+  "idleBannerEnabled", "beepEnabled", "autoCaptureEnabled", "qrisEnabled", "outputPresetEnabled", "autoPrintEnabled",
+] as const;
+// Images arrive as data: URIs from the browser; they are moved to file storage (same as package thumbnails) so this
+// row stays small and the kiosks load a normal URL.
+const KIOSK_CONFIG_IMAGES = ["logoUrl", "idleCoverUrl", "idleBannerUrl", "eventImageUrl"] as const;
+const MAX_STRING = 600;
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const COLOR_KEYS = new Set(["accentColor", "backgroundColor", "surfaceColor", "textColor", "mutedTextColor", "backgroundGradientStart", "backgroundGradientEnd"]);
+
+async function storeImage(tenantId: string, value: unknown): Promise<string | null> {
+  if (value === null || value === "" || value === undefined) return null;
+  const text = String(value);
+  const match = /^data:([^;]+);base64,(.+)$/.exec(text);
+  if (!match) return /^(https?:|\/)/.test(text) ? text : null; // already a real URL (unchanged on this save)
+  const [, mimetype, base64] = match;
+  if (!/^(image|video)\//.test(mimetype)) return null;
+  const buffer = Buffer.from(base64, "base64");
+  if (buffer.length > 40 * 1024 * 1024) throw new Error("File terlalu besar (maksimal 40 MB)");
+  const extension = `.${(mimetype.split("/")[1] ?? "bin").replace(/[^a-z0-9]/gi, "").slice(0, 5) || "bin"}`;
+  return saveUploadedFile(tenantId, { buffer, originalname: `branding${extension}`, mimetype }, "branding", extension);
+}
+
+// PATCH /api/config/kiosk-config — admin saves the customizer state. Returns the stored image URLs so the dashboard
+// can swap its big local data: URIs for the real files.
+configRouter.patch("/kiosk-config", requireAdminAuth, async (req, res) => {
+  const tenantId = req.tenantId!;
+  const body = (req.body?.config && typeof req.body.config === "object" ? req.body.config : {}) as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+
+  for (const key of KIOSK_CONFIG_STRINGS) {
+    if (body[key] === undefined) continue;
+    if (typeof body[key] !== "string") return res.status(400).json({ error: `Nilai "${key}" harus berupa teks` });
+    const v = (body[key] as string).slice(0, MAX_STRING);
+    if (COLOR_KEYS.has(key) && !HEX_COLOR.test(v)) return res.status(400).json({ error: `Warna "${key}" tidak valid` });
+    clean[key] = v;
+  }
+  for (const key of KIOSK_CONFIG_NUMBERS) {
+    if (body[key] === undefined) continue;
+    const n = Number(body[key]);
+    if (!Number.isFinite(n) || n < 0 || n > 100000) return res.status(400).json({ error: `Angka "${key}" tidak valid` });
+    clean[key] = n;
+  }
+  for (const key of KIOSK_CONFIG_BOOLS) {
+    if (body[key] === undefined) continue;
+    clean[key] = body[key] === true;
+  }
+  // Nested switches: only known keys, booleans only.
+  for (const group of ["enabledPages", "features"] as const) {
+    const src = body[group];
+    if (src && typeof src === "object") {
+      const out: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(src as Record<string, unknown>)) if (/^[a-zA-Z]{1,32}$/.test(k)) out[k] = v === true;
+      clean[group] = out;
+    }
+  }
+
+  const images: Record<string, string | null> = {};
+  try {
+    for (const key of KIOSK_CONFIG_IMAGES) {
+      if (body[key] === undefined) continue;
+      const stored = await storeImage(tenantId, body[key]);
+      images[key] = stored ? resolveFrameUrl(stored) : null;
+      clean[key] = images[key];
+    }
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Gambar tidak dapat disimpan" });
+  }
+
+  await ensureTenantSettingsRow(tenantId);
+  const [current] = await db.select({ kioskConfig: tenantSettings.kioskConfig }).from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId));
+  const merged = { ...(current?.kioskConfig ?? {}), ...clean };
+  // The public gallery and other readers still use the dedicated columns, so keep them in step.
+  const columns: Partial<typeof tenantSettings.$inferInsert> = { kioskConfig: merged, updatedAt: new Date() };
+  if (typeof clean.brandName === "string" && clean.brandName.trim()) columns.brandName = clean.brandName.trim().slice(0, 80);
+  if (typeof clean.tagline === "string") columns.tagline = clean.tagline.slice(0, 160);
+  if (typeof clean.accentColor === "string") columns.accentColor = clean.accentColor;
+  if ("logoUrl" in images) columns.logoUrl = images.logoUrl;
+  await db.update(tenantSettings).set(columns).where(eq(tenantSettings.tenantId, tenantId));
+
+  res.json({ ok: true, images });
 });
 
 // PATCH /api/config/kiosk-flow — admin mengatur urutan & on/off step kiosk (Fase 4).

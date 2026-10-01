@@ -412,6 +412,11 @@ export const tenantSettings = pgTable("tenant_settings", {
   // categories saved yet" — both readers fall back to the same six built-in
   // defaults (server/routes/frames.ts, client/lib/frameCategoryStore.ts).
   frameCategories: jsonb("frame_categories").$type<{ key: string; label: string }[]>(),
+  // The kiosk customizer's design choices (colors, fonts, headlines, button style, idle cover, event settings …).
+  // These used to live ONLY in the kiosk PC's localStorage, while every app start overwrote them with stale
+  // server defaults — so a tenant's customization "reset itself" the next day. Now the dashboard saves them here
+  // and every kiosk loads them at boot. Sanitized server-side (see routes/config.ts); null = never saved yet.
+  kioskConfig: jsonb("kiosk_config").$type<Record<string, unknown>>(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

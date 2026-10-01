@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { api } from "@/lib/api";
-import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
+import { pushConfigNow, useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 
 import { inputClass } from "@/lib/adminUi";
 
@@ -30,6 +30,7 @@ export default function GalleryProfile() {
       websiteUrl: config.websiteUrl,
       address: config.address,
     });
+    await pushConfigNow(); // keeps the saved design (and any new logo file) in step with the profile
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2200);
   };

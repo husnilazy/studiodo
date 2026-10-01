@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useBoothConfig, applyThemePreset, type BoothConfig } from "@/lib/boothConfigStore";
+import { useBoothConfig, useConfigSync, applyThemePreset, type BoothConfig } from "@/lib/boothConfigStore";
 import { FONT_PAIRINGS } from "@/lib/fontPairings";
 import { Link } from "wouter";
 import { inputClass, sectionClass } from "@/lib/adminUi";
@@ -125,6 +125,7 @@ function ColorField({
 // ke "Kelola Frame".
 export default function AdminPlaceholder() {
   const { config, update, reset } = useBoothConfig();
+  const syncState = useConfigSync();
   const saveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Every field applies instantly (the live Kiosk Preview panel needs to
@@ -162,10 +163,14 @@ export default function AdminPlaceholder() {
             <p className="text-sm uppercase tracking-[0.2em] text-accent">STUDIODO Control Center</p>
             <h1 className="mt-2 font-display text-4xl font-bold">Kustomisasi Kiosk</h1>
             <p className="mt-2 max-w-2xl text-[var(--kiosk-muted)]">
-              Branding, idle screen, dan gaya UI kiosk. Semua perubahan tersimpan lokal di booth ini dan langsung terlihat di layar kiosk.
+              Branding, idle screen, dan gaya UI kiosk. Perubahan langsung terlihat di layar kiosk dan otomatis tersimpan ke server, jadi tetap ada setelah aplikasi ditutup dan dipakai semua kiosk milik tenant ini.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span role="status" className={`mr-1 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold ${syncState.status === "error" ? "border-red-400/40 bg-red-500/10 text-red-600" : syncState.status === "saving" ? "border-fg/15 text-muted" : "border-emerald-400/40 bg-emerald-500/10 text-emerald-700"}`} title={syncState.message}>
+              <span className={`h-2 w-2 rounded-full ${syncState.status === "error" ? "bg-red-500" : syncState.status === "saving" ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`} />
+              {syncState.status === "saving" ? "Menyimpan ke server…" : syncState.status === "error" ? "Gagal menyimpan ke server" : "Tersimpan di server"}
+            </span>
             <Link href="/admin/customers" className="border border-fg/15 px-4 py-2 text-sm text-fg/70 hover:text-fg">
               Customer
             </Link>
@@ -227,7 +232,7 @@ export default function AdminPlaceholder() {
               <h2 className="font-display text-xl font-semibold">Warna & Tipografi</h2>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <div className="inline-flex rounded-xl border border-fg/15 p-1">
-                  {([["dark", "Gelap (Warm Dark)"], ["light", "Terang (Warm Light)"]] as const).map(([mode, label]) => (
+                  {([["dark", "Gelap"], ["light", "Terang"]] as const).map(([mode, label]) => (
                     <button
                       key={mode}
                       type="button"

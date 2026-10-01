@@ -133,6 +133,8 @@ export const api = {
   getStorageConfig: () => request<any>("/config/storage"),
   updateStorageConfig: (body: Record<string, unknown>) => request<{ ok: boolean }>("/config/storage", { method: "PATCH", body: JSON.stringify(body) }),
   getTenantConfig: () => request<Record<string, unknown>>("/config/tenant"),
+  saveKioskConfig: (config: Record<string, unknown>) =>
+    request<{ ok: boolean; images: Record<string, string | null> }>("/config/kiosk-config", { method: "PATCH", body: JSON.stringify({ config }) }),
   getPlanFeatures: () => request<{
     planSlug: string | null;
     planName: string | null;

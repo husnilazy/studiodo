@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { pushConfigNow, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { Link } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
@@ -526,6 +527,14 @@ export default function AdminDashboard() {
   }, [loadOverview]);
 
   useEffect(() => { api.getMe().then((result) => setMe(result ?? null)).catch(() => undefined); }, []);
+
+  // On admin login: load the tenant's saved design from the server. A tenant that customized before design saving
+  // existed has it only on this PC — in that case upload it once so it survives restarts and reaches other kiosks.
+  useEffect(() => {
+    syncBoothConfigFromServer()
+      .then((result) => { if (!result.hadServerConfig) void pushConfigNow(); })
+      .catch(() => undefined);
+  }, []);
   const metrics = overview.metrics;
   const sessions = overview.sessions ?? [];
   const paid = sessions.filter((session: any) => session.paymentStatus === "success");

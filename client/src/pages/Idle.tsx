@@ -92,7 +92,7 @@ export default function Idle() {
 
           {/* "How it works" — answers "what happens next?" before the customer even touches the screen */}
           {steps.length > 1 && (
-            <motion.ul className="mt-14 hidden max-w-5xl flex-wrap justify-center gap-3 md:flex" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+            <motion.ul className="mt-14 hidden max-w-5xl flex-wrap justify-center gap-3 [@media(min-height:900px)]:flex" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
               {steps.filter((k) => HOW_IT_WORKS[k]).map((key, i) => (
                 <li key={key} className="glass-panel flex items-center gap-3 rounded-2xl px-4 py-3 text-left">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api } from "./api";
+import { api, getAdminToken } from "./api";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
 import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
@@ -292,22 +292,92 @@ export const useBoothConfig = create<BoothConfigStore>()(
   )
 );
 
+// Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
+// camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "printerName", "offlineModeEnabled", "kioskFlow"];
+// Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
+const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "websiteUrl", "address"] as const;
+
+// True while WE are writing server data into the store, so that write is not mistaken for an admin edit and pushed back.
+let applyingRemote = false;
+
+export type ConfigSyncState = { status: "idle" | "saving" | "saved" | "error"; message?: string };
+export const useConfigSync = create<ConfigSyncState>(() => ({ status: "idle" }));
+
 /**
- * Overwrite the persisted local config with the paired tenant's server-side
- * branding once a kiosk key/admin login is confirmed. Needed now that the
- * same physical kiosk (and its localStorage) could be re-paired to a
- * different tenant later — otherwise the old tenant's branding would linger.
+ * Loads the paired tenant's design from the server at boot / admin login.
+ *
+ * It used to copy EVERY server column over the local settings — columns nothing ever wrote to, still holding their
+ * defaults (violet accent, no logo, 3s countdown …). That is why a tenant's colors and logo "reset themselves" the next
+ * day. Now only data that really exists on the server is applied: the saved design (kioskConfig), the profile fields
+ * that were actually filled in, and the flow. Anything the server doesn't have stays as it is on this device.
  */
-export async function syncBoothConfigFromServer() {
-  // Deliberately NOT swallowed here — KioskPairing.tsx relies on this
-  // throwing to detect a bad/typo'd kiosk key. It used to catch-and-return
-  // silently, so a wrong key still got persisted as "paired" and only failed
-  // later, mid-flow, with a generic error instead of bouncing back to setup.
-  const remote = (await api.getTenantConfig()) as Partial<BoothConfig>;
-  // The server only stores the accent, and its default is the old violet: a tenant who never picked one gets the new brand accent.
-  if (remote.accentColor && LEGACY_ACCENTS.includes(remote.accentColor.toUpperCase())) remote.accentColor = THEME_PRESETS.light.accentColor;
-  useBoothConfig.getState().update(remote);
+export async function syncBoothConfigFromServer(): Promise<{ hadServerConfig: boolean }> {
+  // Deliberately NOT swallowed here — KioskPairing.tsx relies on this throwing to detect a bad/typo'd kiosk key.
+  const remote = (await api.getTenantConfig()) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const key of PROFILE_KEYS) {
+    const value = remote[key];
+    if (typeof value === "string" && value.trim() !== "") patch[key] = value;
+  }
+  const design = remote.kioskConfig && typeof remote.kioskConfig === "object" ? (remote.kioskConfig as Record<string, unknown>) : null;
+  if (design) {
+    for (const [key, value] of Object.entries(design)) {
+      if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig)) patch[key] = value;
+    }
+  }
+  if (remote.kioskFlow) patch.kioskFlow = remote.kioskFlow;
+
+  applyingRemote = true;
+  try {
+    useBoothConfig.getState().update(patch as Partial<BoothConfig>);
+  } finally {
+    applyingRemote = false;
+  }
+  return { hadServerConfig: design !== null };
 }
+
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Uploads this device's design to the server right now (admin only). */
+export async function pushConfigNow(): Promise<boolean> {
+  if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+  if (!getAdminToken()) return false;
+  const config = useBoothConfig.getState().config as unknown as Record<string, unknown>;
+  const body: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig)) body[key] = value;
+  }
+  useConfigSync.setState({ status: "saving", message: undefined });
+  try {
+    const result = await api.saveKioskConfig(body);
+    // The server moved uploaded images to file storage: swap our multi-MB data: URIs for the real URLs.
+    const images = result?.images ?? {};
+    if (Object.keys(images).length > 0) {
+      applyingRemote = true;
+      try { useBoothConfig.getState().update(images as Partial<BoothConfig>); } finally { applyingRemote = false; }
+    }
+    useConfigSync.setState({ status: "saved" });
+    return true;
+  } catch (error) {
+    useConfigSync.setState({ status: "error", message: error instanceof Error ? error.message : "Gagal menyimpan ke server" });
+    return false;
+  }
+}
+
+/** Debounced version used while the admin is editing: waits for a pause so every keystroke isn't a request. */
+export function schedulePush() {
+  if (!getAdminToken()) return;
+  useConfigSync.setState({ status: "saving", message: undefined });
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => { void pushConfigNow(); }, 1500);
+}
+
+// Any change made while an admin is logged in is saved to the server automatically — no separate "save to all kiosks" step.
+useBoothConfig.subscribe((state, prev) => {
+  if (applyingRemote || state.config === prev.config) return;
+  schedulePush();
+});
 
 export function isEventActive(config: BoothConfig) {
   if (!config.eventEnabled) return false;
