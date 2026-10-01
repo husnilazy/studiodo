@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "../db/client.js";
 import { tenantApplications } from "../db/schema.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 
 export const tenantApplicationsRouter = Router();
 
@@ -9,17 +10,9 @@ export const tenantApplicationsRouter = Router();
 // server/routes/superadmin.ts and server/routes/auth.ts) — this endpoint has
 // no auth at all by design, so it needs SOME abuse guard against a script
 // flooding the review queue with junk applications.
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const submissionsByIp = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const recent = (submissionsByIp.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  recent.push(now);
-  submissionsByIp.set(ip, recent);
-  return recent.length > RATE_LIMIT_MAX;
-}
+// Keyed on the real client IP (see lib/clientIp.ts) — behind the Cloudflare Tunnel req.ip is the same
+// for everyone, which used to turn this into a single global limit that any five requests could exhaust.
+const isRateLimited = makeRateLimiter(5, 60 * 60 * 1000);
 
 // POST /api/tenant-applications — PUBLIC, no auth. This is what the future
 // STUDIODO landing page's signup form will POST to; a superadmin reviews the
@@ -28,7 +21,7 @@ function isRateLimited(ip: string): boolean {
 // separate router (not nested under /api/superadmin) specifically so it's
 // reachable without the superadmin auth gate that guards everything else there.
 tenantApplicationsRouter.post("/", async (req, res) => {
-  const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  const ip = clientIp(req);
   if (isRateLimited(ip)) return res.status(429).json({ error: "Terlalu banyak pengajuan. Coba lagi nanti." });
 
   const businessName = String(req.body?.businessName ?? "").trim();

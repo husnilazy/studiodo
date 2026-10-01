@@ -505,3 +505,21 @@ export const marketplaceTemplates = pgTable("marketplace_templates", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [index("marketplace_templates_active_idx").on(table.active, table.featured)]);
+
+// Inbound applications from template designers who want to contribute to the marketplace
+// (website /kreator form). A superadmin reviews them and, if accepted, builds/publishes the
+// template through the normal marketplace flow — there is no file upload here by design:
+// a portfolio link is enough to judge whether to talk to someone.
+export const creatorSubmissions = pgTable("creator_submissions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  whatsapp: text("whatsapp"),
+  portfolioUrl: text("portfolio_url").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("new"), // 'new' | 'reviewing' | 'accepted' | 'rejected'
+  note: text("note"), // superadmin-only
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("creator_submissions_status_idx").on(table.status, table.createdAt)]);

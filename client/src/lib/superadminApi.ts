@@ -58,6 +58,12 @@ export type MarketplaceItem = {
 export type MarketplaceSource = { id: string; name: string; category: string; orientation: string; imageUrl: string; slotCount: number; publishable: boolean };
 export type MarketplaceMeta = { name?: string; description?: string; creatorName?: string | null; category?: string; featured?: boolean; active?: boolean };
 
+// --- Creator applications ---
+export type CreatorSubmission = {
+  id: string; name: string; email: string; whatsapp: string | null; portfolioUrl: string; description: string;
+  status: "new" | "reviewing" | "accepted" | "rejected"; note: string | null; reviewedBy: string | null; reviewedAt: string | null; createdAt: string;
+};
+
 export class SuperadminApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -285,6 +291,11 @@ export const superadminApi = {
   publishToMarketplace: (body: MarketplaceMeta & { fromTemplateId: string }) => request<MarketplaceItem>("/marketplace", { method: "POST", body: JSON.stringify(body) }),
   updateMarketplaceItem: (id: string, body: MarketplaceMeta) => request<MarketplaceItem>(`/marketplace/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteMarketplaceItem: (id: string) => request<{ ok: boolean }>(`/marketplace/${id}`, { method: "DELETE" }),
+
+  getCreatorSubmissions: () => request<CreatorSubmission[]>("/creators"),
+  updateCreatorSubmission: (id: string, body: { status?: CreatorSubmission["status"]; note?: string }) =>
+    request<CreatorSubmission>(`/creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCreatorSubmission: (id: string) => request<{ ok: boolean }>(`/creators/${id}`, { method: "DELETE" }),
 
   getBlogPosts: () => request<BlogPostSummary[]>("/blog"),
   getBlogPost: (id: string) => request<BlogPost>(`/blog/${id}`),
