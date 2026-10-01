@@ -182,6 +182,12 @@ export interface PlatformOverview {
   tenants: { total: number; byStatus: Record<string, number>; expiringSoon: number; expired: number; locked: number };
   kiosks: { total: number; online: number };
   sessions: { total: number; paid: number; revenue: number };
+  subscriptions: { revenue30d: number; payments30d: number; pendingOrders: number };
+}
+
+export interface BillingOrderRow {
+  orderId: string; provider: string; tenantId: string; tenantName: string; planName: string; amount: number; periodDays: number;
+  status: "pending" | "paid" | "failed" | "expired"; paymentType: string | null; createdAt: string; paidAt: string | null;
 }
 
 export interface OverviewTimeseriesPoint {
@@ -278,6 +284,7 @@ export const superadminApi = {
   getMe: () => request<{ email: string }>("/me"),
   getTenants: () => request<SuperadminTenant[]>("/tenants"),
   getTenant: (id: string) => request<TenantDetail>(`/tenants/${id}`),
+  getBillingOrders: (status = "") => request<BillingOrderRow[]>(`/billing/orders${status ? `?status=${status}` : ""}`),
   getOverview: () => request<PlatformOverview>("/overview"),
   getOverviewTimeseries: (days = 30) => request<OverviewTimeseriesPoint[]>(`/overview/timeseries?days=${days}`),
   createTenant: (body: { name: string; slug: string; email: string; password: string; plan?: string } & Partial<TenantProfileFields>) =>

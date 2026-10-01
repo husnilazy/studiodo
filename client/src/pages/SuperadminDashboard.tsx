@@ -19,6 +19,7 @@ import { SiteContentPanel } from "@/components/SiteContentPanel";
 import { BlogPanel } from "@/components/BlogPanel";
 import { MarketplacePanel } from "@/components/MarketplacePanel";
 import { CreatorsPanel } from "@/components/CreatorsPanel";
+import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
 import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -230,6 +231,12 @@ function PlatformOverviewPanel() {
         <StatCard label="Total sesi" value={String(sessions.total)} detail={`${sessions.paid} sesi berhasil bayar`} />
         <StatCard label="Revenue platform" value={money(sessions.revenue)} detail="Semua tenant, sepanjang waktu" />
       </div>
+      {overview.subscriptions && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Pendapatan langganan (30h)" value={money(overview.subscriptions.revenue30d)} detail={`${overview.subscriptions.payments30d} pembayaran dicatat`} />
+          <StatCard label="Checkout menunggu" value={String(overview.subscriptions.pendingOrders)} detail="Pesanan online belum dibayar" tone={overview.subscriptions.pendingOrders > 0 ? "amber" : undefined} />
+        </div>
+      )}
 
       {tenants.locked > 0 && (
         <div className="rounded-2xl border border-red-500/40 bg-red-500/15 px-5 py-4">
@@ -1332,7 +1339,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "settings";
+type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "settings";
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "overview", label: "Ringkasan", icon: "⌘" },
   { id: "tenants", label: "Tenant", icon: "◎" },
@@ -1343,6 +1350,7 @@ const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "blog", label: "Blog", icon: "✎" },
   { id: "marketplace", label: "Marketplace", icon: "❒" },
   { id: "creators", label: "Kreator", icon: "✧" },
+  { id: "billing", label: "Pembayaran", icon: "₪" },
   { id: "settings", label: "Pengaturan", icon: "⚙" },
 ];
 
@@ -1499,6 +1507,7 @@ export default function SuperadminDashboard() {
         {section === "marketplace" && <MarketplacePanel />}
 
         {section === "creators" && <CreatorsPanel />}
+        {section === "billing" && <BillingOrdersPanel />}
 
         {section === "settings" && (
           <div className="grid gap-6">

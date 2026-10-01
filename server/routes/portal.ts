@@ -40,6 +40,16 @@ portalRouter.get("/summary", async (req, res) => {
   ]);
   if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
 
+  const dailyRows = await db.select({ createdAt: sessions.createdAt, totalAmount: sessions.totalAmount })
+    .from(sessions).where(and(eq(sessions.tenantId, tenantId), eq(sessions.paymentStatus, "success"), gte(sessions.createdAt, since)));
+  const dailyMap = new Map<string, { sessions: number; revenue: number }>();
+  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+  for (let i = 29; i >= 0; i -= 1) dailyMap.set(dayKey(new Date(Date.now() - i * DAY_MS)), { sessions: 0, revenue: 0 });
+  for (const r of dailyRows) {
+    const e = dailyMap.get(dayKey(new Date(r.createdAt)));
+    if (e) { e.sessions += 1; e.revenue += Number(r.totalAmount ?? 0); }
+  }
+
   const [plan] = await db.select({ name: plans.name, kioskLimit: plans.kioskLimit }).from(plans).where(eq(plans.slug, tenant.plan));
   const now = Date.now();
 
@@ -64,6 +74,7 @@ portalRouter.get("/summary", async (req, res) => {
       online: !!k.lastUsedAt && now - new Date(k.lastUsedAt).getTime() < KIOSK_ONLINE_WINDOW_MS,
     })),
     last30Days: { sessions: Number(stats?.sessions ?? 0), revenue: Number(stats?.revenue ?? 0) },
+    daily: [...dailyMap.entries()].map(([date, v]) => ({ date, ...v })),
     recentPayments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     onlinePaymentEnabled: (await usableGateways()).length > 0,
   });

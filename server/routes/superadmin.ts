@@ -1,8 +1,8 @@
 import { Router, type Request } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { admins, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates } from "../db/schema.js";
+import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signSuperadminToken } from "../lib/jwt.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
@@ -203,11 +203,34 @@ superadminRouter.get("/overview", async (_req, res) => {
     { total: 0, paid: 0, revenue: 0 },
   );
 
+  const since30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
+  const payments30 = await db.select({ amount: tenantPayments.amount }).from(tenantPayments).where(gte(tenantPayments.createdAt, since30));
+  const [pendingOrders] = await db.select({ n: sql<number>`count(*)` }).from(billingOrders).where(eq(billingOrders.status, "pending"));
+
   res.json({
     tenants: { total: rows.length, byStatus, expiringSoon, expired, locked },
     kiosks,
     sessions: sessionsTotal,
+    subscriptions: {
+      revenue30d: payments30.reduce((sum, p) => sum + Number(p.amount ?? 0), 0),
+      payments30d: payments30.length,
+      pendingOrders: Number(pendingOrders?.n ?? 0),
+    },
   });
+});
+
+// GET /api/superadmin/billing/orders?status=paid|pending|failed|expired — online subscription checkouts
+// across all tenants (Midtrans/Xendit), newest first, so failed or stuck payments can be followed up.
+superadminRouter.get("/billing/orders", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : "";
+  const rows = await db.select({
+    orderId: billingOrders.orderId, provider: billingOrders.provider, tenantId: billingOrders.tenantId, tenantName: tenants.name,
+    planName: billingOrders.planName, amount: billingOrders.amount, periodDays: billingOrders.periodDays, status: billingOrders.status,
+    paymentType: billingOrders.paymentType, createdAt: billingOrders.createdAt, paidAt: billingOrders.paidAt,
+  }).from(billingOrders).innerJoin(tenants, eq(tenants.id, billingOrders.tenantId))
+    .where(["pending", "paid", "failed", "expired"].includes(status) ? eq(billingOrders.status, status) : undefined)
+    .orderBy(desc(billingOrders.createdAt)).limit(200);
+  res.json(rows.map((r) => ({ ...r, amount: Number(r.amount) })));
 });
 
 // GET /api/superadmin/overview/timeseries?days=30 — daily session count + revenue
