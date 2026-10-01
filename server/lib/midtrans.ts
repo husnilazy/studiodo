@@ -52,9 +52,14 @@ export async function testMidtrans(cfg: MidtransCfg): Promise<{ ok: boolean; mes
       headers: { Accept: "application/json", Authorization: basicAuth(cfg) },
       signal: AbortSignal.timeout(15_000),
     });
-    if (res.status === 404) return { ok: true, message: `Kunci valid untuk mode ${cfg.production ? "produksi" : "sandbox"}.` };
-    if (res.status === 401) return { ok: false, message: `Kunci ditolak Midtrans. Pastikan Server Key sesuai dengan mode ${cfg.production ? "produksi" : "sandbox"}.` };
-    return { ok: false, message: `Respons tak terduga dari Midtrans (HTTP ${res.status}).` };
+    // Midtrans' Core API often answers HTTP 200 and puts the real outcome in the JSON body's status_code
+    // ("404" = no such order, "401" = bad credentials), so read that first and fall back to the HTTP status.
+    const body = (await res.json().catch(() => ({}))) as { status_code?: string | number };
+    const code = Number(body.status_code ?? res.status);
+    const mode = cfg.production ? "produksi" : "sandbox";
+    if (code === 404) return { ok: true, message: `Kunci valid untuk mode ${mode}.` };
+    if (code === 401) return { ok: false, message: `Kunci ditolak Midtrans. Pastikan Server Key sesuai dengan mode ${mode}.` };
+    return { ok: false, message: `Respons tak terduga dari Midtrans (HTTP ${res.status}, kode ${Number.isFinite(code) ? code : "?"}).` };
   } catch (e) {
     return { ok: false, message: `Tidak dapat menghubungi Midtrans: ${e instanceof Error ? e.message : String(e)}` };
   }
