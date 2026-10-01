@@ -37,7 +37,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
           className="text-2xl transition-transform hover:scale-110"
           aria-label={`${star} bintang`}
         >
-          <span style={{ color: star <= (hovered || value) ? "#FBBF24" : "rgba(255,255,255,0.2)" }}>★</span>
+          <span style={{ color: star <= (hovered || value) ? "#FBBF24" : "rgba(120,120,140,0.3)" }}>★</span>
         </button>
       ))}
     </div>
@@ -85,7 +85,7 @@ export default function ShareGallery({ id }: { id: string }) {
 
   if (session === false) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#17130F] p-10 text-center font-body text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas p-10 text-center font-body text-fg">
         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-7xl opacity-25">📷</motion.span>
         <p className="font-display text-2xl font-semibold">Hasil tidak ditemukan</p>
         <p className="text-fg/40">Link mungkin sudah kadaluarsa atau tidak valid.</p>
@@ -95,7 +95,7 @@ export default function ShareGallery({ id }: { id: string }) {
 
   if (!session) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#17130F] font-body text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas font-body text-fg">
         <div className="h-12 w-12 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
         <p className="text-fg/50">Memuat hasil foto...</p>
       </div>
@@ -129,7 +129,7 @@ export default function ShareGallery({ id }: { id: string }) {
   const whatsappUrl = profile.contactWhatsapp ? `https://wa.me/${profile.contactWhatsapp.replace(/\D/g, "")}` : null;
 
   return (
-    <div className="public-gallery min-h-screen overflow-x-hidden bg-[#17130F] font-body text-white">
+    <div className="public-gallery min-h-screen overflow-x-hidden bg-canvas font-body text-fg">
       {/* Confetti burst */}
       <AnimatePresence>
         {showConfetti && confettiItems.map((p) => (
@@ -157,7 +157,7 @@ export default function ShareGallery({ id }: { id: string }) {
               className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
-            <button onClick={() => setActivePhoto(null)} className="absolute right-5 top-5 rounded-full bg-fg/10 p-2 text-fg/70 hover:bg-fg/20">
+            <button onClick={() => setActivePhoto(null)} className="absolute right-5 top-5 rounded-full bg-white/15 p-2 text-white hover:bg-white/25">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </motion.div>
@@ -236,7 +236,7 @@ export default function ShareGallery({ id }: { id: string }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="overflow-hidden rounded-[2rem] border border-white/[0.07] bg-gradient-to-b from-white/[0.04] to-transparent p-6 md:p-8"
+            className="overflow-hidden rounded-[2rem] border border-fg/10 bg-gradient-to-b from-fg/[0.04] to-transparent p-6 md:p-8"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
@@ -362,7 +362,7 @@ export default function ShareGallery({ id }: { id: string }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="rounded-[2rem] border border-white/[0.07] bg-gradient-to-b from-accent/[0.06] to-transparent p-6 md:p-8"
+          className="rounded-[2rem] border border-fg/10 bg-gradient-to-b from-accent/[0.06] to-transparent p-6 md:p-8"
         >
           <div className="mb-6">
             <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-accent">KONTAK & FEEDBACK</p>

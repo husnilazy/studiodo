@@ -45,6 +45,7 @@ export default function Pembayaran() {
     return true;
   })();
   const [mode, setMode] = useState<Mode>("choose");
+  const [sessionRetry, setSessionRetry] = useState(0); // bump to try creating the server session again
   const [voucherCode, setVoucherCode] = useState("");
   const [showKeyboard, setShowKeyboard] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -112,7 +113,7 @@ export default function Pembayaran() {
       if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
       if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
     };
-  }, [selectedPackage, selectedExtras, orientation, sessionId, eventFreeEntryActive, boothConfig.eventName, offlineModeEnabled]);
+  }, [selectedPackage, selectedExtras, orientation, sessionId, eventFreeEntryActive, boothConfig.eventName, offlineModeEnabled, sessionRetry]);
 
   const totalAmount = Number(selectedPackage?.price ?? 0) + selectedExtras.reduce((sum, extra) => sum + Number(extra.price), 0);
   const [payableAmount, setPayableAmount] = useState(eventFreeEntryActive ? 0 : totalAmount);
@@ -314,7 +315,10 @@ export default function Pembayaran() {
   };
 
   const rupiah = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
-  const methodCard = "glass-panel kinetic-card-hover group flex w-[clamp(14rem,24vw,18rem)] flex-col items-center gap-4 rounded-[2rem] p-8 text-center hover:border-accent/60";
+  // The server session is created in the background when this screen opens. Tapping a payment option before it exists used
+  // to do nothing at all (or, for free packages, silently skip marking the session as paid). Wait for it instead.
+  const sessionReady = Boolean(sessionId);
+  const methodCard = "glass-panel kinetic-card-hover group disabled:pointer-events-none disabled:opacity-50 flex w-[clamp(14rem,24vw,18rem)] flex-col items-center gap-4 rounded-[2rem] p-8 text-center hover:border-accent/60";
   const methodIcon = "flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/12 text-accent transition group-hover:scale-110";
 
   return (
@@ -343,27 +347,31 @@ export default function Pembayaran() {
         )}
 
         {mode === "choose" && (isFreePackage || eventFreeEntryActive) && (
-          <button type="button" onClick={isFreePackage ? startFree : startQris} className="k-btn k-btn-accent k-btn-lg">
-            <Icon name="camera" className="h-6 w-6" />
-            Mulai berfoto
+          <button type="button" onClick={isFreePackage ? startFree : startQris} disabled={!sessionReady} className="k-btn k-btn-accent k-btn-lg">
+            {sessionReady ? <Icon name="camera" className="h-6 w-6" /> : <Spinner className="h-5 w-5 !border-white/40 !border-t-white" />}
+            {sessionReady ? "Mulai berfoto" : "Menyiapkan sesi…"}
           </button>
+        )}
+
+        {mode === "choose" && !sessionReady && !error && !(offlineModeEnabled && !isBrowserOnline()) && (
+          <p role="status" className="flex items-center gap-2 text-sm text-muted"><Spinner className="h-4 w-4" />Menyiapkan sesi…</p>
         )}
 
         {mode === "choose" && !isFreePackage && !eventFreeEntryActive && (
           <Positionable id="choose-buttons" type="system-button" label="Pilihan Metode Bayar">
             <div className="flex flex-wrap justify-center gap-5">
-              <button type="button" onClick={startQris} className={methodCard}>
+              <button type="button" onClick={startQris} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="qr" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Bayar dengan QRIS</span>
                 <span className="text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
               </button>
-              <button type="button" onClick={() => setMode("voucher")} className={methodCard}>
+              <button type="button" onClick={() => setMode("voucher")} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="ticket" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Pakai voucher</span>
                 <span className="text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
               </button>
               {cashPaymentEnabled && (
-                <button type="button" onClick={() => { setCashRedeemed(false); setMode("voucher"); }} className={methodCard}>
+                <button type="button" onClick={() => { setCashRedeemed(false); setMode("voucher"); }} disabled={!sessionReady} className={methodCard}>
                   <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 transition group-hover:scale-110"><Icon name="cash" className="h-8 w-8" /></span>
                   <span className="font-display text-2xl font-semibold">Bayar tunai</span>
                   <span className="text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
@@ -501,7 +509,17 @@ export default function Pembayaran() {
 
         {showScanner && <QrCodeScanner onDetect={onQrScanned} onClose={() => setShowScanner(false)} />}
 
-        {error && mode !== "qris" && <p role="alert" className="max-w-xl rounded-2xl bg-red-500/10 px-5 py-3 text-center text-sm font-medium text-red-500">{error}</p>}
+        {error && mode !== "qris" && (
+          <div role="alert" className="flex max-w-xl flex-col items-center gap-3 rounded-2xl bg-red-500/10 px-5 py-4 text-center text-sm font-medium text-red-500">
+            <p>{error}</p>
+            {!sessionReady && (
+              <button type="button" onClick={() => { setError(null); setSessionRetry((n) => n + 1); }} className="k-btn !min-h-0 !py-2.5 !text-sm">
+                <Icon name="refresh" className="h-4 w-4" />
+                Coba lagi
+              </button>
+            )}
+          </div>
+        )}
 
         <BackButton onClick={() => (mode === "choose" ? navigate(getPreviousRoute("payment", boothConfig.kioskFlow)) : setMode("choose"))} label={mode === "choose" ? "Kembali" : "Pilih cara bayar lain"} />
       </KioskPage>

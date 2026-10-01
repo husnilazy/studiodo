@@ -905,7 +905,7 @@ export default function SesiFoto() {
             return (
             <button
               key={index}
-              onClick={() => photoUrl && retake(index)}
+              onClick={() => photoUrl && config.features.retake && retake(index)}
               disabled={!photoUrl}
               className={`group relative flex h-24 w-20 shrink-0 min-h-0 flex-col overflow-hidden rounded-2xl border-2 landscape:h-full landscape:w-auto bg-fg/[0.04] transition ${isCurrent ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? "border-fg/15 hover:border-fg/35" : "border-dashed border-fg/15"}`}
             >
@@ -914,7 +914,7 @@ export default function SesiFoto() {
                   <img src={photoUrl} alt={`Hasil foto ${index + 1}`} className="block h-full w-full flex-1 object-cover transition group-hover:scale-105" />
                   {/* Always-visible retake bar — a hover-only affordance is
                       invisible on a touchscreen, so this can't be hover-only. */}
-                  <span className="flex shrink-0 items-center justify-center gap-1 bg-black/70 py-1.5 text-[0.625rem] font-semibold text-white/85 backdrop-blur-sm">
+                  <span className={`${config.features.retake ? "flex" : "hidden"} shrink-0 items-center justify-center gap-1 bg-black/70 py-1.5 text-[0.625rem] font-semibold text-white/85 backdrop-blur-sm`}>
                     <IconRefreshSmall className="h-3 w-3" /> Ambil ulang
                   </span>
                 </>
@@ -1083,7 +1083,9 @@ export default function SesiFoto() {
               {finishingEarly ? "Menyimpan..." : <>Frame sudah penuh ({templateSlotCount} foto) — Lanjutkan sekarang <span className="ml-2">→</span></>}
             </button>
           )}
+          {config.features.filters && (
           <div className="glass-panel mt-3 rounded-2xl p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Filter warna</span><span className="font-semibold text-accent">{FILTER_LABELS[filter]}</span></div><div className="mt-2 flex justify-center gap-2 overflow-x-auto pb-1">{FILTER_ORDER.map((key) => <button key={key} onClick={() => setFilter(key)} className={`min-w-[4.25rem] rounded-xl border p-1 text-center transition ${filter === key ? "border-accent bg-accent/15 shadow-lg shadow-accent/20" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}><div className="h-7 rounded-lg bg-fg/10" style={{ filter: FILTER_CSS[key] }} /><span className="mt-1 block text-[0.5625rem]">{FILTER_LABELS[key]}</span></button>)}</div></div>
+          )}
         </main>
 
         <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:flex"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-[var(--kiosk-muted)]">Foto otomatis masuk ke frame pilihan.</p>{template ? (

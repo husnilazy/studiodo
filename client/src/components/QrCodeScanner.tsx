@@ -53,11 +53,11 @@ export default function QrCodeScanner({ onDetect, onClose }: Props) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Scan QR tiket">
-      <div className="relative flex w-full max-w-md flex-col items-center gap-4 rounded-[2rem] border border-white/15 bg-ink-800 p-6 text-center shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-6 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Scan QR tiket">
+      <div className="glass-solid relative flex w-full max-w-md flex-col items-center gap-4 rounded-[2rem] p-6 text-center shadow-2xl">
         <button onClick={onClose} className="absolute right-5 top-4 text-2xl text-fg/50 hover:text-fg" aria-label="Tutup scanner">×</button>
         <span className="eyebrow text-accent">SCAN QR TIKET</span>
-        <h3 className="font-display text-2xl font-bold">Arahkan QR ke kamera</h3>
+        <h3 className="font-display text-2xl font-semibold tracking-tight">Arahkan QR ke kamera</h3>
         {error ? (
           <p className="text-sm text-red-300">{error}</p>
         ) : (

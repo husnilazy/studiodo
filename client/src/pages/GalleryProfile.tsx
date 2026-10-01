@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { api } from "@/lib/api";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 
-const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent";
+import { inputClass } from "@/lib/adminUi";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block text-sm text-fg/60">{label}{children}</label>;
@@ -13,6 +13,9 @@ export default function GalleryProfile() {
   const config = useBoothConfig((state) => state.config);
   const update = useBoothConfig((state) => state.update);
   const [saved, setSaved] = useState(false);
+  // The real public address customers land on after scanning the QR (was a hard-coded example string).
+  const [shareBase, setShareBase] = useState<string | null>(null);
+  useEffect(() => { api.getPublicConfig().then((r) => setShareBase(r?.baseUrl ?? null)).catch(() => setShareBase(null)); }, []);
   const set = <K extends keyof BoothConfig>(key: K, value: BoothConfig[K]) => update({ [key]: value } as Partial<BoothConfig>);
 
   const save = async () => {
@@ -59,8 +62,8 @@ export default function GalleryProfile() {
         </Field>
         {config.logoUrl && <img src={config.logoUrl} alt={config.brandName} className="mt-3 h-20 w-20 rounded-xl bg-fg/10 object-contain p-2" />}
         <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-fg/10 pt-5">
-          <button type="button" onClick={save} className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/20">{saved ? "Profil tersimpan" : "Simpan profil gallery"}</button>
-          <span className="text-xs text-fg/35">Link hasil: https://qr.studiodo.id/#/share/session-id</span>
+          <button type="button" onClick={save} className="k-btn k-btn-accent !min-h-0 !py-3 !text-sm">{saved ? "Profil tersimpan" : "Simpan profil gallery"}</button>
+          <span className="text-xs text-fg/45">{shareBase ? `Link hasil pelanggan: ${shareBase}/#/share/<id-sesi>` : "Link hasil pelanggan dibuat otomatis per sesi."}</span>
         </div>
       </section>
     </div>

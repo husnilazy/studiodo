@@ -18,7 +18,7 @@ export interface KioskStepDef {
 export const STEP_DEFS: Record<KioskStepKey, KioskStepDef> = {
   tutorial: { key: "tutorial", route: "/tutorial", label: "Tutorial", hint: "Ringkasan cara pakai sebelum mulai.", locked: false },
   packages: { key: "packages", route: "/paket", label: "Pilih Paket", hint: "Wajib — titik awal setiap sesi.", locked: true },
-  orientation: { key: "orientation", route: "/orientasi", label: "Atur Live View", hint: "Mirror atau tampilan normal.", locked: false },
+  orientation: { key: "orientation", route: "/orientasi", label: "Tampilan Kamera", hint: "Cermin atau tampilan normal.", locked: false },
   payment: { key: "payment", route: "/bayar", label: "Pembayaran", hint: "Wajib — QRIS, voucher, atau cash.", locked: true },
   frame: { key: "frame", route: "/frame", label: "Pilih Frame", hint: "Pilih bingkai foto.", locked: false },
   capture: { key: "capture", route: "/sesi-foto", label: "Sesi Foto", hint: "Wajib — pengambilan foto.", locked: true },

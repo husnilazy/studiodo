@@ -168,6 +168,19 @@ export async function addPendingStrip(sessionId: string, blob: Blob, shareUrl: s
 
 let _syncing = false;
 
+// Per-record retry backoff. A record that keeps failing for a reason that won't fix itself (a misconfigured storage
+// target, a rejected file) used to be re-sent in full every 15s forever, hammering the server — with several photos
+// queued that was enough to starve real customer requests. Now each failure doubles the wait (15s → 30s → … max 10 min).
+const retryState = new Map<string, { attempts: number; nextAt: number }>();
+const RETRY_BASE_MS = 15_000;
+const RETRY_MAX_MS = 10 * 60_000;
+const dueForRetry = (key: string) => (retryState.get(key)?.nextAt ?? 0) <= Date.now();
+const noteFailure = (key: string) => {
+  const attempts = (retryState.get(key)?.attempts ?? 0) + 1;
+  retryState.set(key, { attempts, nextAt: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)) });
+};
+const noteSuccess = (key: string) => { retryState.delete(key); };
+
 export async function syncOfflineData() {
   if (_syncing) return;
   const { pendingSessionCount, pendingPhotoCount, pendingStripCount } = useOfflineStore.getState();
@@ -180,6 +193,7 @@ export async function syncOfflineData() {
     //    any photos/strip already queued under the old client-only id.
     const sessions = await getAllRecords<PendingSessionMeta>(STORE_SESSIONS);
     for (const meta of sessions) {
+      if (!dueForRetry(`s:${meta.offlineId}`)) continue;
       try {
         const real = await api.createSession({ packageId: meta.packageId, orientation: meta.orientation, selectedExtras: meta.selectedExtras });
         if (!real?.id) continue;
@@ -193,6 +207,7 @@ export async function syncOfflineData() {
           useKioskSession.getState().setSessionId(real.id);
         }
       } catch (err) {
+        noteFailure(`s:${meta.offlineId}`);
         console.warn("[offline-sync] Gagal membuat sesi server untuk", meta.offlineId, err);
         // leave it queued — retried on the next sync pass
       }
@@ -202,10 +217,13 @@ export async function syncOfflineData() {
     const photos = await getAllRecords<PendingPhoto>(STORE_PHOTOS);
     for (const photo of photos) {
       if (isOfflineSessionId(photo.sessionId)) continue; // its session still failed to create above
+      if (!dueForRetry(`p:${photo.id}`)) continue;
       try {
         await api.uploadPhoto(photo.sessionId, photo.slotIndex, photo.blob);
         await deleteRecord(STORE_PHOTOS, photo.id);
+        noteSuccess(`p:${photo.id}`);
       } catch (err) {
+        noteFailure(`p:${photo.id}`);
         console.warn("[offline-sync] Gagal upload foto", photo.id, err);
       }
     }
@@ -214,13 +232,16 @@ export async function syncOfflineData() {
     const strips = await getAllRecords<PendingStrip>(STORE_STRIPS);
     for (const strip of strips) {
       if (isOfflineSessionId(strip.sessionId)) continue;
+      if (!dueForRetry(`t:${strip.sessionId}`)) continue;
       try {
         const stripSession = await api.uploadStrip(strip.sessionId, strip.blob);
         if (!stripSession) throw new Error("Upload strip gagal");
         // shareUrl not sent — server always computes its own from PUBLIC_BASE_URL (see sessions.ts /finalize).
         await api.finalizeSession(strip.sessionId, { stripUrl: stripSession.stripUrl });
         await deleteRecord(STORE_STRIPS, strip.sessionId);
+        noteSuccess(`t:${strip.sessionId}`);
       } catch (err) {
+        noteFailure(`t:${strip.sessionId}`);
         console.warn("[offline-sync] Gagal upload strip/finalize", strip.sessionId, err);
       }
     }

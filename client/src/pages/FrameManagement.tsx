@@ -498,12 +498,12 @@ export default function FrameManagement() {
 
       <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="eyebrow">STICKER LIBRARY</p><h2 className="font-display text-3xl font-semibold">Stiker lucu</h2><p className="mt-1 text-sm text-fg/45">Stiker yang diupload akan langsung tersedia di editor foto kiosk.</p></div>
-          <label className="cursor-pointer rounded-xl bg-accent px-4 py-3 text-sm font-semibold">Upload stiker<input type="file" accept="image/*" multiple className="hidden" onChange={(event) => Array.from(event.target.files ?? []).forEach(uploadSticker)} /></label>
+          <div><p className="eyebrow">STIKER KHUSUS BOOTH</p><h2 className="font-display text-3xl font-semibold">Stiker milik booth</h2><p className="mt-1 text-sm text-fg/55">Paket emoji, lencana teks, dan bentuk sudah otomatis ada di editor foto kiosk. Di sini kamu bisa menambah stiker sendiri (logo, maskot, PNG transparan) yang muncul di kategori “Milik booth”.</p></div>
+          <label className="k-btn k-btn-accent cursor-pointer !min-h-0 !py-2.5 !text-sm">Upload stiker<input type="file" accept="image/*" multiple className="hidden" onChange={(event) => Array.from(event.target.files ?? []).forEach(uploadSticker)} /></label>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-8">
           {stickers.map((sticker) => <div key={sticker.id} className="group relative rounded-xl border border-fg/10 bg-fg/5 p-2"><img src={sticker.dataUrl} alt={sticker.name} className="h-20 w-full object-contain" /><button type="button" onClick={() => removeSticker(sticker.id)} className="absolute right-1 top-1 rounded bg-red-500/80 px-1.5 py-1 text-[10px] opacity-0 transition group-hover:opacity-100">Hapus</button><p className="mt-1 truncate text-center text-[10px] text-fg/50">{sticker.name}</p></div>)}
-          {stickers.length === 0 && <p className="col-span-full py-8 text-center text-sm text-fg/40">Belum ada stiker. Upload PNG atau gambar transparan untuk dipakai customer.</p>}
+          {stickers.length === 0 && <p className="col-span-full py-8 text-center text-sm text-fg/40">Belum ada stiker khusus. Upload PNG transparan jika ingin menambah logo atau maskot booth.</p>}
         </div>
       </section>
 

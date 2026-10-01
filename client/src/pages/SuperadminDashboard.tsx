@@ -394,7 +394,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-[#0b0b10] px-4 text-white">
+    <div className="flex h-screen items-center justify-center bg-canvas px-4 text-fg">
       <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl">
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
@@ -1428,7 +1428,7 @@ export default function SuperadminDashboard() {
   };
 
   if (status === "checking") {
-    return <div className="flex h-screen items-center justify-center bg-[#0b0b10] text-white/50">Memuat…</div>;
+    return <div className="flex h-screen items-center justify-center bg-canvas text-muted">Memuat…</div>;
   }
   if (status === "needsLogin") {
     return <LoginForm onLoggedIn={evaluate} />;
@@ -1440,7 +1440,7 @@ export default function SuperadminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b10] px-6 py-10 text-white">
+    <div className="min-h-screen bg-canvas px-6 py-10 text-fg">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

@@ -24,7 +24,7 @@ export default function VirtualKeyboard({ value, onChange, onClose }: Props) {
   const [shift, setShift] = useState(false);
   const append = (key: string) => onChange(value + (shift && /^[A-Z]$/.test(key) ? key.toLowerCase() : key));
   return (
-    <div className="keyboard-panel mx-auto max-w-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-ink-950/98 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-5" style={{ width: `${Math.min(100, 100 / (keyboardScale / 100))}%`, transform: `scale(${keyboardScale / 100})` }}>
+    <div className="keyboard-panel glass-solid mx-auto max-w-full overflow-hidden rounded-[1.75rem] p-3 shadow-2xl sm:p-5" style={{ width: `${Math.min(100, 100 / (keyboardScale / 100))}%`, transform: `scale(${keyboardScale / 100})` }}>
       <div className="mx-auto w-full max-w-5xl">
         {(symbols ? symbolRows : rows).map((row, rowIndex) => (
           <div
@@ -35,7 +35,7 @@ export default function VirtualKeyboard({ value, onChange, onClose }: Props) {
               <button
                 key={key}
                 onClick={() => append(key)}
-                className="h-11 min-w-0 flex-1 rounded-lg border border-white/10 bg-white/10 px-1 text-sm font-semibold transition hover:bg-accent sm:h-13 sm:rounded-xl sm:text-base lg:h-14 lg:text-lg"
+                className="h-11 min-w-0 flex-1 rounded-lg border border-fg/10 bg-fg/5 px-1 text-sm font-semibold transition hover:bg-accent hover:text-on-accent active:bg-accent active:text-on-accent sm:h-13 sm:rounded-xl sm:text-base lg:h-14 lg:text-lg"
               >
                 {shift && /^[A-Z]$/.test(key) ? key.toLowerCase() : key}
               </button>
@@ -47,7 +47,7 @@ export default function VirtualKeyboard({ value, onChange, onClose }: Props) {
           <button onClick={() => setSymbols((current) => !current)} className="min-h-11 rounded-xl border border-fg/15 px-3 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">#+=</button>
           <button onClick={() => onChange(value.slice(0, -1))} className="min-h-11 flex-1 rounded-xl border border-fg/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">⌫</button>
           <button onClick={() => append(" ")} className="min-h-11 flex-[3] rounded-xl border border-fg/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">Spasi</button>
-          <button onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-accent px-2 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">Selesai</button>
+          <button onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-accent px-2 py-2 text-sm font-semibold text-on-accent sm:min-h-12 sm:text-base">Selesai</button>
         </div>
       </div>
     </div>
