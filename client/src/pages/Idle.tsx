@@ -7,92 +7,123 @@ import { getNextRoute } from "@/lib/kioskFlow";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
+import { Icon } from "@/components/kiosk/Icons";
+import { useFlowSteps } from "@/components/kiosk/StepProgress";
+
+const HOW_IT_WORKS: Record<string, { icon: string; title: string; body: string }> = {
+  packages: { icon: "sparkles", title: "Pilih paket", body: "Tentukan jumlah foto" },
+  orientation: { icon: "mirror", title: "Atur kamera", body: "Cermin atau normal" },
+  payment: { icon: "qr", title: "Bayar", body: "QRIS atau voucher" },
+  frame: { icon: "frame", title: "Pilih frame", body: "Bingkai favoritmu" },
+  capture: { icon: "camera", title: "Berfoto", body: "Pose & senyum!" },
+  preview: { icon: "smile", title: "Percantik", body: "Filter & stiker" },
+  result: { icon: "download", title: "Ambil hasil", body: "Scan QR atau cetak" },
+};
 
 export default function Idle() {
   const [, navigate] = useLocation();
   const config = useBoothConfig((s) => s.config);
   const resetSession = useKioskSession((s) => s.resetSession);
   const [showPromo, setShowPromo] = useState(false);
-  // When mounted inside the WYSIWYG editor (ScreenBuilder.tsx), this page's own
-  // root-level onClick would otherwise fire real navigation on any canvas click
-  // that isn't swallowed by a Positionable's stopPropagation — unlike other kiosk
-  // pages, Idle's entire "tap anywhere to start" behavior lives on this outer div,
-  // not on a single button, so it needs its own editMode check.
+  const steps = useFlowSteps();
+  // Mounted inside the WYSIWYG editor (ScreenBuilder.tsx), the "tap anywhere to start" behavior on this outer div
+  // would otherwise fire real navigation on any canvas click that a Positionable doesn't swallow.
   const positionable = usePositionableContext();
 
   useEffect(() => {
     resetSession();
-    const t = setTimeout(() => setShowPromo(true), 3000);
+    const t = setTimeout(() => setShowPromo(true), 2500);
     return () => clearTimeout(t);
   }, []);
 
+  const start = () => {
+    if (positionable?.editMode) return;
+    navigate(getNextRoute("idle", config.kioskFlow));
+  };
+
   return (
     <ScreenLayoutBoundary screenKey="idle">
-    <div
-      className="kinetic-page relative flex h-full w-full cursor-pointer flex-col items-center justify-center overflow-hidden px-6"
-      onClick={() => {
-        if (positionable?.editMode) return;
-        navigate(getNextRoute("idle", config.kioskFlow));
-      }}
-    >
       <div
-        className={`absolute inset-0 bg-[length:200%_200%] ${config.animationsEnabled && config.backgroundGradientEnabled ? "animate-gradient" : ""} opacity-70`}
-        style={{
-          backgroundImage: config.backgroundGradientEnabled
-            ? `radial-gradient(circle at 30% 30%, ${config.accentColor} 0%, transparent 55%), linear-gradient(135deg, ${config.backgroundGradientStart}, ${config.backgroundGradientEnd})`
-            : "none",
-        }}
-      />
-      {config.idleCoverUrl && config.idleCoverType === "image" && <img src={config.idleCoverUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45" />}
-      {config.idleCoverUrl && config.idleCoverType === "video" && <video src={config.idleCoverUrl} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full object-cover opacity-45" />}
-      {/* Only for legibility over an actual cover photo/video — applied unconditionally
-          before Fase 7, it just muddied the plain gradient background into gray-brown
-          once light mode existed (no cover image = nothing to darken for contrast). */}
-      {config.idleCoverUrl && <div className="absolute inset-0 bg-black/35" />}
+        className="kinetic-page relative flex h-full w-full cursor-pointer select-none flex-col items-center justify-center overflow-hidden px-6"
+        onClick={start}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") start(); }}
+        aria-label={config.idleStartText}
+      >
+        {/* Cover photo/video (optional) with a soft wash so text always reads */}
+        {config.idleCoverUrl && config.idleCoverType === "image" && <img src={config.idleCoverUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+        {config.idleCoverUrl && config.idleCoverType === "video" && <video src={config.idleCoverUrl} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full object-cover" />}
+        {config.idleCoverUrl && <div className="absolute inset-0 bg-gradient-to-b from-canvas/85 via-canvas/45 to-canvas/90" />}
 
-      {config.logoUrl && (
-        <img src={config.logoUrl} alt={config.brandName} className="relative z-10 mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
-      )}
-
-      <Positionable id="heading" type="text" label="Judul Brand">
-        <motion.h1
-          className="kinetic-title relative z-10 font-display text-6xl font-bold tracking-tight md:text-8xl"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        >
-          {config.brandName}
-        </motion.h1>
-      </Positionable>
-      <Positionable id="subheading" type="text" label="Tagline">
-        <p className="relative z-10 mt-4 max-w-lg text-center text-lg text-white/60 md:text-xl">{config.tagline}</p>
-      </Positionable>
-
-      <Positionable id="cta" type="system-button" label="Teks Ajakan">
-        <motion.div
-          className="kinetic-cta relative z-10 mt-16 rounded-full border border-white/20 bg-white/10 px-10 py-4 text-xl font-medium shadow-2xl backdrop-blur-xl"
-          animate={{ scale: [1, 1.05, 1] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-        >
-          Sentuh layar untuk mulai
-        </motion.div>
-      </Positionable>
-
-      <AnimatePresence>
-        {showPromo && config.promoText && (
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            className="absolute bottom-10 z-10 rounded-2xl px-8 py-4 text-center shadow-xl backdrop-blur-md"
-            style={{ background: "color-mix(in srgb, var(--accent) 25%, black 60%)" }}
-          >
-            {config.promoText}
-          </motion.div>
+        {/* Drifting pastel orbs — the same look as the website hero */}
+        {!config.idleCoverUrl && config.backgroundGradientEnabled && (
+          <>
+            <div className={`pointer-events-none absolute -right-24 -top-24 h-[34rem] w-[34rem] rounded-full bg-accent/25 blur-3xl ${config.animationsEnabled ? "k-drift" : ""}`} />
+            <div className={`pointer-events-none absolute -bottom-32 -left-24 h-[30rem] w-[30rem] rounded-full bg-[#ffc8de]/50 blur-3xl ${config.animationsEnabled ? "k-drift" : ""}`} style={{ animationDelay: "-5s" }} />
+          </>
         )}
-      </AnimatePresence>
-      {config.idleBannerEnabled && config.idleBannerUrl && <img src={config.idleBannerUrl} alt="Promo banner" className="absolute bottom-6 right-6 z-10 max-h-28 max-w-xs rounded-2xl border border-white/20 object-contain shadow-2xl" />}
-    </div>
+
+        <div className="relative z-10 flex flex-col items-center text-center">
+          {config.logoUrl && (
+            <img src={config.logoUrl} alt={config.brandName} className="mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
+          )}
+
+          <Positionable id="heading" type="text" label="Judul Brand">
+            <motion.h1 className="kinetic-title font-display text-6xl font-semibold md:text-8xl" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
+              {config.idleHeadline || config.brandName}
+            </motion.h1>
+          </Positionable>
+          <Positionable id="subheading" type="text" label="Tagline">
+            <motion.p className="mt-5 max-w-xl text-lg text-muted md:text-2xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25, duration: 0.6 }}>
+              {config.idleSubheadline || config.tagline}
+            </motion.p>
+          </Positionable>
+
+          <Positionable id="cta" type="system-button" label="Teks Ajakan">
+            <motion.div className="relative mt-14" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+              {config.animationsEnabled && <span className="absolute inset-0 animate-ping-soft rounded-full bg-accent/40" />}
+              <div className="k-btn k-btn-accent k-btn-lg relative gap-3 text-xl md:text-2xl">
+                <Icon name="camera" className="h-7 w-7" />
+                {config.idleStartText || "Sentuh layar untuk mulai"}
+              </div>
+            </motion.div>
+          </Positionable>
+
+          {/* "How it works" — answers "what happens next?" before the customer even touches the screen */}
+          {steps.length > 1 && (
+            <motion.ul className="mt-14 hidden max-w-5xl flex-wrap justify-center gap-3 md:flex" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+              {steps.filter((k) => HOW_IT_WORKS[k]).map((key, i) => (
+                <li key={key} className="glass-panel flex items-center gap-3 rounded-2xl px-4 py-3 text-left">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">
+                    <Icon name={HOW_IT_WORKS[key].icon} className="h-5 w-5" />
+                  </span>
+                  <span>
+                    <span className="block text-[0.7rem] font-bold uppercase tracking-wider text-accent">Langkah {i + 1}</span>
+                    <span className="block text-sm font-semibold">{HOW_IT_WORKS[key].title}</span>
+                    <span className="block text-xs text-muted">{HOW_IT_WORKS[key].body}</span>
+                  </span>
+                </li>
+              ))}
+            </motion.ul>
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showPromo && config.promoText && (
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              className="glass-panel absolute bottom-8 z-10 flex max-w-[90vw] items-center gap-3 rounded-full px-7 py-3.5 text-center text-sm font-semibold md:text-base"
+            >
+              <Icon name="sparkles" className="h-5 w-5 shrink-0 text-accent" />
+              {config.promoText}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {config.idleBannerEnabled && config.idleBannerUrl && <img src={config.idleBannerUrl} alt="Promo banner" className="absolute bottom-6 right-6 z-10 max-h-28 max-w-xs rounded-2xl border border-fg/10 object-contain shadow-2xl" />}
+      </div>
     </ScreenLayoutBoundary>
   );
 }

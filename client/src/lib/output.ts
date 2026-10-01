@@ -69,11 +69,28 @@ export async function renderTemplate(
 
   const frame = await loadImage(template.frameDataUrl);
   ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+  await drawStickers(canvas, stickers, stickerAssets);
+}
+
+/**
+ * Burns the customer's stickers into an already-rendered canvas (frame template OR plain strip). Positions are
+ * 0..1 fractions of the canvas, size is a fraction of its short side — resolution independent, so the same
+ * sticker list renders identically in the small editor preview, the result screen and the print.
+ */
+export async function drawStickers(canvas: HTMLCanvasElement, stickers: PhotoSticker[], stickerAssets: Record<string, string>) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
   for (const sticker of stickers) {
     const source = stickerAssets[sticker.stickerId];
     if (!source) continue;
     const image = await loadImage(source);
     const size = Math.min(canvas.width, canvas.height) * 0.16 * sticker.scale;
-    ctx.drawImage(image, sticker.x * canvas.width - size / 2, sticker.y * canvas.height - size / 2, size, size);
+    // Rotate/flip around the sticker's own centre.
+    ctx.save();
+    ctx.translate(sticker.x * canvas.width, sticker.y * canvas.height);
+    if (sticker.rotation) ctx.rotate((sticker.rotation * Math.PI) / 180);
+    if (sticker.flip) ctx.scale(-1, 1);
+    ctx.drawImage(image, -size / 2, -size / 2, size, size);
+    ctx.restore();
   }
 }

@@ -7,17 +7,19 @@ import { useKioskSession } from "@/lib/sessionStore";
 import type { CameraFilter, PhotoSticker } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import type { BoothConfig } from "@/lib/boothConfigStore";
-import { renderTemplate } from "@/lib/output";
+import { drawStickers, renderTemplate } from "@/lib/output";
 import { renderPhotoStrip } from "@/lib/stripRenderer";
 import { OUTPUT_PRESETS, useTemplateLibrary } from "@/lib/templateStore";
 import type { LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
+import { buildStickerAssets } from "@/lib/builtinStickers";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
 import { addPendingStrip, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
 import Spinner from "@/components/Spinner";
+import StepProgress from "@/components/kiosk/StepProgress";
 
 // Small stroke icons used across the redesigned result screen — kept local
 // (not a dependency) since each one is only ever this one size/weight here.
@@ -69,14 +71,14 @@ function ActionRow({ icon, label, sub, onClick, loading, disabled }: { icon: Rea
       type="button"
       onClick={onClick}
       disabled={disabled || loading}
-      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex w-full items-center gap-3 rounded-xl border border-fg/10 bg-fg/[0.03] px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-fg/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
-        {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <span className="h-[18px] w-[18px]">{icon}</span>}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fg/[0.06] text-fg/70">
+        {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-fg/30 border-t-white" /> : <span className="h-[18px] w-[18px]">{icon}</span>}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold">{label}</span>
-        <span className="block truncate text-xs text-white/45">{sub}</span>
+        <span className="block truncate text-xs text-fg/45">{sub}</span>
       </span>
     </button>
   );
@@ -111,6 +113,7 @@ async function renderPrintStrip(
     await renderTemplate(photoUrls, template, sourceCanvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, mirror);
   } else {
     await renderPhotoStrip(photoUrls, sourceCanvas, { accentColor, stripLayout, stripTemplate, outputPreset: "4r", filter, mirror });
+    await drawStickers(sourceCanvas, photoStickers, stickerAssets);
   }
 
   const printCanvas = document.createElement("canvas");
@@ -134,7 +137,7 @@ export default function Hasil() {
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
   const stickerList = useStickerLibrary((state) => state.stickers);
-  const stickerAssets = useMemo(() => Object.fromEntries(stickerList.map((sticker) => [sticker.id, sticker.dataUrl])), [stickerList]);
+  const stickerAssets = useMemo(() => buildStickerAssets(photoStickers, stickerList), [photoStickers, stickerList]);
   const config = useBoothConfig((s) => s.config);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -251,6 +254,7 @@ export default function Hasil() {
         await renderTemplate(photoUrls, template, canvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, outputMirrored);
       } else {
         await renderPhotoStrip(photoUrls, canvas, { accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate, outputPreset, filter, mirror: outputMirrored });
+        await drawStickers(canvas, photoStickers, stickerAssets);
       }
       setStripDataUrl(canvas.toDataURL("image/jpeg", 0.95));
       setStripRendering(false);
@@ -563,13 +567,14 @@ export default function Hasil() {
 
   return (
     <ScreenLayoutBoundary screenKey="result">
-    <div className="kinetic-page relative h-full overflow-y-auto px-5 py-8 sm:px-10">
+    <div className="kinetic-page relative h-full">
+    <StepProgress current="result" />
+    <div className="h-full overflow-y-auto px-5 pb-8 pt-[4.75rem] sm:px-10">
       <header className="mx-auto max-w-6xl">
         <Positionable id="heading" type="text" label="Judul">
           <div>
-            <span className="eyebrow">06 / YOUR MOMENT</span>
-            <h2 className="mt-2 font-display text-4xl font-bold sm:text-6xl">Hasil fotomu sudah siap.</h2>
-            <p className="mt-2 text-white/50">Foto final, media, dan QR download ada di sini.</p>
+            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-5xl">{config.resultHeadline || "Hasil fotomu sudah siap."}</h1>
+            <p className="mt-2 text-lg text-muted">Scan QR untuk mengunduh, atau cetak langsung. Terima kasih sudah berfoto!</p>
           </div>
         </Positionable>
       </header>
@@ -593,7 +598,7 @@ export default function Hasil() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
               <h3 className="font-display text-lg font-semibold">Preview Foto</h3>
             </div>
-            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/60">{photoUrls.length} Foto</span>
+            <span className="shrink-0 rounded-full border border-fg/10 bg-fg/5 px-3 py-1 text-xs font-medium text-fg/60">{photoUrls.length} Foto</span>
           </div>
 
           <div className="relative flex min-h-[clamp(240px,42vh,420px)] items-center justify-center">
@@ -620,32 +625,32 @@ export default function Hasil() {
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: stripRendering ? 0 : 1, scale: stripRendering ? 0.97 : 1 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-white/10 shadow-2xl"
+                className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl"
               />
               {stripRendering && (
                 <div className="absolute flex flex-col items-center gap-3">
-                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-accent" />
-                  <p className="text-center text-sm font-semibold text-white/70">Menyiapkan hasil foto...</p>
-                  <p className="text-xs text-white/40">Sedang merender strip</p>
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
+                  <p className="text-center text-sm font-semibold text-fg/70">Menyiapkan hasil foto...</p>
+                  <p className="text-xs text-fg/40">Sedang merender strip</p>
                 </div>
               )}
             </div>
             {currentMediaUrl && (
               currentMediaIsGif
-                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-white/10 shadow-2xl" />
-                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} controls loop playsInline className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-white/10 shadow-2xl" />
+                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
+                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} controls loop playsInline className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
             )}
             {showExtraMediaSlide && previewIndex === previewCount - 1 && (
               awaitingMedia ? (
                 <div className="flex flex-col items-center gap-3">
                   <Spinner size="md" />
-                  <p className="text-center text-sm font-semibold text-white/70">Menyiapkan GIF/video sesi...</p>
-                  <p className="text-xs text-white/40">Muncul otomatis begitu selesai</p>
+                  <p className="text-center text-sm font-semibold text-fg/70">Menyiapkan GIF/video sesi...</p>
+                  <p className="text-xs text-fg/40">Muncul otomatis begitu selesai</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 px-6 text-center">
-                  <p className="text-sm font-semibold text-white/70">GIF/video sesi gagal dibuat</p>
-                  <p className="text-xs text-white/40">Foto & strip tetap tersimpan dengan baik.</p>
+                  <p className="text-sm font-semibold text-fg/70">GIF/video sesi gagal dibuat</p>
+                  <p className="text-xs text-fg/40">Foto & strip tetap tersimpan dengan baik.</p>
                 </div>
               )
             )}
@@ -669,7 +674,7 @@ export default function Hasil() {
                 <button
                   key={index}
                   onClick={() => setPreviewIndex(index)}
-                  className={`h-1.5 rounded-full transition-all ${previewIndex === index ? "w-6 bg-accent" : "w-1.5 bg-white/25 hover:bg-white/40"}`}
+                  className={`h-1.5 rounded-full transition-all ${previewIndex === index ? "w-6 bg-accent" : "w-1.5 bg-fg/25 hover:bg-fg/40"}`}
                   aria-label={index === 0 ? "Strip hasil" : `Klip ${index}`}
                 />
               ))}
@@ -705,7 +710,7 @@ export default function Hasil() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconScan className="h-[18px] w-[18px]" /></span>
               <div className="min-w-0">
                 <h3 className="font-display text-lg font-semibold">Scan & Download</h3>
-                <p className="truncate text-xs text-white/50">Scan QR code untuk mengunduh foto kamu.</p>
+                <p className="truncate text-xs text-fg/50">Scan QR code untuk mengunduh foto kamu.</p>
               </div>
             </div>
 
@@ -714,7 +719,7 @@ export default function Hasil() {
                 {stripRendering && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="h-16 w-16 animate-ping rounded-full border-2 border-accent/30" />
-                    <div className="absolute h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-accent" />
+                    <div className="absolute h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
                   </div>
                 )}
                 <div className={`rounded-2xl bg-white p-3 shadow-xl transition-opacity duration-500 ${stripRendering ? "opacity-0" : "opacity-100"}`}>
@@ -755,15 +760,15 @@ export default function Hasil() {
             </div>
             <div className="space-y-2">
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35"><IconPhone className={iconBase} /></span>
-                <input value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} onFocus={() => setKeyboardField("whatsapp")} type="tel" inputMode="tel" placeholder="Nomor WhatsApp" className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
+                <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/35"><IconPhone className={iconBase} /></span>
+                <input value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} onFocus={() => setKeyboardField("whatsapp")} type="tel" inputMode="tel" placeholder="Nomor WhatsApp" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
               </div>
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35"><IconMail className={iconBase} /></span>
-                <input value={email} onChange={(event) => setEmail(event.target.value)} onFocus={() => setKeyboardField("email")} type="email" placeholder="Email (opsional)" className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
+                <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/35"><IconMail className={iconBase} /></span>
+                <input value={email} onChange={(event) => setEmail(event.target.value)} onFocus={() => setKeyboardField("email")} type="email" placeholder="Email (opsional)" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
               </div>
-              <label className="flex gap-2 text-xs text-white/55"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /> Izinkan hasil digunakan untuk galeri {config.brandName}</label>
-              <button onClick={saveCustomer} disabled={savingCustomer} className="w-full rounded-xl border border-white/15 px-4 py-2.5 text-sm hover:border-accent disabled:opacity-50">{savingCustomer ? "Menyimpan..." : "Simpan biodata"}</button>
+              <label className="flex gap-2 text-xs text-fg/55"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /> Izinkan hasil digunakan untuk galeri {config.brandName}</label>
+              <button onClick={saveCustomer} disabled={savingCustomer} className="w-full rounded-xl border border-fg/15 px-4 py-2.5 text-sm hover:border-accent disabled:opacity-50">{savingCustomer ? "Menyimpan..." : "Simpan biodata"}</button>
               {customerSaved && (
                 <p role="status" className="flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">
                   <IconCheck className="h-4 w-4 shrink-0" /> Terima kasih sudah menggunakan {config.brandName}!
@@ -779,15 +784,15 @@ export default function Hasil() {
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate font-display text-lg font-semibold">Detail Cetak</h3>
                 </div>
-                {stripDataUrl && <img src={stripDataUrl} alt="" className="h-11 w-9 shrink-0 rounded-md border border-white/10 object-cover" />}
+                {stripDataUrl && <img src={stripDataUrl} alt="" className="h-11 w-9 shrink-0 rounded-md border border-fg/10 object-cover" />}
               </div>
               <p className="font-semibold">{additionalPrintConfig.label}</p>
-              <p className="mt-1 text-xs text-white/50">Bayar QRIS atau pakai kode voucher, lalu {additionalQuantity} lembar akan langsung dicetak.</p>
+              <p className="mt-1 text-xs text-fg/50">Bayar QRIS atau pakai kode voucher, lalu {additionalQuantity} lembar akan langsung dicetak.</p>
               <div className="mt-3 flex items-center gap-3">
-                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] p-1">
-                  <button type="button" onClick={() => setAdditionalQuantity((q) => Math.max(1, q - 1))} disabled={additionalPayment !== "idle"} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-40"><IconMinus className="h-3.5 w-3.5" /></button>
+                <div className="flex items-center gap-2 rounded-xl border border-fg/10 bg-fg/[0.06] p-1">
+                  <button type="button" onClick={() => setAdditionalQuantity((q) => Math.max(1, q - 1))} disabled={additionalPayment !== "idle"} className="flex h-7 w-7 items-center justify-center rounded-lg text-fg/70 hover:bg-fg/10 hover:text-fg disabled:opacity-40"><IconMinus className="h-3.5 w-3.5" /></button>
                   <span className="w-6 text-center text-sm font-semibold">{additionalQuantity}</span>
-                  <button type="button" onClick={() => setAdditionalQuantity((q) => Math.min(additionalPrintConfig.max, q + 1))} disabled={additionalPayment !== "idle"} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-40"><IconPlus className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => setAdditionalQuantity((q) => Math.min(additionalPrintConfig.max, q + 1))} disabled={additionalPayment !== "idle"} className="flex h-7 w-7 items-center justify-center rounded-lg text-fg/70 hover:bg-fg/10 hover:text-fg disabled:opacity-40"><IconPlus className="h-3.5 w-3.5" /></button>
                 </div>
                 <span className="ml-auto text-sm font-semibold text-accent">Rp {(additionalQuantity * additionalPrintConfig.price).toLocaleString("id-ID")}</span>
               </div>
@@ -797,7 +802,7 @@ export default function Hasil() {
                   <button type="button" onClick={buyAdditionalPrint} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold">
                     <IconPrinter className="h-4 w-4" /> Bayar QRIS
                   </button>
-                  <button type="button" onClick={() => setAdditionalMode("voucher")} className="flex-1 rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/80 hover:border-accent hover:text-white">
+                  <button type="button" onClick={() => setAdditionalMode("voucher")} className="flex-1 rounded-xl border border-fg/15 px-4 py-3 text-sm font-semibold text-fg/80 hover:border-accent hover:text-fg">
                     Pakai kode voucher
                   </button>
                 </div>
@@ -811,17 +816,17 @@ export default function Hasil() {
                       onChange={(e) => setAdditionalVoucherCode(e.target.value.toUpperCase())}
                       onKeyDown={(e) => { if (e.key === "Enter") redeemAdditionalPrintVoucher(); }}
                       placeholder="KODE VOUCHER"
-                      className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-semibold tracking-[0.12em] outline-none focus:border-accent"
+                      className="min-w-0 flex-1 rounded-xl border border-fg/15 bg-fg/[0.06] px-4 py-3 text-sm font-semibold tracking-[0.12em] outline-none focus:border-accent"
                     />
                     <button type="button" onClick={redeemAdditionalPrintVoucher} disabled={!additionalVoucherCode.trim()} className="rounded-xl bg-accent px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">Terapkan</button>
                   </div>
-                  <button type="button" onClick={() => setAdditionalMode("choose")} className="mt-2 text-xs text-white/40 hover:text-white/70">← Pakai QRIS saja</button>
+                  <button type="button" onClick={() => setAdditionalMode("choose")} className="mt-2 text-xs text-fg/40 hover:text-fg/70">← Pakai QRIS saja</button>
                 </div>
               )}
 
               {(additionalPayment === "starting" || additionalPayment === "waiting" || additionalPayment === "printing") && (
                 <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-accent/80 px-4 py-3 text-sm font-semibold">
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-fg/30 border-t-white" />
                   {additionalPayment === "starting" ? "Memproses..." : additionalPayment === "waiting" ? "Menunggu pembayaran..." : "Mencetak..."}
                 </div>
               )}
@@ -830,7 +835,7 @@ export default function Hasil() {
               {additionalPayment === "error" && (
                 <div className="mt-3">
                   <p className="text-xs text-red-300">{additionalError}</p>
-                  <button type="button" onClick={() => { setAdditionalPayment("idle"); setAdditionalMode("choose"); setAdditionalVoucherCode(""); }} className="mt-2 text-xs font-semibold text-white/60 hover:text-white">Coba lagi</button>
+                  <button type="button" onClick={() => { setAdditionalPayment("idle"); setAdditionalMode("choose"); setAdditionalVoucherCode(""); }} className="mt-2 text-xs font-semibold text-fg/60 hover:text-fg">Coba lagi</button>
                 </div>
               )}
             </div>
@@ -848,8 +853,8 @@ export default function Hasil() {
               return (
                 <div key={clipUrl} className="glass-panel flex w-40 shrink-0 flex-col items-center gap-2 rounded-2xl p-3">
                   {isGif
-                    ? <img src={clipUrl} alt={`Klip foto ${index + 1}`} className="h-32 w-full rounded-xl border border-white/10 object-cover" />
-                    : <video src={clipUrl} muted loop autoPlay playsInline className="h-32 w-full rounded-xl border border-white/10 object-cover" />}
+                    ? <img src={clipUrl} alt={`Klip foto ${index + 1}`} className="h-32 w-full rounded-xl border border-fg/10 object-cover" />
+                    : <video src={clipUrl} muted loop autoPlay playsInline className="h-32 w-full rounded-xl border border-fg/10 object-cover" />}
                   <a href={clipUrl} download={`${config.brandName.toLowerCase().replace(/\s+/g, "-")}-foto-${index + 1}.${isGif ? "gif" : "webm"}`} className="text-xs text-accent hover:underline">
                     ↓ Foto {index + 1}
                   </a>
@@ -869,11 +874,11 @@ export default function Hasil() {
             for, so there's nothing left for it to safely do here. */}
         {!config.autoPrintEnabled && (
           <button onClick={() => printNow()} disabled={printing} className="flex items-center gap-2 rounded-xl bg-accent px-7 py-3 font-semibold shadow-lg shadow-accent/20 disabled:opacity-60">
-            {printing ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <IconPrinter className="h-4 w-4" />}
+            {printing ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-fg/30 border-t-white" /> : <IconPrinter className="h-4 w-4" />}
             {printing ? "Sedang mencetak..." : "Print Sekarang"}
           </button>
         )}
-        <button onClick={download} className="flex items-center gap-2 rounded-xl border border-white/20 px-7 py-3 hover:border-accent">
+        <button onClick={download} className="flex items-center gap-2 rounded-xl border border-fg/20 px-7 py-3 hover:border-accent">
           <IconDownload className="h-4 w-4" /> Download
         </button>
         {/* Satu tombol "selesai" saja — sebelumnya ada "Selesai" + "Mulai sesi
@@ -883,24 +888,25 @@ export default function Hasil() {
         <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-7 py-3 font-semibold shadow-lg shadow-accent/20 sm:w-auto">
           <IconRefresh className="h-4 w-4" /> Mulai Sesi Baru
         </button>
-        <span className="w-full text-center text-xs text-white/40">Kembali ke awal otomatis dalam {autoResetSeconds} detik</span>
+        <span className="w-full text-center text-xs text-fg/40">Kembali ke awal otomatis dalam {autoResetSeconds} detik</span>
         {printStatus === "ok" && <span className="text-xs text-emerald-300">● Terkirim ke printer (4R)</span>}
         {printStatus === "error" && <span className="text-xs text-red-300">● Print gagal: {printError}</span>}
-        {uploadStatus === "pending" && <span className="text-xs text-white/40">● Menyimpan hasil ke server...</span>}
+        {uploadStatus === "pending" && <span className="text-xs text-fg/40">● Menyimpan hasil ke server...</span>}
         {uploadStatus === "error" && <span className="text-xs text-red-300">● Gagal menyimpan hasil — coba scan QR lagi nanti atau hubungi admin.</span>}
       </div>
 
       {keyboardField && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeyboardField(null); }}>
           <div className="w-full max-w-4xl">
-            <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-950/95 px-4 py-3 text-sm text-white/60">
-              <div><span>{keyboardField === "whatsapp" ? "Isi nomor WhatsApp" : "Isi email"}</span><p className="mt-1 max-w-[420px] truncate text-base font-semibold text-white">{keyboardValue || "Belum ada ketikan"}</p></div>
-              <button onClick={() => setKeyboardField(null)} className="rounded-lg px-3 py-1 text-white/60 hover:bg-white/10 hover:text-white">Tutup</button>
+            <div className="mb-2 flex items-center justify-between rounded-2xl border border-fg/10 bg-canvas/95 px-4 py-3 text-sm text-muted">
+              <div><span>{keyboardField === "whatsapp" ? "Isi nomor WhatsApp" : "Isi email"}</span><p className="mt-1 max-w-[420px] truncate text-base font-semibold text-fg">{keyboardValue || "Belum ada ketikan"}</p></div>
+              <button onClick={() => setKeyboardField(null)} className="rounded-lg px-3 py-1 text-fg/60 hover:bg-fg/10 hover:text-fg">Tutup</button>
             </div>
             <VirtualKeyboard value={keyboardValue} onChange={updateKeyboardValue} onClose={() => setKeyboardField(null)} />
           </div>
         </div>
       )}
+    </div>
     </div>
     </ScreenLayoutBoundary>
   );

@@ -27,6 +27,10 @@ export interface PhotoSticker {
   x: number;
   y: number;
   scale: number;
+  /** Degrees, clockwise. Absent on stickers placed before rotation existed. */
+  rotation?: number;
+  /** Mirrored horizontally (so text/emoji can face the other way). */
+  flip?: boolean;
 }
 
 export interface PhotoEdit {

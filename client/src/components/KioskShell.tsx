@@ -65,8 +65,8 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
             transition={{ duration: 0.2 }}
             className={`absolute right-4 top-4 z-50 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium backdrop-blur-md ${
               isOnline
-                ? "border-emerald-400/30 bg-emerald-900/60 text-emerald-300"
-                : "border-amber-400/30 bg-amber-900/60 text-amber-300"
+                ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-700"
+                : "border-amber-400/40 bg-amber-500/15 text-amber-700"
             }`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
@@ -78,7 +78,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
       {/* Persistent minimal indicator when offline (no popup) */}
       {!isOnline && !showStatus && config.offlineModeEnabled && (
-        <div className="absolute right-4 top-4 z-50 flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-black/40 px-2.5 py-1 text-[10px] text-amber-400/70 backdrop-blur-sm">
+        <div className="absolute right-4 top-4 z-50 flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] text-amber-700 backdrop-blur-sm">
           <span className="h-1 w-1 rounded-full bg-amber-400/70" />
           Offline
         </div>
@@ -86,7 +86,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
       {/* Pending sync badge */}
       {pendingCount > 0 && isOnline && (
-        <div className={`absolute right-4 top-10 z-50 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] backdrop-blur-sm ${syncInProgress ? "border-sky-400/30 bg-sky-900/50 text-sky-300" : "border-violet-400/30 bg-violet-900/50 text-violet-300"}`}>
+        <div className={`absolute right-4 top-10 z-50 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] backdrop-blur-sm ${syncInProgress ? "border-sky-400/40 bg-sky-500/10 text-sky-700" : "border-accent/30 bg-accent/10 text-accent"}`}>
           {syncInProgress && <span className="h-1 w-1 animate-spin rounded-full border border-sky-400 border-t-transparent" />}
           {syncInProgress ? "Sync..." : `${pendingCount} pending`}
         </div>

@@ -12,6 +12,8 @@ import { addPendingSession, createOfflineSessionId, isBrowserOnline } from "@/li
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
+import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
+import { Icon } from "@/components/kiosk/Icons";
 
 type Mode = "choose" | "voucher" | "qris";
 
@@ -239,6 +241,22 @@ export default function Pembayaran() {
     }
   };
 
+  // A package priced at Rp 0 needs no payment step at all — offering "Bayar dengan QRIS" for Rp 0 only confuses people.
+  const isFreePackage = totalAmount === 0 && !eventFreeEntryActive;
+  const startFree = async () => {
+    if (sessionId) await api.markEventFree(sessionId, selectedPackage?.name ? `Gratis · ${selectedPackage.name}` : "Gratis").catch(() => undefined);
+    navigate(getNextRoute("payment", boothConfig.kioskFlow));
+  };
+
+  const closeQris = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
+    if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
+    if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
+    setChecking(false);
+    setMode("choose");
+  };
+
   const continueOffline = () => {
     if (!offlineModeEnabled || isBrowserOnline() || !selectedPackage) return;
     if (!sessionId) {
@@ -295,242 +313,198 @@ export default function Pembayaran() {
     redeemVoucher(normalized);
   };
 
+  const rupiah = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
+  const methodCard = "glass-panel kinetic-card-hover group flex w-[clamp(14rem,24vw,18rem)] flex-col items-center gap-4 rounded-[2rem] p-8 text-center hover:border-accent/60";
+  const methodIcon = "flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/12 text-accent transition group-hover:scale-110";
+
   return (
     <ScreenLayoutBoundary screenKey="payment">
-    <div className="kinetic-page relative flex h-full flex-col items-center justify-center gap-10 px-6">
-      <Positionable id="heading" type="text" label="Judul">
-        <div className="text-center"><span className="eyebrow">03 / SECURE CHECKOUT</span><h2 className="kinetic-heading font-display text-5xl font-bold md:text-7xl">Pembayaran</h2><p className="mt-3 text-[var(--kiosk-muted)]">Satu scan, lalu momenmu siap dibuat.</p></div>
-      </Positionable>
-      <Positionable id="total-price" type="text" label="Total Harga">
-        <p className="text-xl text-accent">
-          Total {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(payableAmount)}
-        </p>
-      </Positionable>
+      <KioskPage step="payment">
+        <ScreenTitle
+          title={boothConfig.paymentHeadline || "Pembayaran"}
+          subtitle={mode === "voucher" ? "Masukkan kode voucher atau invoice cash dari petugas." : isFreePackage || eventFreeEntryActive ? "Tidak ada yang perlu dibayar. Langsung berfoto!" : "Pilih cara bayar yang paling nyaman buatmu."}
+        />
 
-      {eventFreeEntryActive && (
-        <div className="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 px-6 py-4 text-center text-emerald-100">
-          <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">{boothConfig.eventName || "Event"}</p>
-          <p className="mt-1 text-lg font-semibold">Kiosk sedang aktif untuk event ini, jadi masuk gratis.</p>
-          <p className="mt-1 text-sm text-emerald-50/80">{boothConfig.eventDescription || "Semua paket tersedia tanpa pembayaran."}</p>
-        </div>
-      )}
-
-      {mode === "choose" && (
-        <Positionable id="choose-buttons" type="system-button" label="Pilihan Metode Bayar">
-          <div className="flex flex-wrap justify-center gap-5">
-            <button
-              onClick={startQris}
-              className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
-            >
-              {eventFreeEntryActive ? "Lanjutkan ke sesi foto" : "Bayar dengan QRIS"}
-            </button>
-            <button
-              onClick={() => setMode("voucher")}
-              className="glass-panel kinetic-button rounded-[2rem] border-white/10 px-14 py-10 font-display text-2xl font-semibold hover:border-accent"
-            >
-              Gunakan Voucher
-            </button>
-            {cashPaymentEnabled && <button onClick={() => { setCashRedeemed(false); setMode("voucher"); }} className="glass-panel kinetic-button rounded-[2rem] border-emerald-300/20 px-14 py-10 font-display text-2xl font-semibold text-emerald-100 hover:border-emerald-200">Bayar Cash ke Admin</button>}
-            {offlineModeEnabled && !isBrowserOnline() && <button onClick={continueOffline} className="glass-panel kinetic-button rounded-[2rem] border-amber-300/30 px-14 py-10 font-display text-2xl font-semibold text-amber-100 hover:border-amber-200">Lanjut offline<br /><span className="text-sm font-normal">Bayar manual di kasir</span></button>}
+        {/* Order summary — customers kept asking "what am I paying for?" */}
+        <Positionable id="total-price" type="text" label="Total Harga">
+          <div className="glass-panel flex min-w-[18rem] flex-col items-center gap-1 rounded-3xl px-10 py-5 text-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted">{selectedPackage?.name ?? "Paket"}{selectedExtras.length > 0 ? ` + ${selectedExtras.map((e) => e.name).join(", ")}` : ""}</span>
+            <span className="font-display text-4xl font-semibold tracking-tight text-accent md:text-5xl">{payableAmount === 0 ? "Gratis" : rupiah(payableAmount)}</span>
+            {payableAmount !== totalAmount && totalAmount > 0 && <span className="text-xs text-muted line-through">{rupiah(totalAmount)}</span>}
           </div>
         </Positionable>
-      )}
 
-      {mode === "voucher" && (
-        <div className="flex w-full max-w-3xl flex-col items-center gap-4">
-          <div className="glass-panel w-full rounded-[2rem] border-white/10 p-5 shadow-2xl shadow-black/20 sm:p-7">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/15 text-2xl text-accent">%</div>
-            <div>
-              <p className="eyebrow">PROMO CODE</p>
-              <h3 className="mt-1 font-display text-2xl font-semibold">Punya voucher?</h3>
-              <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Masukkan kode voucher atau invoice cash dari admin.</p>
-            </div>
+        {eventFreeEntryActive && (
+          <div className="max-w-xl rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-6 py-4 text-center text-emerald-700">
+            <p className="text-xs font-bold uppercase tracking-[0.2em]">{boothConfig.eventName || "Event"}</p>
+            <p className="mt-1 text-lg font-semibold">Kiosk sedang aktif untuk event ini, jadi masuk gratis.</p>
+            <p className="mt-1 text-sm opacity-80">{boothConfig.eventDescription || "Semua paket tersedia tanpa pembayaran."}</p>
           </div>
-          <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-3">
-            <div className="mb-2 flex items-center justify-between px-2 text-xs uppercase tracking-[0.16em] text-white/40">
-              <span>Kode voucher</span>
-              <span className="text-accent">Tidak peka huruf besar/kecil</span>
+        )}
+
+        {mode === "choose" && (isFreePackage || eventFreeEntryActive) && (
+          <button type="button" onClick={isFreePackage ? startFree : startQris} className="k-btn k-btn-accent k-btn-lg">
+            <Icon name="camera" className="h-6 w-6" />
+            Mulai berfoto
+          </button>
+        )}
+
+        {mode === "choose" && !isFreePackage && !eventFreeEntryActive && (
+          <Positionable id="choose-buttons" type="system-button" label="Pilihan Metode Bayar">
+            <div className="flex flex-wrap justify-center gap-5">
+              <button type="button" onClick={startQris} className={methodCard}>
+                <span className={methodIcon}><Icon name="qr" className="h-8 w-8" /></span>
+                <span className="font-display text-2xl font-semibold">Bayar dengan QRIS</span>
+                <span className="text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
+              </button>
+              <button type="button" onClick={() => setMode("voucher")} className={methodCard}>
+                <span className={methodIcon}><Icon name="ticket" className="h-8 w-8" /></span>
+                <span className="font-display text-2xl font-semibold">Pakai voucher</span>
+                <span className="text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
+              </button>
+              {cashPaymentEnabled && (
+                <button type="button" onClick={() => { setCashRedeemed(false); setMode("voucher"); }} className={methodCard}>
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 transition group-hover:scale-110"><Icon name="cash" className="h-8 w-8" /></span>
+                  <span className="font-display text-2xl font-semibold">Bayar tunai</span>
+                  <span className="text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
+                </button>
+              )}
+              {offlineModeEnabled && !isBrowserOnline() && (
+                <button type="button" onClick={continueOffline} className={methodCard}>
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/12 text-amber-600"><Icon name="warning" className="h-8 w-8" /></span>
+                  <span className="font-display text-2xl font-semibold">Lanjut offline</span>
+                  <span className="text-sm text-muted">Bayar manual di kasir.</span>
+                </button>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+          </Positionable>
+        )}
+
+        {mode === "voucher" && (
+          <div className="glass-panel w-full max-w-2xl rounded-[2rem] p-6 sm:p-8">
+            <div className="flex items-start gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/12 text-accent"><Icon name="ticket" className="h-6 w-6" /></span>
+              <div>
+                <h2 className="font-display text-2xl font-semibold">Punya voucher?</h2>
+                <p className="mt-1 text-sm text-muted">Ketik kodenya (huruf besar/kecil sama saja) atau scan QR pada tiket.</p>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center gap-2">
               <input
                 autoFocus
                 value={voucherCode}
                 onChange={(event) => { setError(null); setVoucherCode(event.target.value.toUpperCase()); }}
                 onFocus={() => setShowKeyboard(true)}
                 onKeyDown={(event) => { if (event.key === "Enter") redeemVoucher(); }}
-                placeholder="CONTOH: CASH-AB12CD34"
+                placeholder="Contoh: CASH-AB12CD34"
                 aria-label="Kode voucher"
                 disabled={redeemingVoucher}
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-semibold tracking-[0.16em] outline-none transition focus:border-accent disabled:opacity-60"
+                className="k-input min-w-0 flex-1 !py-4 text-lg font-semibold tracking-[0.14em] disabled:opacity-60"
               />
-              {voucherCode && !redeemingVoucher && <button onClick={() => setVoucherCode("")} className="rounded-lg px-2 text-white/40 hover:text-white" aria-label="Hapus kode voucher">×</button>}
+              {voucherCode && !redeemingVoucher && (
+                <button type="button" onClick={() => setVoucherCode("")} className="k-btn !min-h-[3.25rem] !px-4" aria-label="Hapus kode voucher"><Icon name="x" className="h-5 w-5" /></button>
+              )}
             </div>
-          </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => redeemVoucher()}
-                disabled={!voucherCode.trim() || redeemingVoucher}
-                className="kinetic-button flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {redeemingVoucher && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-                {redeemingVoucher ? "Memeriksa voucher..." : "Terapkan voucher"}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button type="button" onClick={() => redeemVoucher()} disabled={!voucherCode.trim() || redeemingVoucher} className="k-btn k-btn-accent flex-1">
+                {redeemingVoucher && <Spinner className="h-4 w-4 !border-white/40 !border-t-white" />}
+                {redeemingVoucher ? "Memeriksa voucher…" : "Terapkan voucher"}
               </button>
               {qrScanSupported && (
-                <button onClick={() => setShowScanner(true)} disabled={redeemingVoucher} className="kinetic-button rounded-xl border border-white/15 px-5 py-3 font-semibold text-white/80 hover:border-accent disabled:cursor-not-allowed disabled:opacity-40">
+                <button type="button" onClick={() => setShowScanner(true)} disabled={redeemingVoucher} className="k-btn">
+                  <Icon name="scan" className="h-5 w-5" />
                   Scan QR tiket
                 </button>
               )}
             </div>
-            {cashRedeemed && <p className="mt-3 text-center text-sm text-emerald-300">Invoice cash diterima. Sesi siap dimulai.</p>}
+            {cashRedeemed && <p className="mt-4 text-center text-sm font-semibold text-emerald-600">Invoice cash diterima. Sesi siap dimulai.</p>}
           </div>
-        </div>
-      )}
-
-      <AnimatePresence>
-        {showKeyboard && mode === "voucher" && (
-          // pointer-events-none on this full-screen wrapper (with -auto only
-          // on the keyboard itself below) — it used to catch every click
-          // across the WHOLE screen (fixed inset-0), including the "Terapkan
-          // voucher" button and input sitting well above the keyboard, so
-          // the first tap silently just dismissed this overlay instead of
-          // reaching the button; only a second tap actually landed on it.
-          // Now a tap anywhere that isn't the keyboard passes straight
-          // through to whatever's really there.
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-black/45 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 32, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.97 }}
-              transition={{ duration: 0.24, ease: "easeOut" }}
-              className="pointer-events-auto w-full max-w-5xl"
-            >
-              <VirtualKeyboard value={voucherCode} onChange={(value) => setVoucherCode(value.toUpperCase())} onClose={() => setShowKeyboard(false)} />
-            </motion.div>
-          </motion.div>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {mode === "qris" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Pembayaran QRIS"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="relative flex w-full max-w-md flex-col items-center gap-5 rounded-[2rem] border border-white/15 bg-ink-800 p-7 text-center shadow-2xl"
-            >
-              <button
-                onClick={() => {
-                  if (pollRef.current) clearInterval(pollRef.current);
-                  if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
-                  if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
-                  if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
-                  setChecking(false);
-                  setMode("choose");
-                }}
-                className="absolute right-5 top-4 text-2xl text-white/50 hover:text-white"
-                aria-label="Tutup pembayaran"
-              >×</button>
+        <AnimatePresence>
+          {showKeyboard && mode === "voucher" && (
+            // pointer-events-none on this full-screen wrapper (with -auto only on the keyboard itself): a tap anywhere
+            // that isn't the keyboard must reach whatever is really there, not just dismiss the overlay first.
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-fg/15 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6">
+              <motion.div initial={{ opacity: 0, y: 32, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.24, ease: "easeOut" }} className="pointer-events-auto w-full max-w-5xl">
+                <VirtualKeyboard value={voucherCode} onChange={(value) => setVoucherCode(value.toUpperCase())} onClose={() => setShowKeyboard(false)} />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              <span className="eyebrow text-accent">SCAN TO PAY</span>
-              <h3 className="font-display text-3xl font-bold">Bayar dengan QRIS</h3>
-              <p className="text-sm text-white/60">Buka aplikasi pembayaran, scan QR, lalu tunggu konfirmasi otomatis.</p>
+        <AnimatePresence>
+          {mode === "qris" && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-6 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Pembayaran QRIS">
+              <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="glass-solid relative flex w-full max-w-md flex-col items-center gap-5 rounded-[2rem] p-8 text-center">
+                <button type="button" onClick={closeQris} className="k-btn k-btn-ghost absolute right-3 top-3 !min-h-0 !p-2" aria-label="Tutup pembayaran"><Icon name="x" className="h-5 w-5" /></button>
 
-              {/* QR Code — while the Xendit invoice is still being created
-                  (qrisString not set yet), the canvas is empty, so this used
-                  to render as a blank white square with no indication
-                  anything was happening. */}
-              <div className="flex h-64 w-64 items-center justify-center rounded-2xl bg-white p-3 shadow-xl shadow-black/30">
-                {qrisString ? (
-                  <canvas ref={qrisCanvasRef} aria-label="QRIS pembayaran" className="h-full w-full" />
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-black/10 border-t-accent" />
-                    <p className="text-sm font-medium text-black/50">Menyiapkan QRIS...</p>
+                <div>
+                  <span className="eyebrow !mb-1">Scan untuk bayar</span>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight">Bayar dengan QRIS</h2>
+                  <p className="mt-2 text-sm text-muted">Buka aplikasi pembayaranmu, scan QR di bawah, lalu tunggu. Halaman ini lanjut otomatis.</p>
+                </div>
+
+                {/* While the invoice is still being created the canvas is empty — show a spinner instead of a blank white square. */}
+                <div className="flex aspect-square w-full max-w-[18rem] items-center justify-center rounded-3xl bg-white p-3 shadow-xl ring-1 ring-black/5">
+                  {qrisString ? (
+                    <canvas ref={qrisCanvasRef} aria-label="QRIS pembayaran" className="h-full w-full" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <Spinner className="h-10 w-10" />
+                      <p className="text-sm font-medium text-black/50">Menyiapkan QRIS…</p>
+                    </div>
+                  )}
+                </div>
+                <p className="font-display text-2xl font-semibold text-accent">{rupiah(payableAmount)}</p>
+
+                {checking && qrisExpirySeconds > 0 && (
+                  <div className="flex w-full items-center gap-3 rounded-2xl border border-fg/10 bg-fg/5 px-4 py-3">
+                    <div className="relative shrink-0">
+                      <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
+                        <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="3" />
+                        <circle cx="20" cy="20" r="16" fill="none" stroke={qrisExpirySeconds < 60 ? "#ef4444" : "var(--accent)"} strokeWidth="3" strokeLinecap="round" strokeDasharray="100.53" strokeDashoffset={100.53 * (1 - qrisExpirySeconds / QRIS_DISPLAY_SECONDS)} className="transition-all duration-1000" />
+                      </svg>
+                      <span className={`absolute inset-0 flex items-center justify-center text-[0.625rem] font-bold ${qrisExpirySeconds < 60 ? "text-red-500" : "text-muted"}`}>{Math.ceil(qrisExpirySeconds / 60)}m</span>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[0.65rem] font-bold uppercase tracking-wider text-muted">Berlaku</p>
+                      <p className={`font-display text-lg font-semibold tabular-nums ${qrisExpirySeconds < 60 ? "text-red-500" : ""}`}>
+                        {String(Math.floor(qrisExpirySeconds / 60)).padStart(2, "0")}:{String(qrisExpirySeconds % 60).padStart(2, "0")}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                      <span className="text-xs text-muted">Menunggu pembayaran…</span>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {/* Expiry countdown */}
-              {checking && qrisExpirySeconds > 0 && (
-                <div className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                  {/* Progress ring */}
-                  <div className="relative shrink-0">
-                    <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
-                      <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
-                      <circle
-                        cx="20" cy="20" r="16"
-                        fill="none"
-                        stroke={qrisExpirySeconds < 60 ? "#f87171" : "var(--accent, #7C3AED)"}
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeDasharray="100.53"
-                        strokeDashoffset={100.53 * (1 - qrisExpirySeconds / QRIS_DISPLAY_SECONDS)}
-                        className="transition-all duration-1000"
-                      />
-                    </svg>
-                    <span className={`absolute inset-0 flex items-center justify-center text-[0.625rem] font-bold ${qrisExpirySeconds < 60 ? "text-red-300" : "text-white/70"}`}>
-                      {Math.ceil(qrisExpirySeconds / 60)}m
-                    </span>
+                {qrisExpirySeconds === 0 && checking && (
+                  <div className="w-full rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-center">
+                    <p className="text-sm font-semibold text-amber-700">QR ini terlihat kedaluwarsa</p>
+                    <p className="mt-0.5 text-xs text-amber-700/80">Sudah bayar? Kami masih memeriksa di latar belakang. Atau buat QRIS baru di bawah.</p>
                   </div>
-                  <div className="text-left">
-                    <p className="text-xs text-white/40 uppercase tracking-wide">Berlaku</p>
-                    <p className={`font-display text-lg font-bold tabular-nums ${qrisExpirySeconds < 60 ? "text-red-300" : "text-white"}`}>
-                      {String(Math.floor(qrisExpirySeconds / 60)).padStart(2, "0")}:{String(qrisExpirySeconds % 60).padStart(2, "0")}
-                    </p>
-                  </div>
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                    <span className="text-xs text-white/50">Menunggu...</span>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {qrisExpirySeconds === 0 && checking && (
-                <div className="w-full rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-center">
-                  <p className="text-sm font-semibold text-amber-200">QR ini terlihat kedaluwarsa</p>
-                  <p className="mt-0.5 text-xs text-amber-200/70">Sudah bayar? Kami masih memeriksa di latar belakang. Atau buat QRIS baru di bawah.</p>
-                </div>
-              )}
-
-              {error && <p className="max-w-sm text-sm text-red-300">{error}</p>}
-              {(qrisExpirySeconds === 0 || !checking) && (
-                <button onClick={startQris} disabled={starting} className="kinetic-button flex items-center gap-2 rounded-xl bg-accent px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50">
-                  {starting && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-                  {starting ? "Menyiapkan..." : "Buat QRIS baru"}
-                </button>
-              )}
+                {error && <p className="max-w-sm text-sm font-medium text-red-500">{error}</p>}
+                {(qrisExpirySeconds === 0 || !checking) && (
+                  <button type="button" onClick={startQris} disabled={starting} className="k-btn k-btn-accent">
+                    {starting && <Spinner className="h-4 w-4 !border-white/40 !border-t-white" />}
+                    {starting ? "Menyiapkan…" : "Buat QRIS baru"}
+                  </button>
+                )}
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {showScanner && <QrCodeScanner onDetect={onQrScanned} onClose={() => setShowScanner(false)} />}
+        {showScanner && <QrCodeScanner onDetect={onQrScanned} onClose={() => setShowScanner(false)} />}
 
-      {error && <p className="text-red-400">{error}</p>}
+        {error && mode !== "qris" && <p role="alert" className="max-w-xl rounded-2xl bg-red-500/10 px-5 py-3 text-center text-sm font-medium text-red-500">{error}</p>}
 
-      <Positionable id="back-button" type="system-button" label="Tombol Kembali">
-        <button
-          onClick={() => (mode === "choose" ? navigate(getPreviousRoute("payment", boothConfig.kioskFlow)) : setMode("choose"))}
-          className="text-white/40 hover:text-white/70"
-        >
-          ← Kembali
-        </button>
-      </Positionable>
-    </div>
+        <BackButton onClick={() => (mode === "choose" ? navigate(getPreviousRoute("payment", boothConfig.kioskFlow)) : setMode("choose"))} label={mode === "choose" ? "Kembali" : "Pilih cara bayar lain"} />
+      </KioskPage>
     </ScreenLayoutBoundary>
   );
 }

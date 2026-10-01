@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOfflineStore } from "@/lib/offlineStore";
+import { useBoothConfig } from "@/lib/boothConfigStore";
 
 interface ToastMessage {
   id: string;
@@ -15,6 +16,8 @@ export default function NetworkToast() {
   const isOnline = useOfflineStore((s) => s.isOnline);
   const pendingCount = useOfflineStore((s) => s.pendingSessionCount + s.pendingPhotoCount + s.pendingStripCount);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
+  // Sync progress is operator information: a customer mid-session has no use for "menyinkronkan data".
+  const showSyncToasts = useBoothConfig((s) => s.config.offlineModeEnabled);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const prevOnline = useRef<boolean | null>(null);
   const prevSyncing = useRef(false);
@@ -46,6 +49,7 @@ export default function NetworkToast() {
   // Show sync progress, then a "done" toast once a sync pass that had
   // something to do finishes.
   useEffect(() => {
+    if (!showSyncToasts) { prevSyncing.current = syncInProgress; return; }
     if (syncInProgress) {
       pendingBeforeSync.current = pendingCount;
       pushToast({ type: "syncing", text: "Menyinkronkan data...", sub: `${pendingCount} data menunggu upload` });
@@ -56,17 +60,17 @@ export default function NetworkToast() {
   }, [syncInProgress]);
 
   const ICONS: Record<ToastMessage["type"], string> = {
-    online: "🌐",
-    offline: "📡",
-    syncing: "🔄",
-    synced: "✨",
+    online: "●",
+    offline: "●",
+    syncing: "↻",
+    synced: "✓",
   };
 
   const COLORS: Record<ToastMessage["type"], string> = {
-    online: "border-emerald-400/40 bg-emerald-950/80",
-    offline: "border-amber-400/40 bg-amber-950/80",
-    syncing: "border-sky-400/40 bg-sky-950/80",
-    synced: "border-violet-400/40 bg-violet-950/80",
+    online: "border-emerald-400/50",
+    offline: "border-amber-400/60",
+    syncing: "border-sky-400/50",
+    synced: "border-accent/40",
   };
 
   const PILL_COLORS: Record<ToastMessage["type"], string> = {
@@ -77,7 +81,7 @@ export default function NetworkToast() {
   };
 
   return (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[9999] flex -translate-x-1/2 flex-col items-center gap-2">
+    <div className="pointer-events-none fixed left-1/2 top-[5rem] z-[9999] flex -translate-x-1/2 flex-col items-center gap-2">
       <AnimatePresence mode="sync">
         {toasts.map((toast) => (
           <motion.div
@@ -86,9 +90,9 @@ export default function NetworkToast() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl shadow-black/50 backdrop-blur-xl ${COLORS[toast.type]}`}
+            className={`glass-solid flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl ${COLORS[toast.type]}`}
           >
-            <span className="text-xl">{ICONS[toast.type]}</span>
+            <span className="text-lg font-bold text-accent">{ICONS[toast.type]}</span>
             <div>
               <p className="text-sm font-semibold text-fg">{toast.text}</p>
               {toast.sub && <p className="mt-0.5 text-xs text-fg/55">{toast.sub}</p>}

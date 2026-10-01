@@ -29,50 +29,81 @@ import SubscriptionLockedScreen from "@/components/SubscriptionLockedScreen";
 import DeviceMismatchScreen from "@/components/DeviceMismatchScreen";
 import KioskBootScreen from "@/components/KioskBootScreen";
 
+const IDLE_WARNING_SECONDS = 30;
+
 function GlobalIdleTimer() {
   const [location, navigate] = useLocation();
   const resetSession = useKioskSession((s) => s.resetSession);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timersRef = useRef<{ warn?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval> }>({});
+  // Seconds left before the session is thrown away, or null while the customer is active.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   useEffect(() => {
     // Jangan aktifkan idle timer di halaman ini
     const isSafeRoute = location === "/" || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share") || location === "/hasil";
-    // Sesi foto sudah lunas dibayar sebelum sampai di sini — 3 menit terlalu
-    // ketat untuk layar ini (customer mungkin sedang pose, ganti filter, atau
-    // kamera butuh waktu nyambung) dan diam-diam membuang sesi yang SUDAH DIBAYAR
-    // balik ke pilih paket kalau timer ini kena. Kasih waktu lebih longgar di sini
-    // saja, bukan dihilangkan total — booth yang benar-benar ditinggal tetap harus
-    // reset akhirnya.
+    // Sesi foto sudah lunas dibayar sebelum sampai di sini — 3 menit terlalu ketat untuk layar ini (customer
+    // mungkin sedang pose, ganti filter, atau kamera butuh waktu nyambung) dan diam-diam membuang sesi yang
+    // SUDAH DIBAYAR kalau timer ini kena. Kasih waktu lebih longgar di sini saja, bukan dihilangkan total.
     const idleTimeoutMs = (location === "/sesi-foto" ? 8 : 3) * 60 * 1000;
 
+    const clear = () => {
+      if (timersRef.current.warn) clearTimeout(timersRef.current.warn);
+      if (timersRef.current.tick) clearInterval(timersRef.current.tick);
+      timersRef.current = {};
+    };
+
     const resetTimer = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clear();
+      setSecondsLeft(null);
       if (isSafeRoute) return;
 
-      timerRef.current = setTimeout(() => {
-        resetSession();
-        navigate("/");
-      }, idleTimeoutMs);
+      // A visible countdown BEFORE the reset: customers used to lose a half-finished session with no warning at all.
+      timersRef.current.warn = setTimeout(() => {
+        const deadline = Date.now() + IDLE_WARNING_SECONDS * 1000;
+        setSecondsLeft(IDLE_WARNING_SECONDS);
+        timersRef.current.tick = setInterval(() => {
+          const left = Math.ceil((deadline - Date.now()) / 1000);
+          if (left <= 0) {
+            clear();
+            setSecondsLeft(null);
+            resetSession();
+            navigate("/");
+          } else {
+            setSecondsLeft(left);
+          }
+        }, 500);
+      }, Math.max(1000, idleTimeoutMs - IDLE_WARNING_SECONDS * 1000));
     };
 
     resetTimer();
 
-    // Listen for any activity
-    window.addEventListener("mousemove", resetTimer);
-    window.addEventListener("touchstart", resetTimer);
-    window.addEventListener("keydown", resetTimer);
-    window.addEventListener("click", resetTimer);
-
+    const events = ["mousemove", "touchstart", "keydown", "click"] as const;
+    events.forEach((name) => window.addEventListener(name, resetTimer));
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("touchstart", resetTimer);
-      window.removeEventListener("keydown", resetTimer);
-      window.removeEventListener("click", resetTimer);
+      clear();
+      events.forEach((name) => window.removeEventListener(name, resetTimer));
     };
   }, [location, navigate, resetSession]);
 
-  return null;
+  if (secondsLeft === null) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-canvas/70 px-6 backdrop-blur-md" role="alertdialog" aria-live="assertive" aria-label="Masih di sini?">
+      <div className="glass-panel flex w-full max-w-md flex-col items-center gap-5 rounded-[2rem] p-10 text-center">
+        <div className="relative flex h-28 w-28 items-center justify-center">
+          <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">
+            <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="7" />
+            <circle cx="50" cy="50" r="44" fill="none" stroke="var(--accent)" strokeWidth="7" strokeLinecap="round" strokeDasharray={2 * Math.PI * 44} strokeDashoffset={(2 * Math.PI * 44) * (1 - secondsLeft / IDLE_WARNING_SECONDS)} style={{ transition: "stroke-dashoffset 0.5s linear" }} />
+          </svg>
+          <span className="font-display text-4xl font-semibold">{secondsLeft}</span>
+        </div>
+        <div>
+          <h2 className="font-display text-3xl font-semibold tracking-tight">Masih di sini?</h2>
+          <p className="mt-2 text-muted">Sesi akan diulang dari awal dalam {secondsLeft} detik kalau layar tidak disentuh.</p>
+        </div>
+        <button type="button" className="k-btn k-btn-accent k-btn-lg w-full">Ya, lanjutkan</button>
+      </div>
+    </div>
+  );
 }
 function AnimatedRoutes() {
   const [location] = useLocation();
@@ -104,7 +135,7 @@ function AnimatedRoutes() {
           <Route path="/superadmin" component={SuperadminDashboard} />
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>
-            <div className="flex h-full items-center justify-center text-fg/50">Halaman tidak ditemukan</div>
+            <div className="flex h-full items-center justify-center text-muted">Halaman tidak ditemukan</div>
           </Route>
         </Switch>
       </motion.div>

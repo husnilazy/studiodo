@@ -10,7 +10,7 @@ export default function KioskBootScreen() {
   const config = useBoothConfig((s) => s.config);
 
   return (
-    <div className="kinetic-page relative flex h-full w-full flex-col items-center justify-center gap-5 overflow-hidden bg-[#0b0b10] px-8 text-center">
+    <div className="kinetic-page relative flex h-full w-full flex-col items-center justify-center gap-5 overflow-hidden px-8 text-center">
       {config.logoUrl && (
         <img src={config.logoUrl} alt={config.brandName} className="mb-1 h-14 max-w-[60vw] object-contain opacity-70" />
       )}

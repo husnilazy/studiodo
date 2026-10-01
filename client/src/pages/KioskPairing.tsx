@@ -3,7 +3,7 @@ import { setApiBaseUrl, setKioskKey, getApiBaseUrl } from "@/lib/apiConfig";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { ApiError } from "@/lib/api";
 
-const inputClass = "w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent";
+const inputClass = "k-input";
 
 export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
   const [apiBaseUrl, setApiBaseUrlInput] = useState(() => (getApiBaseUrl() === "/api" ? "" : getApiBaseUrl()));
@@ -53,7 +53,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
 
   return (
     <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] px-4 text-[var(--kiosk-text)]">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+      <form onSubmit={submit} className="glass-panel w-full max-w-sm rounded-[2rem] p-8">
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Setup kiosk ini</h1>
         <p className="mt-2 text-sm text-fg/45">
@@ -80,7 +80,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
         <button
           type="submit"
           disabled={submitting || !kioskKey.trim()}
-          className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="k-btn k-btn-accent mt-6 w-full"
         >
           {submitting ? "Menghubungkan…" : "Hubungkan kiosk"}
         </button>

@@ -19,6 +19,18 @@ const themed = (variable: string) =>
 export default {
   content: [path.join(dir, "index.html"), path.join(dir, "src/**/*.{ts,tsx}")],
   theme: {
+    // The kiosk scales its root font-size up to 26px (index.css), so a 1080px-wide portrait screen has only ~665
+    // "design" pixels of room. Tailwind's default px breakpoints (md 768, lg 1024) would switch such a screen to
+    // multi-column desktop layouts that then overflow. These values keep the same idea of "wide enough for
+    // columns" after accounting for that scaling: a 1080px portrait kiosk stays on the compact layout, while a
+    // 1366px laptop or a 1920x1080 landscape kiosk gets the multi-column one.
+    screens: {
+      sm: "640px",
+      md: "1100px",
+      lg: "1280px",
+      xl: "1600px",
+      "2xl": "2000px",
+    },
     extend: {
       colors: {
         fg: themed("--kiosk-text"),

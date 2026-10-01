@@ -15,6 +15,8 @@ import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
 import Spinner from "@/components/Spinner";
+import StepProgress from "@/components/kiosk/StepProgress";
+import { Icon } from "@/components/kiosk/Icons";
 
 // Sony Imaging Edge Webcam / virtual cam warm-up guard
 const CAMERA_WARMUP_MS = 2800;
@@ -84,13 +86,13 @@ function TimerExpiredOverlay({ onSkip, waitingForMedia }: { onSkip: () => void; 
         {waitingForMedia ? <Spinner size="md" /> : <span className="font-display text-3xl font-bold text-red-300">{countdown}</span>}
       </div>
       <div className="text-center">
-        <p className="font-display text-2xl font-semibold text-white">Waktu sesi habis</p>
-        <p className="mt-1 text-white/50">
+        <p className="font-display text-2xl font-semibold text-fg">Waktu sesi habis</p>
+        <p className="mt-1 text-fg/50">
           {waitingForMedia ? "Menyimpan GIF & video sesi..." : `Melanjutkan ke preview dalam ${countdown} detik...`}
         </p>
       </div>
       <button
-        className="pointer-events-auto rounded-2xl bg-accent px-8 py-3 font-semibold text-white shadow-lg shadow-accent/30 disabled:cursor-wait disabled:opacity-50"
+        className="pointer-events-auto k-btn k-btn-accent k-btn-lg disabled:cursor-wait disabled:opacity-50"
         onClick={onSkip}
         disabled={waitingForMedia}
       >
@@ -852,44 +854,30 @@ export default function SesiFoto() {
 
   return (
     <ScreenLayoutBoundary screenKey="capture">
-    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3 sm:px-6 lg:px-8">
-      {/* Was a fixed palette keyed by config.captureVibe, unrelated to the
-          tenant's actual configured theme — this screen ended up the only
-          one in the whole kiosk not following the admin's accent/background
-          colors. Now built from the same theme values everything else uses. */}
-      <div
-        className="absolute inset-0 bg-[length:200%_200%] animate-gradient opacity-30"
-        style={{ backgroundImage: `linear-gradient(135deg, ${config.accentColor}, ${config.backgroundGradientEnd})` }}
-      />
-
-      <header className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8">
+      <StepProgress current="capture" />
+      <header className="relative z-10 mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-3">
         <Positionable id="heading" type="text" label="Judul">
-          <div className="text-center sm:text-left">
-            <p className="eyebrow">PHOTO SESSION</p>
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              <h1 className="font-display text-2xl font-semibold sm:text-3xl">Siap untuk momenmu?</h1>
-              {config.autoCaptureEnabled && (
-                <span className="flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-accent">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Mode Otomatis
-                </span>
-              )}
-            </div>
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{config.captureHeadline || "Siap untuk momenmu?"}</h1>
+            <p className="mt-0.5 text-sm text-muted">
+              {countdown !== null ? "Tahan pose… sebentar lagi!" : sessionComplete ? "Semua foto sudah diambil. Lanjut untuk mempercantik hasilnya." : config.autoCaptureEnabled ? "Mode otomatis: foto berikutnya diambil sendiri." : "Ketuk tombol bulat di layar kamera untuk mulai hitung mundur."}
+            </p>
           </div>
         </Positionable>
-        <div className="glass-panel mx-auto flex items-center gap-3 rounded-2xl px-3 py-2 sm:gap-5 sm:px-5">
-          <div className="text-center">
-            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[var(--kiosk-muted)]">Progress</p>
-            <p className="text-sm font-semibold">{currentSlot + 1} <span className="text-[var(--kiosk-muted)]">/ {totalPhotos}</span></p>
-          </div>
-          {eventTimerEnabled && <div className={`border-l pl-3 text-center sm:pl-5 ${remainingSeconds < 30 ? "border-red-400/40 text-red-300" : "border-white/10 text-[var(--kiosk-muted)]"}`}>
-            <p className="text-[0.625rem] uppercase tracking-[0.14em] text-[var(--kiosk-muted)]">Sisa waktu</p>
-            <p className="text-sm font-semibold">{Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p>
-          </div>}
+        <div className="flex items-center gap-2">
+          {config.autoCaptureEnabled && <span className="k-chip k-chip-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Mode otomatis</span>}
+          <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />Foto {Math.min(currentSlot + 1, totalPhotos)} dari {totalPhotos}</span>
+          {eventTimerEnabled && (
+            <span className={`k-chip !text-sm ${remainingSeconds < 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`}>
+              <Icon name="clock" className="h-4 w-4" />
+              {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
+            </span>
+          )}
         </div>
-        <div className="hidden sm:block" />
       </header>
 
-      <div className="relative z-10 mx-auto mt-3 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 lg:grid-cols-[minmax(230px,300px)_minmax(0,1fr)_minmax(280px,340px)] xl:gap-4">
+      <div className="relative z-10 mx-auto mt-3 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] landscape:lg:grid-cols-[minmax(230px,300px)_minmax(0,1fr)_minmax(280px,340px)] landscape:lg:grid-rows-1 xl:gap-4">
         {/* Full redesign of the captured-photos rail — thumbnails were
             cramped (a 108px ceiling on a wide-but-short kiosk screen made
             them look tiny) and "retake" had zero visual affordance beyond a
@@ -897,13 +885,13 @@ export default function SesiFoto() {
             refresh icon + "Ambil ulang" label baked into every filled
             thumbnail (not just on hover — this is a touchscreen), and a
             plainer instruction line up top. */}
-        <section className="glass-panel order-2 flex min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-4 lg:order-1">
+        <section className="glass-panel order-2 flex min-h-0 flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:order-1 landscape:lg:h-full landscape:lg:p-4">
           <div className="flex items-center justify-between">
-            <div><p className="eyebrow mb-1">CAPTURE FEED</p><h2 className="font-display text-xl font-semibold">Jepretan</h2></div>
-            <span className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent">{photoUrls.filter(Boolean).length}/{totalPhotos}</span>
+            <div><h2 className="font-display text-xl font-semibold">Jepretan</h2></div>
+            <span className="k-chip k-chip-accent">{photoUrls.filter(Boolean).length}/{totalPhotos}</span>
           </div>
-          <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-white/50">
-            <IconRefreshSmall className="h-3.5 w-3.5 shrink-0 text-white/40" /> Ketuk foto yang sudah jadi untuk ambil ulang.
+          <p className="mt-2 hidden items-center gap-1.5 text-xs leading-5 text-fg/50 landscape:flex">
+            <IconRefreshSmall className="h-3.5 w-3.5 shrink-0 text-fg/40" /> Ketuk foto yang sudah jadi untuk ambil ulang.
           </p>
           {/* `auto-rows-fr` (not `content-start`) is what actually stretches
               every row to share out whatever height this column has — with
@@ -911,7 +899,7 @@ export default function SesiFoto() {
               `h-[clamp(...)]`) the rows just pack at their own natural size
               and leave the rest of a tall/roomy screen empty below, which is
               exactly the "kurang terisi" (under-filled) complaint. */}
-          <div className="mt-3 grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2.5">{Array.from({ length: totalPhotos }).map((_, index) => {
+          <div className="mt-2 flex gap-2.5 overflow-x-auto portrait:pb-1 landscape:mt-3 landscape:grid landscape:min-h-0 landscape:flex-1 landscape:auto-rows-fr landscape:grid-cols-2 landscape:overflow-visible">{Array.from({ length: totalPhotos }).map((_, index) => {
             const photoUrl = photoUrls[index];
             const isCurrent = index === currentSlot;
             return (
@@ -919,7 +907,7 @@ export default function SesiFoto() {
               key={index}
               onClick={() => photoUrl && retake(index)}
               disabled={!photoUrl}
-              className={`group relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border-2 bg-white/[0.04] transition ${isCurrent ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? "border-white/15 hover:border-white/35" : "border-dashed border-white/15"}`}
+              className={`group relative flex h-24 w-20 shrink-0 min-h-0 flex-col overflow-hidden rounded-2xl border-2 landscape:h-full landscape:w-auto bg-fg/[0.04] transition ${isCurrent ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? "border-fg/15 hover:border-fg/35" : "border-dashed border-fg/15"}`}
             >
               {photoUrl ? (
                 <>
@@ -931,7 +919,7 @@ export default function SesiFoto() {
                   </span>
                 </>
               ) : (
-                <span className="flex h-full flex-1 flex-col items-center justify-center gap-1.5 text-white/30">
+                <span className="flex h-full flex-1 flex-col items-center justify-center gap-1.5 text-fg/30">
                   <IconCameraSmall className="h-6 w-6" />
                   <span className="text-[0.6875rem]">Menunggu</span>
                 </span>
@@ -939,7 +927,7 @@ export default function SesiFoto() {
               <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold ${isCurrent ? "bg-accent text-white" : "bg-black/70 text-white/85"}`}>{index + 1}</span>
               {syncingSlots.has(index) && (
                 <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-black/70" title="Menyimpan ke server...">
-                  <span className="h-2.5 w-2.5 animate-spin rounded-full border border-white/40 border-t-accent" />
+                  <span className="h-2.5 w-2.5 animate-spin rounded-full border border-fg/40 border-t-accent" />
                 </span>
               )}
             </button>
@@ -947,7 +935,7 @@ export default function SesiFoto() {
           })}</div>
         </section>
 
-        <main className="order-1 flex min-h-0 min-w-0 flex-col lg:order-2">
+        <main className="order-1 flex min-h-0 min-w-0 flex-col landscape:lg:order-2">
           {/* flex-1 + items-center here (instead of the old fixed vh height)
               is what makes this fill whatever vertical space this column
               actually has. The box's pixel size is computed in JS (see the
@@ -963,7 +951,7 @@ export default function SesiFoto() {
               something the live viewfinder itself needs to pre-match. Plain CSS aspect-ratio was
               tried first but doesn't reliably fill a flex item — see the
               comment on previewContainerRef above. */}
-          <div ref={previewContainerRef} className="glass-panel relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[2rem] border-white/10 bg-black/60 p-1 shadow-2xl shadow-black/30">
+          <div ref={previewContainerRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[2rem] bg-[#0b0d16] p-1.5 shadow-2xl ring-1 ring-fg/10">
             <motion.div
               animate={{ scale: flash ? 1.08 : 1 }}
               transition={{ duration: flash ? 0.18 : 0.4, ease: flash ? "easeOut" : "easeInOut" }}
@@ -976,16 +964,16 @@ export default function SesiFoto() {
             >
               {!previewReady && !cameraError && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
-                  <div className="h-10 w-10 rounded-full border-2 border-white/20 border-t-accent animate-spin" />
-                  <span className="mt-4 text-sm text-white/60">Menyiapkan kamera...</span>
+                  <div className="h-10 w-10 rounded-full border-2 border-fg/20 border-t-accent animate-spin" />
+                  <span className="mt-4 text-sm text-fg/60">Menyiapkan kamera...</span>
                 </div>
               )}
               {cameraError && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center px-6 text-center" style={{ backgroundColor: "var(--kiosk-background)" }}>
                   <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-red-400/10 text-3xl">!</span>
                   <p className="mt-4 font-display text-xl font-semibold">Kamera belum tersedia</p>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-white/50">{cameraError}</p>
-                  <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/40">
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-fg/50">{cameraError}</p>
+                  <p className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-2 text-xs text-fg/40">
                     {config.cameraMode === "tether"
                       ? "Pastikan digiCamControl berjalan dan kamera Canon terhubung lewat USB — layar ini akan tertutup otomatis begitu terdeteksi lagi."
                       : "Izinkan akses kamera pada browser, lalu muat ulang halaman."}
@@ -1014,7 +1002,7 @@ export default function SesiFoto() {
                   />
                   {liveViewLost && !cameraError && (
                     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 text-center">
-                      <div className="h-6 w-6 rounded-full border-2 border-white/20 border-t-amber-400 animate-spin" />
+                      <div className="h-6 w-6 rounded-full border-2 border-fg/20 border-t-amber-400 animate-spin" />
                       <p className="text-sm text-amber-200">Live view terputus, menyambung ulang...</p>
                     </div>
                   )}
@@ -1055,7 +1043,7 @@ export default function SesiFoto() {
                 disabled={!previewReady || countdown !== null}
                 whileTap={{ scale: 0.92 }}
                 aria-label="Ambil foto"
-                className="absolute left-1/2 top-[78%] z-30 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white shadow-[0_0_0_4px_rgba(0,0,0,0.35)] transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-28 sm:w-28"
+                className="absolute left-1/2 top-[78%] z-30 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-fg shadow-[0_0_0_4px_rgba(0,0,0,0.35)] transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-28 sm:w-28"
               >
                 {countdown !== null ? (
                   <>
@@ -1063,7 +1051,7 @@ export default function SesiFoto() {
                       <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="4" />
                       <circle cx="50" cy="50" r="44" fill="none" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" strokeDasharray="276" strokeDashoffset={276 * (1 - countdown / Math.max(1, config.countdownSeconds))} transform="rotate(-90 50 50)" />
                     </svg>
-                    <span className="relative text-3xl font-bold text-white drop-shadow">{countdown}</span>
+                    <span className="relative text-3xl font-bold text-fg drop-shadow">{countdown}</span>
                   </>
                 ) : (
                   <span className={`flex h-[85%] w-[85%] items-center justify-center rounded-full bg-white shadow-inner transition ${focusing ? "animate-pulse" : ""}`}>
@@ -1082,33 +1070,33 @@ export default function SesiFoto() {
               filter row buried at the very bottom, which read as if there
               was no way forward at all. */}
           {sessionComplete && (
-            <button onClick={() => navigate(getNextRoute("capture", config.kioskFlow))} disabled={mediaUploading} className="kinetic-button relative z-10 mt-3 flex min-h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-accent px-6 py-4 text-lg font-semibold shadow-lg shadow-accent/25 disabled:cursor-wait disabled:opacity-60">
+            <button onClick={() => navigate(getNextRoute("capture", config.kioskFlow))} disabled={mediaUploading} className="k-btn k-btn-accent k-btn-lg relative z-10 mt-3 w-full disabled:cursor-wait disabled:opacity-60">
               {mediaUploading
                 ? <><Spinner size="md" />{selectedPackage?.hasGif && selectedPackage?.hasVideo
                     ? "Menyimpan GIF & video sesi..."
                     : selectedPackage?.hasGif ? "Menyimpan GIF sesi..." : "Menyimpan video sesi..."}</>
-                : <>Lanjut edit hasil foto <span className="ml-2">→</span></>}
+                : <>Lanjut: percantik hasil foto <Icon name="arrow-right" className="h-5 w-5" /></>}
             </button>
           )}
           {canFinishEarly && (
-            <button onClick={finishEarly} disabled={finishingEarly} className="relative z-10 mt-3 flex min-h-14 w-full items-center justify-center rounded-2xl border border-accent/40 bg-accent/10 px-6 py-4 text-sm font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-wait disabled:opacity-60">
+            <button onClick={finishEarly} disabled={finishingEarly} className="k-btn relative z-10 mt-3 w-full !border-accent/40 !bg-accent/10 !text-accent disabled:cursor-wait disabled:opacity-60">
               {finishingEarly ? "Menyimpan..." : <>Frame sudah penuh ({templateSlotCount} foto) — Lanjutkan sekarang <span className="ml-2">→</span></>}
             </button>
           )}
-          <div className="glass-panel mt-3 rounded-2xl p-3"><div className="flex items-center justify-between"><span className="text-xs uppercase tracking-[0.16em] text-[var(--kiosk-muted)]">Filter</span><span className="font-semibold text-accent">{FILTER_LABELS[filter]}</span></div><div className="mt-2 flex justify-center gap-2 overflow-x-auto pb-1">{FILTER_ORDER.map((key) => <button key={key} onClick={() => setFilter(key)} className={`min-w-[4.25rem] rounded-xl border p-1 text-center transition ${filter === key ? "border-accent bg-accent/15 shadow-lg shadow-accent/20" : "border-white/10 bg-white/5 hover:border-white/30"}`}><div className="h-7 rounded-lg bg-white/10" style={{ filter: FILTER_CSS[key] }} /><span className="mt-1 block text-[0.5625rem]">{FILTER_LABELS[key]}</span></button>)}</div></div>
+          <div className="glass-panel mt-3 rounded-2xl p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Filter warna</span><span className="font-semibold text-accent">{FILTER_LABELS[filter]}</span></div><div className="mt-2 flex justify-center gap-2 overflow-x-auto pb-1">{FILTER_ORDER.map((key) => <button key={key} onClick={() => setFilter(key)} className={`min-w-[4.25rem] rounded-xl border p-1 text-center transition ${filter === key ? "border-accent bg-accent/15 shadow-lg shadow-accent/20" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}><div className="h-7 rounded-lg bg-fg/10" style={{ filter: FILTER_CSS[key] }} /><span className="mt-1 block text-[0.5625rem]">{FILTER_LABELS[key]}</span></button>)}</div></div>
         </main>
 
-        <section className="glass-panel order-3 flex min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-3"><div className="flex items-center justify-between"><div><p className="eyebrow mb-1">LIVE COMPOSITION</p><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-[var(--kiosk-muted)]">Foto otomatis masuk ke frame pilihan.</p>{template ? (
+        <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:flex"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-[var(--kiosk-muted)]">Foto otomatis masuk ke frame pilihan.</p>{template ? (
           // `h-full w-full` (not just `max-h-full max-w-full`) is load-bearing:
           // a <canvas> with no explicit size renders at its own drawing-buffer
           // resolution and just sits there small on a roomy screen — max-*
           // alone only ever shrinks it back down, never grows it to fill
           // available space. `object-contain` then keeps the drawn frame's
           // real aspect ratio inside that stretched box instead of distorting it.
-          <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+          <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-fg/10 bg-fg/[0.04] p-3">
             <canvas ref={templateCanvasRef} className="h-full w-full rounded-xl object-contain" />
           </div>
-        ) : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-white/15 text-xs text-[var(--kiosk-muted)]">Frame belum dipilih</div>}</section>
+        ) : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Frame belum dipilih</div>}</section>
       </div>
       {eventTimerEnabled && remainingSeconds <= 0 && (
         <TimerExpiredOverlay onSkip={() => navigate(getNextRoute("capture", config.kioskFlow))} waitingForMedia={mediaUploading} />
@@ -1131,11 +1119,11 @@ export default function SesiFoto() {
               transition={{ duration: 0.4, ease: "easeOut" }}
               className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/20 ring-4 ring-emerald-400/40 shadow-2xl shadow-emerald-400/20"
             >
-              <span className="text-3xl">✓</span>
+              <Icon name="check" className="h-10 w-10 text-emerald-300" strokeWidth={3} />
             </motion.div>
             <div className="rounded-2xl border border-emerald-400/30 bg-black/80 px-5 py-3 text-center backdrop-blur-md shadow-2xl">
-              <p className="font-display text-lg font-bold text-emerald-300">Foto ke-{capturedSlot + 1} berhasil! ✨</p>
-              <p className="text-xs text-white/50 mt-0.5">{capturedSlot + 1} dari {totalPhotos} foto diambil</p>
+              <p className="font-display text-lg font-semibold text-emerald-300">Foto ke-{capturedSlot + 1} berhasil!</p>
+              <p className="text-xs text-fg/50 mt-0.5">{capturedSlot + 1} dari {totalPhotos} foto diambil</p>
             </div>
           </motion.div>
         )}
