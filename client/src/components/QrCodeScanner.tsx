@@ -55,7 +55,7 @@ export default function QrCodeScanner({ onDetect, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Scan QR tiket">
       <div className="relative flex w-full max-w-md flex-col items-center gap-4 rounded-[2rem] border border-white/15 bg-ink-800 p-6 text-center shadow-2xl">
-        <button onClick={onClose} className="absolute right-5 top-4 text-2xl text-white/50 hover:text-white" aria-label="Tutup scanner">×</button>
+        <button onClick={onClose} className="absolute right-5 top-4 text-2xl text-fg/50 hover:text-fg" aria-label="Tutup scanner">×</button>
         <span className="eyebrow text-accent">SCAN QR TIKET</span>
         <h3 className="font-display text-2xl font-bold">Arahkan QR ke kamera</h3>
         {error ? (
@@ -65,7 +65,7 @@ export default function QrCodeScanner({ onDetect, onClose }: Props) {
             <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
           </div>
         )}
-        <p className="text-xs text-white/40">Kode akan terisi otomatis begitu QR terbaca.</p>
+        <p className="text-xs text-fg/40">Kode akan terisi otomatis begitu QR terbaca.</p>
       </div>
     </div>
   );

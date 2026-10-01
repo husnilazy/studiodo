@@ -42,8 +42,8 @@ export default function ToastHost() {
           >
             <span className="text-xl">{ICONS[toast.type]}</span>
             <div>
-              <p className="text-sm font-semibold text-white">{toast.title}</p>
-              {toast.sub && <p className="mt-0.5 text-xs text-white/55">{toast.sub}</p>}
+              <p className="text-sm font-semibold text-fg">{toast.title}</p>
+              {toast.sub && <p className="mt-0.5 text-xs text-fg/55">{toast.sub}</p>}
             </div>
             <span className={`ml-1 h-2 w-2 shrink-0 rounded-full ${PILL_COLORS[toast.type]}`} />
           </motion.div>

@@ -59,10 +59,10 @@ function CategoryPicker({ value, onChange }: { value: string; onChange: (categor
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`mt-1 flex w-full items-center justify-between gap-2 rounded-xl border bg-black/30 px-3 py-2 text-left text-sm text-white transition ${open ? "border-accent" : "border-white/10 hover:border-white/25"}`}
+        className={`mt-1 flex w-full items-center justify-between gap-2 rounded-xl border bg-black/30 px-3 py-2 text-left text-sm text-white transition ${open ? "border-accent" : "border-fg/10 hover:border-fg/25"}`}
       >
         <span className="truncate">{currentLabel || "Pilih kategori"}</span>
-        <span className={`shrink-0 text-white/40 transition-transform duration-200 ${open ? "-rotate-180" : ""}`}>⌄</span>
+        <span className={`shrink-0 text-fg/40 transition-transform duration-200 ${open ? "-rotate-180" : ""}`}>⌄</span>
       </button>
       <AnimatePresence>
         {open && (
@@ -79,14 +79,14 @@ function CategoryPicker({ value, onChange }: { value: string; onChange: (categor
                   key={category.key}
                   type="button"
                   onClick={() => { onChange(category.key); setOpen(false); }}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${category.key === value ? "bg-accent/20 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"}`}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${category.key === value ? "bg-accent/20 text-fg" : "text-fg/70 hover:bg-fg/5 hover:text-fg"}`}
                 >
                   {category.label}
                   {category.key === value && <span className="text-accent">✓</span>}
                 </button>
               ))}
             </div>
-            <div className="border-t border-white/10 p-1.5">
+            <div className="border-t border-fg/10 p-1.5">
               {adding ? (
                 <div className="flex gap-1.5 p-0.5">
                   <input
@@ -333,7 +333,7 @@ export default function FrameManagement() {
     <div className="h-full overflow-y-auto bg-[var(--kiosk-background)] px-5 py-8 text-[var(--kiosk-text)] md:px-10">
       <header className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4">
         <div>
-          <Link href="/admin" className="text-sm text-white/45 hover:text-white">← Admin OS</Link>
+          <Link href="/admin" className="text-sm text-fg/45 hover:text-fg">← Admin OS</Link>
           <p className="eyebrow mt-6">ADMIN / FRAME STUDIO</p>
           <h1 className="mt-2 font-display text-4xl font-bold md:text-6xl">Manajemen Frame</h1>
           <p className="mt-2 max-w-2xl text-[var(--kiosk-muted)]">
@@ -360,30 +360,30 @@ export default function FrameManagement() {
           </div>
           <div className="mt-5 space-y-5">
             {drafts.map((template) => (
-              <article key={template.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <article key={template.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
                 <div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_320px]">
                   <TemplateEditor template={template} onChange={(patch) => patchDraft(template.id, patch)} />
                   <div className="space-y-3">
-                    <label className="block text-sm text-white/55">
+                    <label className="block text-sm text-fg/55">
                       Nama frame
                       <input value={template.name} onChange={(event) => patchDraft(template.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" />
                     </label>
-                    <label className="block text-sm text-white/55">
+                    <label className="block text-sm text-fg/55">
                       Kategori
                       <CategoryPicker value={template.category} onChange={(category) => patchDraft(template.id, { category })} />
                     </label>
-                    <label className="block text-sm text-white/55">
+                    <label className="block text-sm text-fg/55">
                       Style / warna
                       <input value={template.style} onChange={(event) => patchDraft(template.id, { style: event.target.value })} placeholder="Contoh: Pastel pink, gold" className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" />
                     </label>
-                    <label className="block text-sm text-white/55">
+                    <label className="block text-sm text-fg/55">
                       Orientasi
                       <select value={template.orientation} onChange={(event) => patchDraft(template.id, { orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
                         <option value="portrait">Portrait</option>
                         <option value="landscape">Landscape</option>
                       </select>
                     </label>
-                    <label className="block text-sm text-white/55">
+                    <label className="block text-sm text-fg/55">
                       Resize / output
                       <select value={template.outputPreset} onChange={(event) => updatePreset(template, event.target.value as OutputPreset)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
                         {Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}
@@ -404,16 +404,16 @@ export default function FrameManagement() {
         <section className={`mx-auto mt-8 max-w-7xl ${panelAccent} md:p-7`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="eyebrow">EDIT FRAME</p><h2 className="font-display text-2xl font-semibold">Edit {editingTemplate.name}</h2></div>
-            <div className="flex gap-2"><button onClick={() => setEditingTemplate(null)} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/60">Batal</button><button onClick={saveEditedTemplate} disabled={savingEdit} className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{savingEdit && <Spinner size="sm" />}{savingEdit ? "Menyimpan…" : "Simpan perubahan"}</button></div>
+            <div className="flex gap-2"><button onClick={() => setEditingTemplate(null)} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60">Batal</button><button onClick={saveEditedTemplate} disabled={savingEdit} className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{savingEdit && <Spinner size="sm" />}{savingEdit ? "Menyimpan…" : "Simpan perubahan"}</button></div>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(260px,1fr)_320px]">
             <TemplateEditor template={editingTemplate} onChange={(patch) => setEditingTemplate((current) => current ? { ...current, ...patch } : current)} />
             <div className="space-y-3">
-              <label className="block text-sm text-white/55">Nama frame<input value={editingTemplate.name} onChange={(event) => setEditingTemplate({ ...editingTemplate, name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
-              <label className="block text-sm text-white/55">Kategori<CategoryPicker value={editingTemplate.category} onChange={(category) => setEditingTemplate({ ...editingTemplate, category })} /></label>
-              <label className="block text-sm text-white/55">Style / warna<input value={editingTemplate.style} onChange={(event) => setEditingTemplate({ ...editingTemplate, style: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
-              <label className="block text-sm text-white/55">Orientasi<select value={editingTemplate.orientation} onChange={(event) => setEditingTemplate({ ...editingTemplate, orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
-              <label className="block text-sm text-white/55">Resize / output<select value={editingTemplate.outputPreset} onChange={(event) => { const outputPreset = event.target.value as OutputPreset; const preset = outputPreset === "custom" ? null : OUTPUT_PRESETS[outputPreset]; setEditingTemplate({ ...editingTemplate, outputPreset, ...(preset ? { canvasWidth: preset.width, canvasHeight: preset.height } : {}) }); }} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">{Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}</select></label>
+              <label className="block text-sm text-fg/55">Nama frame<input value={editingTemplate.name} onChange={(event) => setEditingTemplate({ ...editingTemplate, name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
+              <label className="block text-sm text-fg/55">Kategori<CategoryPicker value={editingTemplate.category} onChange={(category) => setEditingTemplate({ ...editingTemplate, category })} /></label>
+              <label className="block text-sm text-fg/55">Style / warna<input value={editingTemplate.style} onChange={(event) => setEditingTemplate({ ...editingTemplate, style: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
+              <label className="block text-sm text-fg/55">Orientasi<select value={editingTemplate.orientation} onChange={(event) => setEditingTemplate({ ...editingTemplate, orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+              <label className="block text-sm text-fg/55">Resize / output<select value={editingTemplate.outputPreset} onChange={(event) => { const outputPreset = event.target.value as OutputPreset; const preset = outputPreset === "custom" ? null : OUTPUT_PRESETS[outputPreset]; setEditingTemplate({ ...editingTemplate, outputPreset, ...(preset ? { canvasWidth: preset.width, canvasHeight: preset.height } : {}) }); }} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">{Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}</select></label>
             </div>
           </div>
         </section>
@@ -425,25 +425,25 @@ export default function FrameManagement() {
             <p className="eyebrow">PUBLISHED LIBRARY</p>
             <h2 className="font-display text-3xl font-semibold">Frame aktif</h2>
           </div>
-          <span className="rounded-full border border-white/15 px-3 py-1 text-sm text-white/45">{publishedTemplates.length} frame</span>
+          <span className="rounded-full border border-fg/15 px-3 py-1 text-sm text-fg/45">{publishedTemplates.length} frame</span>
         </div>
         {groupedTemplates.length > 0 && (
           <div className="mb-6 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setCategoryFilter("__all__")}
-              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === "__all__" ? "border-accent bg-accent/15 text-white" : "border-white/15 text-white/55 hover:border-white/35 hover:text-white"}`}
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === "__all__" ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55 hover:border-fg/35 hover:text-fg"}`}
             >
-              Semua <span className="text-white/40">({publishedTemplates.length})</span>
+              Semua <span className="text-fg/40">({publishedTemplates.length})</span>
             </button>
             {groupedTemplates.map((group) => (
               <button
                 key={group.key}
                 type="button"
                 onClick={() => setCategoryFilter(group.key)}
-                className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === group.key ? "border-accent bg-accent/15 text-white" : "border-white/15 text-white/55 hover:border-white/35 hover:text-white"}`}
+                className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === group.key ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55 hover:border-fg/35 hover:text-fg"}`}
               >
-                {group.label} <span className="text-white/40">({group.items.length})</span>
+                {group.label} <span className="text-fg/40">({group.items.length})</span>
               </button>
             ))}
           </div>
@@ -453,11 +453,11 @@ export default function FrameManagement() {
             <div key={group.key}>
               <div className="mb-3 flex items-center gap-2">
                 <h3 className="font-display text-lg font-semibold">{group.label}</h3>
-                <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-white/40">{group.items.length}</span>
+                <span className="rounded-full border border-fg/10 px-2 py-0.5 text-xs text-fg/40">{group.items.length}</span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {group.items.map((template) => (
-                  <article key={template.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] transition hover:border-white/25">
+                  <article key={template.id} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] transition hover:border-fg/25">
                     <div className="relative h-56 overflow-hidden bg-black/30">
                       <img src={template.frameDataUrl} alt={template.name} className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
                       <div className="absolute inset-0 flex items-end justify-end bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
@@ -476,8 +476,8 @@ export default function FrameManagement() {
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold">{template.name}</h3>
-                      <p className="mt-1 text-xs text-white/45">{template.category} · {template.style}</p>
-                      <p className="mt-0.5 text-xs text-white/25">{template.orientation} · {template.outputPreset?.toUpperCase()} · {template.slots.length} slot</p>
+                      <p className="mt-1 text-xs text-fg/45">{template.category} · {template.style}</p>
+                      <p className="mt-0.5 text-xs text-fg/25">{template.orientation} · {template.outputPreset?.toUpperCase()} · {template.slots.length} slot</p>
                     </div>
                   </article>
                 ))}
@@ -485,11 +485,11 @@ export default function FrameManagement() {
             </div>
           ))}
           {publishedTemplates.length === 0 && (
-            <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border border-dashed border-white/15 py-20 text-center">
+            <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border border-dashed border-fg/15 py-20 text-center">
               <span className="text-6xl opacity-20">🖼</span>
               <div>
-                <p className="font-semibold text-white/50">Belum ada frame</p>
-                <p className="mt-1 text-sm text-white/30">Upload batch PNG di atas untuk mulai menambah frame kiosk.</p>
+                <p className="font-semibold text-fg/50">Belum ada frame</p>
+                <p className="mt-1 text-sm text-fg/30">Upload batch PNG di atas untuk mulai menambah frame kiosk.</p>
               </div>
             </div>
           )}
@@ -498,12 +498,12 @@ export default function FrameManagement() {
 
       <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="eyebrow">STICKER LIBRARY</p><h2 className="font-display text-3xl font-semibold">Stiker lucu</h2><p className="mt-1 text-sm text-white/45">Stiker yang diupload akan langsung tersedia di editor foto kiosk.</p></div>
+          <div><p className="eyebrow">STICKER LIBRARY</p><h2 className="font-display text-3xl font-semibold">Stiker lucu</h2><p className="mt-1 text-sm text-fg/45">Stiker yang diupload akan langsung tersedia di editor foto kiosk.</p></div>
           <label className="cursor-pointer rounded-xl bg-accent px-4 py-3 text-sm font-semibold">Upload stiker<input type="file" accept="image/*" multiple className="hidden" onChange={(event) => Array.from(event.target.files ?? []).forEach(uploadSticker)} /></label>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-8">
-          {stickers.map((sticker) => <div key={sticker.id} className="group relative rounded-xl border border-white/10 bg-black/20 p-2"><img src={sticker.dataUrl} alt={sticker.name} className="h-20 w-full object-contain" /><button type="button" onClick={() => removeSticker(sticker.id)} className="absolute right-1 top-1 rounded bg-red-500/80 px-1.5 py-1 text-[10px] opacity-0 transition group-hover:opacity-100">Hapus</button><p className="mt-1 truncate text-center text-[10px] text-white/50">{sticker.name}</p></div>)}
-          {stickers.length === 0 && <p className="col-span-full py-8 text-center text-sm text-white/40">Belum ada stiker. Upload PNG atau gambar transparan untuk dipakai customer.</p>}
+          {stickers.map((sticker) => <div key={sticker.id} className="group relative rounded-xl border border-fg/10 bg-fg/5 p-2"><img src={sticker.dataUrl} alt={sticker.name} className="h-20 w-full object-contain" /><button type="button" onClick={() => removeSticker(sticker.id)} className="absolute right-1 top-1 rounded bg-red-500/80 px-1.5 py-1 text-[10px] opacity-0 transition group-hover:opacity-100">Hapus</button><p className="mt-1 truncate text-center text-[10px] text-fg/50">{sticker.name}</p></div>)}
+          {stickers.length === 0 && <p className="col-span-full py-8 text-center text-sm text-fg/40">Belum ada stiker. Upload PNG atau gambar transparan untuk dipakai customer.</p>}
         </div>
       </section>
 
@@ -512,37 +512,37 @@ export default function FrameManagement() {
         <h2 className="font-display text-2xl font-semibold">Output & Capture</h2>
         <div className="mt-4 space-y-4">
           <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.outputPresetEnabled} onChange={(event) => set("outputPresetEnabled", event.target.checked)} /><span>Aktifkan pilihan ukuran output (4R, 2R, A4)</span></label>
-          <label className="block max-w-xs text-sm text-white/60">
+          <label className="block max-w-xs text-sm text-fg/60">
             Maksimal foto dalam satu sesi
             <input type="number" min={1} max={50} className={inputClass} value={config.maxPhotosPerSession} onChange={(event) => set("maxPhotosPerSession", Math.max(1, Math.min(50, Number(event.target.value))))} />
           </label>
-          <p className="text-xs text-white/45">Jumlah foto paket tetap menjadi default; nilai ini menjadi batas maksimal agar sesi tidak melebihi kuota capture admin.</p>
+          <p className="text-xs text-fg/45">Jumlah foto paket tetap menjadi default; nilai ini menjadi batas maksimal agar sesi tidak melebihi kuota capture admin.</p>
         </div>
       </section>
 
       <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
         <p className="eyebrow">PRINT LAYOUT</p>
         <h2 className="font-display text-2xl font-semibold">Layout & Visual Strip</h2>
-        <p className="mt-1 text-sm text-white/45">Susunan foto (layout) dan tema warna/border (visual template) dipakai di halaman Hasil dan saat cetak.</p>
+        <p className="mt-1 text-sm text-fg/45">Susunan foto (layout) dan tema warna/border (visual template) dipakai di halaman Hasil dan saat cetak.</p>
         <div className="mt-4 grid gap-5 md:grid-cols-[280px_1fr]">
           <div className="mx-auto w-full max-w-[220px]">
-            <canvas ref={stripPreviewRef} className="w-full rounded-xl border border-white/10 shadow-lg" />
-            <p className="mt-2 text-center text-xs text-white/40">Live preview (foto contoh)</p>
+            <canvas ref={stripPreviewRef} className="w-full rounded-xl border border-fg/10 shadow-lg" />
+            <p className="mt-2 text-center text-xs text-fg/40">Live preview (foto contoh)</p>
           </div>
           <div className="space-y-4">
-            <label className="block text-sm text-white/60">
+            <label className="block text-sm text-fg/60">
               Layout foto
               <select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
                 {Object.entries(STRIP_LAYOUT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="block text-sm text-white/60">
+            <label className="block text-sm text-fg/60">
               Visual template
               <select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
                 {Object.entries(STRIP_TEMPLATE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <p className="text-xs text-white/45">Warna aksen di visual template (Neon Glow, gradient, footer bar) mengikuti warna aksen di Kustomisasi Kiosk.</p>
+            <p className="text-xs text-fg/45">Warna aksen di visual template (Neon Glow, gradient, footer bar) mengikuti warna aksen di Kustomisasi Kiosk.</p>
           </div>
         </div>
       </section>

@@ -74,7 +74,7 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
 
   if (status === "checking") {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] text-white/50">
+      <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] text-fg/50">
         Memuat…
       </div>
     );
@@ -84,11 +84,11 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
     <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] px-4 text-[var(--kiosk-text)]">
       <form
         onSubmit={submitLogin}
-        className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl"
+        className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl"
       >
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Login Admin</h1>
-        <p className="mt-2 text-sm text-white/45">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
+        <p className="mt-2 text-sm text-fg/45">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
 
         <div className="mt-6 space-y-3">
           <input
@@ -97,14 +97,14 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent"
           />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
-            className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent"
           />
         </div>
 

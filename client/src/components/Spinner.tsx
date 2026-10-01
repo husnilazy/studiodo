@@ -7,5 +7,5 @@ const SIZES = {
 } as const;
 
 export default function Spinner({ size = "sm", className = "" }: { size?: keyof typeof SIZES; className?: string }) {
-  return <span className={`inline-block animate-spin rounded-full border-white/20 border-t-accent ${SIZES[size]} ${className}`} />;
+  return <span className={`inline-block animate-spin rounded-full border-fg/20 border-t-accent ${SIZES[size]} ${className}`} />;
 }

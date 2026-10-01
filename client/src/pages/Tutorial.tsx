@@ -31,7 +31,7 @@ export default function Tutorial() {
         <Positionable id="step-list" type="system-steplist" label="Daftar Langkah">
           <div className="grid w-full max-w-4xl grid-cols-2 gap-4 md:grid-cols-3">
             {steps.map((key, index) => (
-              <div key={key} className="glass-panel rounded-2xl border-white/10 p-5 text-center">
+              <div key={key} className="glass-panel rounded-2xl border-fg/10 p-5 text-center">
                 <p className="font-display text-3xl font-bold text-accent">{index + 1}</p>
                 <p className="mt-2 font-semibold">{STEP_DEFS[key].label}</p>
                 <p className="mt-1 text-xs text-[var(--kiosk-muted)]">{STEP_DEFS[key].hint}</p>

@@ -88,7 +88,7 @@ export default function ShareGallery({ id }: { id: string }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#17130F] p-10 text-center font-body text-white">
         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-7xl opacity-25">📷</motion.span>
         <p className="font-display text-2xl font-semibold">Hasil tidak ditemukan</p>
-        <p className="text-white/40">Link mungkin sudah kadaluarsa atau tidak valid.</p>
+        <p className="text-fg/40">Link mungkin sudah kadaluarsa atau tidak valid.</p>
       </div>
     );
   }
@@ -96,8 +96,8 @@ export default function ShareGallery({ id }: { id: string }) {
   if (!session) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#17130F] font-body text-white">
-        <div className="h-12 w-12 animate-spin rounded-full border-2 border-white/15 border-t-accent" />
-        <p className="text-white/50">Memuat hasil foto...</p>
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
+        <p className="text-fg/50">Memuat hasil foto...</p>
       </div>
     );
   }
@@ -157,7 +157,7 @@ export default function ShareGallery({ id }: { id: string }) {
               className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
-            <button onClick={() => setActivePhoto(null)} className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white/70 hover:bg-white/20">
+            <button onClick={() => setActivePhoto(null)} className="absolute right-5 top-5 rounded-full bg-fg/10 p-2 text-fg/70 hover:bg-fg/20">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </motion.div>
@@ -165,7 +165,7 @@ export default function ShareGallery({ id }: { id: string }) {
       </AnimatePresence>
 
       {/* Hero header */}
-      <div className="relative overflow-hidden border-b border-white/[0.06]">
+      <div className="relative overflow-hidden border-b border-fg/[0.06]">
         {/* Was accent + a hardcoded cyan glow — the cyan had nothing to do
             with the tenant's brand and gave the whole hero a cold blue/purple
             tint instead of STUDIODO's warm terracotta look. Both stops now
@@ -173,14 +173,14 @@ export default function ShareGallery({ id }: { id: string }) {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--accent)_28%,transparent),transparent_55%),radial-gradient(ellipse_at_bottom_right,color-mix(in_srgb,var(--accent)_14%,transparent),transparent_55%)]" />
         <div className="relative mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10 md:py-14">
           <div className="flex items-center gap-3">
-            {profile.logoUrl ? <img src={profile.logoUrl} alt={profileBrand} className="h-20 w-auto max-w-[min(72vw,280px)] object-contain object-left" /> : <div className="text-2xl font-bold tracking-wide text-white">{profileBrand}</div>}
+            {profile.logoUrl ? <img src={profile.logoUrl} alt={profileBrand} className="h-20 w-auto max-w-[min(72vw,280px)] object-contain object-left" /> : <div className="text-2xl font-bold tracking-wide text-fg">{profileBrand}</div>}
           </div>
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-accent">STUDIODO Gallery</p>
             <h1 className="mt-5 max-w-2xl font-display text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
               Momenmu sudah siap! <span className="inline-block animate-bounce">✨</span>
             </h1>
-            <p className="mt-3 max-w-lg text-white/50">Download, bagikan, atau simpan kenangan ini. Foto kamu tersimpan di galeri pribadi STUDIODO.</p>
+            <p className="mt-3 max-w-lg text-fg/50">Download, bagikan, atau simpan kenangan ini. Foto kamu tersimpan di galeri pribadi STUDIODO.</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -220,7 +220,7 @@ export default function ShareGallery({ id }: { id: string }) {
             </a>
             <button
               onClick={() => navigator.clipboard?.writeText(shareLink)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-semibold text-white/70 transition hover:border-white/30 hover:text-white sm:px-5 sm:text-sm"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-fg/15 px-3 py-2.5 text-center text-xs font-semibold text-fg/70 transition hover:border-fg/30 hover:text-fg sm:px-5 sm:text-sm"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               Salin link
@@ -246,7 +246,7 @@ export default function ShareGallery({ id }: { id: string }) {
               <a
                 href={session.stripUrl}
                 download
-                className="flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white/70 transition hover:border-accent/60 hover:text-accent"
+                className="flex items-center gap-2 rounded-xl border border-fg/15 px-4 py-2 text-sm font-semibold text-fg/70 transition hover:border-accent/60 hover:text-accent"
               >
                 ↓ Download
               </a>
@@ -257,7 +257,7 @@ export default function ShareGallery({ id }: { id: string }) {
                 alt="Strip foto"
                 whileHover={{ scale: 1.02 }}
                 transition={{ duration: 0.2 }}
-                className="max-h-[70vh] max-w-full cursor-zoom-in rounded-2xl border border-white/[0.08] object-contain shadow-2xl shadow-black/60"
+                className="max-h-[70vh] max-w-full cursor-zoom-in rounded-2xl border border-fg/[0.08] object-contain shadow-2xl shadow-black/60"
                 onClick={() => setActivePhoto(session.stripUrl)}
               />
             </div>
@@ -272,7 +272,7 @@ export default function ShareGallery({ id }: { id: string }) {
             transition={{ delay: 0.25 }}
           >
             <div className="mb-5">
-              <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-white/40">FOTO INDIVIDUAL</p>
+              <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-fg/40">FOTO INDIVIDUAL</p>
               <h2 className="mt-1 font-display text-2xl font-bold">{photoUrls.length} foto dari sesi kamu</h2>
             </div>
             <div className={`grid gap-3 ${photoUrls.length === 1 ? "max-w-xs" : photoUrls.length <= 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"}`}>
@@ -283,7 +283,7 @@ export default function ShareGallery({ id }: { id: string }) {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.3 + index * 0.06 }}
                   onClick={() => setActivePhoto(url)}
-                  className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] cursor-zoom-in"
+                  className="group relative overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.03] cursor-zoom-in"
                 >
                   <img
                     src={url}
@@ -292,10 +292,10 @@ export default function ShareGallery({ id }: { id: string }) {
                     loading="lazy"
                   />
                   <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 p-3">
-                    <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur-sm">Foto {index + 1}</span>
+                    <span className="rounded-full bg-fg/20 px-3 py-1 text-xs font-semibold backdrop-blur-sm">Foto {index + 1}</span>
                   </div>
                   <div className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 opacity-0 transition group-hover:opacity-100 backdrop-blur-sm">
-                    <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                    <svg className="h-3.5 w-3.5 text-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
                   </div>
                 </motion.button>
               ))}
@@ -306,7 +306,7 @@ export default function ShareGallery({ id }: { id: string }) {
                   key={url}
                   href={url}
                   download={`foto-${index + 1}.jpg`}
-                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/60 transition hover:border-white/25 hover:text-white"
+                  className="rounded-lg border border-fg/10 bg-fg/[0.04] px-3 py-1.5 text-xs text-fg/60 transition hover:border-fg/25 hover:text-fg"
                 >
                   ↓ Foto {index + 1}
                 </a>
@@ -321,11 +321,11 @@ export default function ShareGallery({ id }: { id: string }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
-            className="rounded-[2rem] border border-white/[0.07] bg-white/[0.03] p-6"
+            className="rounded-[2rem] border border-fg/[0.07] bg-fg/[0.03] p-6"
           >
-            <p className="eyebrow mb-3 text-xs font-bold uppercase tracking-[0.2em] text-white/40">MEDIA MOMEN — SEMUA FOTO BERGERAK BERSAMAAN</p>
-            {session.videoUrl && <div><p className="mb-2 text-sm font-semibold text-white/70">Video sesi</p><video src={session.videoUrl} controls loop playsInline className="w-full rounded-2xl border border-white/[0.08]" /><a href={session.videoUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download video</a></div>}
-            {session.gifUrl && <div className={session.videoUrl ? "mt-6" : ""}><p className="mb-2 text-sm font-semibold text-white/70">GIF sesi</p><img src={session.gifUrl} alt="GIF sesi" className="w-full rounded-2xl border border-white/[0.08]" /><a href={session.gifUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download GIF</a></div>}
+            <p className="eyebrow mb-3 text-xs font-bold uppercase tracking-[0.2em] text-fg/40">MEDIA MOMEN — SEMUA FOTO BERGERAK BERSAMAAN</p>
+            {session.videoUrl && <div><p className="mb-2 text-sm font-semibold text-fg/70">Video sesi</p><video src={session.videoUrl} controls loop playsInline className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.videoUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download video</a></div>}
+            {session.gifUrl && <div className={session.videoUrl ? "mt-6" : ""}><p className="mb-2 text-sm font-semibold text-fg/70">GIF sesi</p><img src={session.gifUrl} alt="GIF sesi" className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.gifUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download GIF</a></div>}
           </motion.section>
         )}
 
@@ -337,7 +337,7 @@ export default function ShareGallery({ id }: { id: string }) {
             transition={{ delay: 0.38 }}
           >
             <div className="mb-5">
-              <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-white/40">KLIP TIAP FOTO</p>
+              <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-fg/40">KLIP TIAP FOTO</p>
               <h2 className="mt-1 font-display text-2xl font-bold">Momen bergerak di tiap foto</h2>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2">
@@ -345,7 +345,7 @@ export default function ShareGallery({ id }: { id: string }) {
                 if (!clipUrl) return null;
                 const isGif = clipUrl.toLowerCase().endsWith(".gif");
                 return (
-                  <div key={clipUrl} className="flex w-40 shrink-0 flex-col items-center gap-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3">
+                  <div key={clipUrl} className="flex w-40 shrink-0 flex-col items-center gap-2 overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.03] p-3">
                     {isGif
                       ? <img src={clipUrl} alt={`Klip foto ${index + 1}`} className="h-32 w-full rounded-xl object-cover" />
                       : <video src={clipUrl} muted loop autoPlay playsInline className="h-32 w-full rounded-xl object-cover" />}
@@ -367,7 +367,7 @@ export default function ShareGallery({ id }: { id: string }) {
           <div className="mb-6">
             <p className="eyebrow text-xs font-bold uppercase tracking-[0.2em] text-accent">KONTAK & FEEDBACK</p>
             <h2 className="mt-1 font-display text-2xl font-bold">Bagaimana pengalaman kamu?</h2>
-            <p className="mt-2 text-sm text-white/45">Simpan kontak untuk promo & event berikutnya dari STUDIODO.</p>
+            <p className="mt-2 text-sm text-fg/45">Simpan kontak untuk promo & event berikutnya dari STUDIODO.</p>
           </div>
 
           {saved ? (
@@ -384,18 +384,18 @@ export default function ShareGallery({ id }: { id: string }) {
             <form onSubmit={submit} className="space-y-4">
               {/* Star rating */}
               <div>
-                <label className="mb-2 block text-sm text-white/60">Rating pengalaman</label>
+                <label className="mb-2 block text-sm text-fg/60">Rating pengalaman</label>
                 <StarRating value={form.rating} onChange={(v) => setForm({ ...form, rating: v })} />
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <input
-                  className="rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
+                  className="rounded-xl border border-fg/[0.12] bg-fg/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
                   placeholder="Nomor WhatsApp"
                   value={form.whatsapp}
                   onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
                 />
                 <input
-                  className="rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
+                  className="rounded-xl border border-fg/[0.12] bg-fg/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
                   type="email"
                   placeholder="Email (opsional)"
                   value={form.email}
@@ -403,13 +403,13 @@ export default function ShareGallery({ id }: { id: string }) {
                 />
               </div>
               <textarea
-                className="w-full rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
+                className="w-full rounded-xl border border-fg/[0.12] bg-fg/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30"
                 placeholder="Cerita pengalaman kamu di sini... (opsional)"
                 rows={3}
                 value={form.feedback}
                 onChange={(e) => setForm({ ...form, feedback: e.target.value })}
               />
-              <label className="flex items-start gap-3 text-sm text-white/50">
+              <label className="flex items-start gap-3 text-sm text-fg/50">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 rounded accent-[var(--accent)]"
@@ -430,15 +430,15 @@ export default function ShareGallery({ id }: { id: string }) {
         </motion.section>
       </main>
 
-      <footer className="border-t border-white/[0.06] px-4 py-8 sm:px-6">
+      <footer className="border-t border-fg/[0.06] px-4 py-8 sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-          <div><p className="text-sm font-semibold text-white/70">{profileBrand}</p><p className="mt-1 text-xs text-white/35">{profile.address || "Photobooth & creative moments"}</p></div>
+          <div><p className="text-sm font-semibold text-fg/70">{profileBrand}</p><p className="mt-1 text-xs text-fg/35">{profile.address || "Photobooth & creative moments"}</p></div>
           <div className="flex flex-wrap justify-center gap-2 sm:justify-end">
             {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-emerald-400/25 px-3 py-1.5 text-xs text-emerald-300">WhatsApp</a>}
-            {profile.socialInstagram && <a href={profile.socialInstagram} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60">Instagram</a>}
-            {profile.socialTiktok && <a href={profile.socialTiktok} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60">TikTok</a>}
-            {profile.socialFacebook && <a href={profile.socialFacebook} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60">Facebook</a>}
-            {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60">Website</a>}
+            {profile.socialInstagram && <a href={profile.socialInstagram} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Instagram</a>}
+            {profile.socialTiktok && <a href={profile.socialTiktok} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">TikTok</a>}
+            {profile.socialFacebook && <a href={profile.socialFacebook} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Facebook</a>}
+            {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Website</a>}
           </div>
         </div>
       </footer>

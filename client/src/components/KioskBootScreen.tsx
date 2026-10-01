@@ -14,8 +14,8 @@ export default function KioskBootScreen() {
       {config.logoUrl && (
         <img src={config.logoUrl} alt={config.brandName} className="mb-1 h-14 max-w-[60vw] object-contain opacity-70" />
       )}
-      <div className="h-9 w-9 animate-spin rounded-full border-2 border-white/15 border-t-accent" />
-      <p className="text-sm text-white/40">Menghubungkan ke server...</p>
+      <div className="h-9 w-9 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
+      <p className="text-sm text-fg/40">Menghubungkan ke server...</p>
     </div>
   );
 }

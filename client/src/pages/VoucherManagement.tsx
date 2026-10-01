@@ -8,7 +8,7 @@ import Spinner from "@/components/Spinner";
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={`block ${className}`}>
-      <span className="text-sm text-white/60">{label}</span>
+      <span className="text-sm text-fg/60">{label}</span>
       {children}
     </label>
   );
@@ -223,7 +223,7 @@ export default function VoucherManagement() {
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {vouchers.map((voucher) => (
-            <div key={voucher.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div key={voucher.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
               {editingVoucherId === voucher.id ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Kode"><input className={inputClass} value={editingVoucher.code ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, code: e.target.value.toUpperCase() })} /></Field>
@@ -232,20 +232,20 @@ export default function VoucherManagement() {
                   <Field label="Kuota"><input className={inputClass} type="number" placeholder="Tanpa batas" value={editingVoucher.maxUses ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, maxUses: e.target.value })} /></Field>
                   <Field label="Mulai aktif"><input className={inputClass} type="datetime-local" value={editingVoucher.startsAt ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, startsAt: e.target.value })} /></Field>
                   <Field label="Berakhir"><input className={inputClass} type="datetime-local" value={editingVoucher.expiresAt ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, expiresAt: e.target.value })} /></Field>
-                  <div className="flex gap-2 sm:col-span-2"><button onClick={saveVoucherEdit} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold">Simpan perubahan</button><button onClick={() => setEditingVoucherId(null)} className="rounded-xl border border-white/15 px-4 py-2 text-xs">Batal</button></div>
+                  <div className="flex gap-2 sm:col-span-2"><button onClick={saveVoucherEdit} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold">Simpan perubahan</button><button onClick={() => setEditingVoucherId(null)} className="rounded-xl border border-fg/15 px-4 py-2 text-xs">Batal</button></div>
                 </div>
               ) : <div className="flex items-start justify-between gap-3">
-                <div><p className="font-semibold tracking-[0.16em] text-accent">{voucher.code}</p><p className="mt-1 text-lg font-semibold">{voucher.discountType === "percent" ? `${voucher.discountValue}%` : voucher.discountType === "free" ? "Gratis" : `Rp ${Number(voucher.discountValue).toLocaleString("id-ID")}`}</p><p className="mt-1 text-xs text-white/45">Dipakai {voucher.usedCount}{voucher.maxUses === null ? " · Tanpa batas" : ` dari ${voucher.maxUses}`} · {voucher.startsAt ? new Date(voucher.startsAt).toLocaleDateString("id-ID") : "Mulai sekarang"}</p></div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${voucher.active ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/50"}`}>{voucher.active ? "Aktif" : "Nonaktif"}</span>
+                <div><p className="font-semibold tracking-[0.16em] text-accent">{voucher.code}</p><p className="mt-1 text-lg font-semibold">{voucher.discountType === "percent" ? `${voucher.discountValue}%` : voucher.discountType === "free" ? "Gratis" : `Rp ${Number(voucher.discountValue).toLocaleString("id-ID")}`}</p><p className="mt-1 text-xs text-fg/45">Dipakai {voucher.usedCount}{voucher.maxUses === null ? " · Tanpa batas" : ` dari ${voucher.maxUses}`} · {voucher.startsAt ? new Date(voucher.startsAt).toLocaleDateString("id-ID") : "Mulai sekarang"}</p></div>
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${voucher.active ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>{voucher.active ? "Aktif" : "Nonaktif"}</span>
               </div>}
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-                <button onClick={() => beginVoucherEdit(voucher)} className="rounded-full border border-white/15 px-3 py-1 text-xs">Edit</button>
-                <button onClick={async () => { await api.updateVoucher(voucher.id, { active: !voucher.active }); refreshVouchers(); }} className="rounded-full border border-white/15 px-3 py-1 text-xs">{voucher.active ? "Nonaktifkan" : "Aktifkan"}</button>
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-fg/10 pt-3">
+                <button onClick={() => beginVoucherEdit(voucher)} className="rounded-full border border-fg/15 px-3 py-1 text-xs">Edit</button>
+                <button onClick={async () => { await api.updateVoucher(voucher.id, { active: !voucher.active }); refreshVouchers(); }} className="rounded-full border border-fg/15 px-3 py-1 text-xs">{voucher.active ? "Nonaktifkan" : "Aktifkan"}</button>
                 <button onClick={async () => { await api.deleteVoucher(voucher.id); refreshVouchers(); }} className="text-xs text-red-300">Hapus</button>
               </div>
             </div>
           ))}
-          {vouchers.length === 0 && <p className="text-sm text-white/40">Belum ada voucher. Buat promo pertama untuk customer.</p>}
+          {vouchers.length === 0 && <p className="text-sm text-fg/40">Belum ada voucher. Buat promo pertama untuk customer.</p>}
         </div>
       </section>
 
@@ -271,12 +271,12 @@ export default function VoucherManagement() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold text-emerald-200">{bulkResult.length} kode berhasil dibuat</p>
               <div className="flex gap-2">
-                <button type="button" onClick={copyBulkCodes} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-accent hover:text-white">Salin semua kode</button>
-                <button type="button" onClick={downloadBulkCodes} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:border-accent hover:text-white">Download CSV</button>
+                <button type="button" onClick={copyBulkCodes} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/70 hover:border-accent hover:text-fg">Salin semua kode</button>
+                <button type="button" onClick={downloadBulkCodes} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/70 hover:border-accent hover:text-fg">Download CSV</button>
               </div>
             </div>
-            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="font-mono text-xs leading-relaxed text-white/70">{bulkResult.map((v) => v.code).join(", ")}</p>
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-fg/10 bg-fg/5 p-2">
+              <p className="font-mono text-xs leading-relaxed text-fg/70">{bulkResult.map((v) => v.code).join(", ")}</p>
             </div>
           </div>
         )}
@@ -286,17 +286,17 @@ export default function VoucherManagement() {
         <p className="eyebrow">LAPORAN</p>
         <h2 className="font-display text-xl font-semibold">Penggunaan voucher</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-white/45">Total dipakai</p><p className="mt-3 font-display text-3xl font-semibold">{report?.summary.totalRedemptions ?? 0}</p></div>
-          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-white/45">Diskon diberikan</p><p className="mt-3 font-display text-3xl font-semibold">{money(report?.summary.totalDiscountGiven ?? 0)}</p></div>
-          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-white/45">Revenue setelah diskon</p><p className="mt-3 font-display text-3xl font-semibold text-accent">{money(report?.summary.totalRevenueAfterDiscount ?? 0)}</p></div>
+          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-fg/45">Total dipakai</p><p className="mt-3 font-display text-3xl font-semibold">{report?.summary.totalRedemptions ?? 0}</p></div>
+          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-fg/45">Diskon diberikan</p><p className="mt-3 font-display text-3xl font-semibold">{money(report?.summary.totalDiscountGiven ?? 0)}</p></div>
+          <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-fg/45">Revenue setelah diskon</p><p className="mt-3 font-display text-3xl font-semibold text-accent">{money(report?.summary.totalRevenueAfterDiscount ?? 0)}</p></div>
         </div>
         <div className="mt-5 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-white/45"><tr><th className="p-3">Waktu</th><th className="p-3">Kode</th><th className="p-3">Tujuan</th><th className="p-3">Diskon</th><th className="p-3">Dibayar</th></tr></thead>
+            <thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Kode</th><th className="p-3">Tujuan</th><th className="p-3">Diskon</th><th className="p-3">Dibayar</th></tr></thead>
             <tbody>
               {(report?.items ?? []).map((item) => (
-                <tr key={item.id} className="border-t border-white/10">
-                  <td className="p-3 text-white/60">{new Date(item.redeemedAt).toLocaleString("id-ID")}</td>
+                <tr key={item.id} className="border-t border-fg/10">
+                  <td className="p-3 text-fg/60">{new Date(item.redeemedAt).toLocaleString("id-ID")}</td>
                   <td className="p-3 font-semibold text-accent">{item.code}</td>
                   <td className="p-3">{item.redemptionPurpose === "additional_print" ? "Print tambahan" : "Sesi"}</td>
                   <td className="p-3">{money(Number(item.discountAmount))}</td>
@@ -305,14 +305,14 @@ export default function VoucherManagement() {
               ))}
             </tbody>
           </table>
-          {reportLoading && <p className="py-6 text-center text-sm text-white/40">Memuat…</p>}
-          {!reportLoading && (report?.items.length ?? 0) === 0 && <p className="py-6 text-center text-sm text-white/40">Belum ada voucher yang dipakai.</p>}
+          {reportLoading && <p className="py-6 text-center text-sm text-fg/40">Memuat…</p>}
+          {!reportLoading && (report?.items.length ?? 0) === 0 && <p className="py-6 text-center text-sm text-fg/40">Belum ada voucher yang dipakai.</p>}
         </div>
         {report && report.total > REPORT_PAGE_SIZE && (
-          <div className="mt-4 flex items-center justify-between text-sm text-white/50">
-            <button type="button" disabled={reportOffset === 0} onClick={() => loadReport(Math.max(0, reportOffset - REPORT_PAGE_SIZE))} className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-30">← Sebelumnya</button>
+          <div className="mt-4 flex items-center justify-between text-sm text-fg/50">
+            <button type="button" disabled={reportOffset === 0} onClick={() => loadReport(Math.max(0, reportOffset - REPORT_PAGE_SIZE))} className="rounded-lg border border-fg/15 px-3 py-1.5 disabled:opacity-30">← Sebelumnya</button>
             <span>{reportOffset + 1}–{Math.min(reportOffset + REPORT_PAGE_SIZE, report.total)} dari {report.total}</span>
-            <button type="button" disabled={reportOffset + REPORT_PAGE_SIZE >= report.total} onClick={() => loadReport(reportOffset + REPORT_PAGE_SIZE)} className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-30">Berikutnya →</button>
+            <button type="button" disabled={reportOffset + REPORT_PAGE_SIZE >= report.total} onClick={() => loadReport(reportOffset + REPORT_PAGE_SIZE)} className="rounded-lg border border-fg/15 px-3 py-1.5 disabled:opacity-30">Berikutnya →</button>
           </div>
         )}
       </section>
@@ -321,14 +321,14 @@ export default function VoucherManagement() {
         <section className={sectionClass}>
           <p className="eyebrow">PROMO CONTROL</p>
           <h2 className="font-display text-xl font-semibold">Invoice Cash</h2>
-          <p className="mt-1 text-xs text-white/45">Admin menerima uang cash, lalu membuat invoice dan kode sekali pakai.</p>
+          <p className="mt-1 text-xs text-fg/45">Admin menerima uang cash, lalu membuat invoice dan kode sekali pakai.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <Field label="Nominal diterima"><input className={inputClass} type="number" min={1} placeholder="50000" value={cashInvoiceDraft.amount} onChange={(event) => setCashInvoiceDraft({ ...cashInvoiceDraft, amount: event.target.value })} /></Field>
             <Field label="Nama customer (opsional)"><input className={inputClass} placeholder="Nama customer" value={cashInvoiceDraft.customerName} onChange={(event) => setCashInvoiceDraft({ ...cashInvoiceDraft, customerName: event.target.value })} /></Field>
             <button type="button" onClick={generateCashInvoice} disabled={!cashInvoiceDraft.amount} className="mt-1 self-end rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-40">Generate invoice</button>
           </div>
           {cashInvoiceError && <p className="mt-3 text-xs text-red-300">{cashInvoiceError}</p>}
-          {cashInvoice && <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-4"><div><p className="text-xs text-white/45">{cashInvoice.invoiceNumber}</p><p className="mt-1 text-2xl font-bold tracking-[0.16em] text-emerald-200">{cashInvoice.code}</p><p className="mt-1 text-sm">Rp {Number(cashInvoice.cashAmount).toLocaleString("id-ID")} · {cashInvoice.customerName || "Tanpa nama"}</p></div><button type="button" onClick={printCashInvoice} className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:border-accent">Print struk kecil</button></div>}
+          {cashInvoice && <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-4"><div><p className="text-xs text-fg/45">{cashInvoice.invoiceNumber}</p><p className="mt-1 text-2xl font-bold tracking-[0.16em] text-emerald-200">{cashInvoice.code}</p><p className="mt-1 text-sm">Rp {Number(cashInvoice.cashAmount).toLocaleString("id-ID")} · {cashInvoice.customerName || "Tanpa nama"}</p></div><button type="button" onClick={printCashInvoice} className="rounded-xl border border-fg/20 px-4 py-2 text-sm hover:border-accent">Print struk kecil</button></div>}
         </section>
       )}
     </div>

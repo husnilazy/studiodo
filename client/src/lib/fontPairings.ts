@@ -8,6 +8,8 @@
 // one Electron bundle is negligible.
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/sora";
+import "@fontsource/plus-jakarta-sans/400.css";
 import "@fontsource/fraunces/500.css";
 import "@fontsource/fraunces/600.css";
 import "@fontsource/fraunces/700.css";
@@ -27,6 +29,8 @@ export interface FontPairingDef {
 // pre-Fase-7 tenant already has stored as fontFamily: "Space Grotesk", so migrating
 // tenants get the SAME intended look, just one that finally renders.
 export const FONT_PAIRINGS = {
+  // The STUDIODO website pairing: the default look of the kiosk.
+  studiodo: { label: "STUDIODO (Sora + Jakarta)", display: "'Sora Variable'", body: "'Plus Jakarta Sans'" },
   classic: { label: "Classic Clean", display: "'Space Grotesk Variable'", body: "'Inter Variable'" },
   "warm-serif": { label: "Warm Serif", display: "'Fraunces'", body: "'Inter Variable'" },
   "rounded-modern": { label: "Modern Sans", display: "'Plus Jakarta Sans'", body: "'Inter Variable'" },

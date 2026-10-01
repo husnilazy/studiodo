@@ -242,12 +242,12 @@ export default function TemplateEditor({ template, onChange }: Props) {
           onPointerUp={finishDrag}
           onPointerCancel={finishDrag}
         />
-        <p className="mt-2 text-center text-xs text-white/45">Drag slot untuk memindahkan. Drag sudut kanan bawah untuk resize.</p>
+        <p className="mt-2 text-center text-xs text-fg/45">Drag slot untuk memindahkan. Drag sudut kanan bawah untuk resize.</p>
       </div>
       <div className="space-y-3">
-        <div className="flex rounded-lg border border-white/10 p-1">
-          <button onClick={() => setMode("slots")} className={`flex-1 px-2 py-1 text-xs ${mode === "slots" ? "bg-accent" : "text-white/50"}`}>Slot foto</button>
-          <button onClick={() => setMode("guide")} className={`flex-1 px-2 py-1 text-xs ${mode === "guide" ? "bg-accent" : "text-white/50"}`}>Green guide</button>
+        <div className="flex rounded-lg border border-fg/10 p-1">
+          <button onClick={() => setMode("slots")} className={`flex-1 px-2 py-1 text-xs ${mode === "slots" ? "bg-accent" : "text-fg/50"}`}>Slot foto</button>
+          <button onClick={() => setMode("guide")} className={`flex-1 px-2 py-1 text-xs ${mode === "guide" ? "bg-accent" : "text-fg/50"}`}>Green guide</button>
         </div>
         <button onClick={detectGreenSlots} className="w-full border border-green-400/30 bg-green-400/10 px-3 py-2 text-xs text-green-100 hover:bg-green-400/20">
           Deteksi area hijau otomatis
@@ -258,14 +258,14 @@ export default function TemplateEditor({ template, onChange }: Props) {
         <button onClick={addSlot} className="w-full border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent hover:bg-accent/20">
           + Tambah slot
         </button>
-        <label className="block text-xs text-white/60">Slot aktif
+        <label className="block text-xs text-fg/60">Slot aktif
           <select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
             {template.slots.map((_, index) => <option key={index} value={index}>Foto {index + 1}</option>)}
           </select>
         </label>
         {selectedSlot && (
           <>
-            <label className="block text-xs text-white/60">Rasio slot
+            <label className="block text-xs text-fg/60">Rasio slot
               <select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selectedSlot.aspectRatio ?? "free"} onChange={(event) => setRatio(event.target.value === "free" ? null : Number(event.target.value))}>
                 {SLOT_RATIOS.map((ratio) => <option key={ratio.label} value={ratio.value ?? "free"}>{ratio.label}</option>)}
               </select>
@@ -274,7 +274,7 @@ export default function TemplateEditor({ template, onChange }: Props) {
             <button type="button" onClick={deleteSelectedSlot} disabled={template.slots.length <= 1} className="w-full rounded border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-200 hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-40">
               Hapus slot foto
             </button>
-            {template.slots.length <= 1 && <p className="text-[10px] text-white/35">Minimal satu slot harus tersisa.</p>}
+            {template.slots.length <= 1 && <p className="text-[10px] text-fg/35">Minimal satu slot harus tersisa.</p>}
           </>
         )}
         {mode === "guide" && (

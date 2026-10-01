@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { api } from "./api";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
-import { THEME_PRESETS, type ThemeMode } from "./themePresets";
+import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
 
 export type CaptureVibe = "Electric" | "Cotton Candy" | "Ocean" | "Sunset" | "Mono";
@@ -129,7 +129,7 @@ export interface BoothConfig {
 
 const DEFAULT_CONFIG: BoothConfig = {
   brandName: "STUDIODO",
-  tagline: "Capture the moment, cinematically.",
+  tagline: "Abadikan momen, bagikan senyum.",
   logoUrl: null,
   contactWhatsapp: "",
   socialInstagram: "",
@@ -138,14 +138,14 @@ const DEFAULT_CONFIG: BoothConfig = {
   websiteUrl: "",
   address: "",
   logoScale: 100,
-  accentColor: "#D97757",
-  backgroundColor: "#17130F",
-  surfaceColor: "#241E19",
-  textColor: "#F5EFE9",
-  mutedTextColor: "#B8AA9C",
-  fontFamily: "Space Grotesk",
-  themeMode: "dark",
-  fontPairing: "classic",
+  accentColor: THEME_PRESETS.light.accentColor,
+  backgroundColor: THEME_PRESETS.light.backgroundColor,
+  surfaceColor: THEME_PRESETS.light.surfaceColor,
+  textColor: THEME_PRESETS.light.textColor,
+  mutedTextColor: THEME_PRESETS.light.mutedTextColor,
+  fontFamily: "Sora",
+  themeMode: "light",
+  fontPairing: "studiodo",
   eventEnabled: false,
   eventName: "Event Spesial",
   eventDescription: "Acara khusus studio hari ini.",
@@ -163,16 +163,16 @@ const DEFAULT_CONFIG: BoothConfig = {
   sessionLayout: "immersive",
   backgroundStyle: "ambient",
   backgroundGradientEnabled: true,
-  backgroundGradientStart: "#17130F",
-  backgroundGradientEnd: "#2B1D14",
+  backgroundGradientStart: THEME_PRESETS.light.backgroundGradientStart,
+  backgroundGradientEnd: THEME_PRESETS.light.backgroundGradientEnd,
   animationsEnabled: true,
   keyboardScale: 100,
   promoText: "Promo hari ini: cetak 2x, gratis 1x!",
   idleStartText: "Sentuh layar untuk mulai",
   idleHeadline: "STUDIODO",
-  idleSubheadline: "Capture the moment, cinematically.",
+  idleSubheadline: "Abadikan momen, bagikan senyum.",
   packageHeadline: "Pilih Paket",
-  orientationHeadline: "Pilih Orientasi",
+  orientationHeadline: "Tampilan Kamera",
   paymentHeadline: "Pembayaran",
   captureHeadline: "Siap untuk momenmu?",
   previewHeadline: "Momenmu, siap diedit.",
@@ -234,6 +234,21 @@ interface BoothConfigStore {
   reset: () => void;
 }
 
+/** Upgrades a theme that was never customized (still the pre-redesign clay palette) to the website look. */
+function upgradeLegacyTheme(config: Partial<BoothConfig> | undefined): Partial<BoothConfig> | undefined {
+  if (!config) return config;
+  const next: Partial<BoothConfig> = { ...config };
+  const same = (a?: string, b?: string) => (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
+  const untouchedPalette = LEGACY_PALETTES.some((p) => same(p.backgroundColor, config.backgroundColor) && same(p.surfaceColor, config.surfaceColor) && same(p.textColor, config.textColor));
+  if (untouchedPalette) Object.assign(next, THEME_PRESETS.light, { themeMode: "light" as ThemeMode });
+  if (config.accentColor && LEGACY_ACCENTS.includes(config.accentColor.toUpperCase())) next.accentColor = THEME_PRESETS.light.accentColor;
+  if ((config.fontPairing as string | undefined) === "classic" || !config.fontPairing) next.fontPairing = "studiodo";
+  if (config.tagline === "Capture the moment, cinematically.") next.tagline = DEFAULT_CONFIG.tagline;
+  if (config.idleSubheadline === "Capture the moment, cinematically.") next.idleSubheadline = DEFAULT_CONFIG.idleSubheadline;
+  if (config.orientationHeadline === "Pilih Orientasi") next.orientationHeadline = DEFAULT_CONFIG.orientationHeadline;
+  return next;
+}
+
 function mergeConfig(config?: Partial<BoothConfig>): BoothConfig {
   const tetherBridgeUrl = config?.tetherBridgeUrl?.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1):5513\/?$/, "$1$2:5510") ?? DEFAULT_CONFIG.tetherBridgeUrl;
   return {
@@ -262,6 +277,12 @@ export const useBoothConfig = create<BoothConfigStore>()(
     }),
     {
       name: "studiodo-booth-config",
+      version: 2,
+      // v2 = website redesign. Only a stored pre-v2 theme is upgraded; v2+ configs are the tenant's own choices.
+      migrate: (persisted) => {
+        const p = (persisted ?? {}) as Partial<BoothConfigStore>;
+        return { ...p, config: mergeConfig(upgradeLegacyTheme(p.config)) } as BoothConfigStore;
+      },
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<BoothConfigStore>),
@@ -282,8 +303,10 @@ export async function syncBoothConfigFromServer() {
   // throwing to detect a bad/typo'd kiosk key. It used to catch-and-return
   // silently, so a wrong key still got persisted as "paired" and only failed
   // later, mid-flow, with a generic error instead of bouncing back to setup.
-  const remote = await api.getTenantConfig();
-  useBoothConfig.getState().update(remote as Partial<BoothConfig>);
+  const remote = (await api.getTenantConfig()) as Partial<BoothConfig>;
+  // The server only stores the accent, and its default is the old violet: a tenant who never picked one gets the new brand accent.
+  if (remote.accentColor && LEGACY_ACCENTS.includes(remote.accentColor.toUpperCase())) remote.accentColor = THEME_PRESETS.light.accentColor;
+  useBoothConfig.getState().update(remote);
 }
 
 export function isEventActive(config: BoothConfig) {
@@ -319,10 +342,10 @@ export function applyThemeToDocument(config: BoothConfig) {
   root.style.setProperty("--kiosk-surface", config.surfaceColor);
   root.style.setProperty("--kiosk-text", config.textColor);
   root.style.setProperty("--kiosk-muted", config.mutedTextColor);
-  const pairing = FONT_PAIRINGS[config.fontPairing] ?? FONT_PAIRINGS.classic;
+  const pairing = FONT_PAIRINGS[config.fontPairing] ?? FONT_PAIRINGS.studiodo;
   root.style.setProperty("--font-display", pairing.display);
   root.style.setProperty("--font-body", pairing.body);
-  root.dataset.themeMode = config.themeMode ?? "dark";
+  root.dataset.themeMode = config.themeMode ?? "light";
   root.dataset.buttonStyle = config.buttonStyle;
   root.dataset.kioskDensity = config.kioskDensity;
   root.dataset.animations = String(config.animationsEnabled);

@@ -49,7 +49,7 @@ export default function OperatorConsole() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex bg-[#0b0b10] text-white">
+    <div className="force-dark fixed inset-0 z-[100] flex bg-[#0b0b10] text-white">
       <aside className="flex w-72 shrink-0 flex-col border-r border-white/10 bg-black/40 p-5">
         <p className="eyebrow">OPERATOR</p>
         <h1 className="font-display text-2xl font-bold">Konsol Perangkat</h1>
@@ -59,7 +59,7 @@ export default function OperatorConsole() {
               key={item.key}
               type="button"
               onClick={() => setTab(item.key)}
-              className={`w-full rounded-xl px-3 py-2.5 text-left transition ${tab === item.key ? "bg-accent text-white" : "text-white/60 hover:bg-white/5"}`}
+              className={`w-full rounded-xl px-3 py-2.5 text-left transition ${tab === item.key ? "bg-accent text-white" : "text-fg/60 hover:bg-fg/5"}`}
             >
               <span className="block text-sm font-semibold">{item.label}</span>
               <span className="block text-xs opacity-70">{item.hint}</span>
@@ -84,8 +84,8 @@ export default function OperatorConsole() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-white/5 pb-3 text-sm last:border-0 last:pb-0">
-      <span className="text-white/45">{label}</span>
+    <div className="flex items-center justify-between border-b border-fg/5 pb-3 text-sm last:border-0 last:pb-0">
+      <span className="text-fg/45">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
   );
@@ -103,7 +103,7 @@ const STATUS_BADGE: Record<DiagnosticResult["status"], { label: string; classNam
   ok: { label: "OK", className: "border-emerald-400/30 text-emerald-300" },
   warn: { label: "Perhatian", className: "border-amber-400/30 text-amber-300" },
   fail: { label: "Gagal", className: "border-red-400/30 text-red-300" },
-  checking: { label: "Memeriksa…", className: "border-white/15 text-white/50" },
+  checking: { label: "Memeriksa…", className: "border-fg/15 text-fg/50" },
 };
 
 function DiagnosticsPanel() {
@@ -142,26 +142,26 @@ function DiagnosticsPanel() {
 
   return (
     <div className="max-w-3xl space-y-5">
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-center justify-between rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
         <div>
           <p className="eyebrow">RINGKASAN KESEHATAN</p>
           <p className="font-display text-3xl font-bold">
             {scorePercent}% <span className="text-accent">sehat</span>
           </p>
-          <p className="text-xs text-white/40">{passCount}/{entries.length} cek lolos</p>
+          <p className="text-xs text-fg/40">{passCount}/{entries.length} cek lolos</p>
         </div>
-        <button type="button" onClick={runAll} disabled={running} className="rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-50">
+        <button type="button" onClick={runAll} disabled={running} className="rounded-xl border border-fg/15 px-4 py-2 text-sm disabled:opacity-50">
           {running ? "Memeriksa…" : "Periksa ulang"}
         </button>
       </div>
-      <div className="divide-y divide-white/10 rounded-2xl border border-white/10">
+      <div className="divide-y divide-fg/10 rounded-2xl border border-fg/10">
         {entries.map((entry) => {
           const badge = STATUS_BADGE[entry.result?.status ?? "checking"];
           return (
             <div key={entry.key} className="flex items-center justify-between gap-4 p-4">
               <div>
                 <p className="font-semibold">{entry.label}</p>
-                <p className="text-xs text-white/45">{entry.result?.detail || "Memeriksa…"}</p>
+                <p className="text-xs text-fg/45">{entry.result?.detail || "Memeriksa…"}</p>
               </div>
               <span className={`rounded-full border px-3 py-1 text-xs ${badge.className}`}>{badge.label}</span>
             </div>
@@ -210,7 +210,7 @@ function CameraPanel() {
             key={mode}
             type="button"
             onClick={() => update({ cameraMode: mode })}
-            className={`rounded-xl border px-4 py-2 text-sm ${config.cameraMode === mode ? "border-accent bg-accent/15 text-white" : "border-white/15 text-white/60"}`}
+            className={`rounded-xl border px-4 py-2 text-sm ${config.cameraMode === mode ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/60"}`}
           >
             {mode === "webcam" ? "Webcam" : "Tether (DSLR)"}
           </button>
@@ -218,21 +218,21 @@ function CameraPanel() {
       </div>
 
       {config.cameraMode === "tether" && (
-        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <label className="block text-sm text-white/60">
+        <div className="space-y-3 rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
+          <label className="block text-sm text-fg/60">
             URL bridge kamera
             <input
-              className="mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent"
+              className="mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent"
               value={config.tetherBridgeUrl}
               onChange={(event) => update({ tetherBridgeUrl: event.target.value })}
             />
           </label>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={check} disabled={checking} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">
+            <button type="button" onClick={check} disabled={checking} className="rounded-lg border border-fg/15 px-3 py-2 text-xs disabled:opacity-50">
               {checking ? "Mengecek…" : "Cek ulang"}
             </button>
             {window.studiodo?.restartDigicamBridge && (
-              <button type="button" onClick={restartBridge} disabled={restarting} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">
+              <button type="button" onClick={restartBridge} disabled={restarting} className="rounded-lg border border-fg/15 px-3 py-2 text-xs disabled:opacity-50">
                 {restarting ? "Restart…" : "Restart bridge"}
               </button>
             )}
@@ -245,7 +245,7 @@ function CameraPanel() {
         </div>
       )}
       {config.cameraMode === "webcam" && (
-        <p className="text-sm text-white/45">Mode webcam pakai kamera browser langsung — tidak butuh konfigurasi bridge.</p>
+        <p className="text-sm text-fg/45">Mode webcam pakai kamera browser langsung — tidak butuh konfigurasi bridge.</p>
       )}
     </div>
   );
@@ -306,10 +306,10 @@ function PrinterPanel() {
     <div className="max-w-2xl space-y-5">
       <p className="eyebrow">PRINTER</p>
       <h2 className="font-display text-2xl font-bold">Konfigurasi printer</h2>
-      {!window.studiodo?.listPrinters && <p className="text-sm text-white/40">Fitur ini hanya tersedia di aplikasi desktop STUDIODO (Electron).</p>}
+      {!window.studiodo?.listPrinters && <p className="text-sm text-fg/40">Fitur ini hanya tersedia di aplikasi desktop STUDIODO (Electron).</p>}
       {error && <p className="text-sm text-red-300">{error}</p>}
       <select
-        className="w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2.5 text-sm outline-none focus:border-accent"
+        className="w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent"
         value={config.printerName ?? ""}
         onChange={(event) => update({ printerName: event.target.value || null })}
       >
@@ -321,7 +321,7 @@ function PrinterPanel() {
         ))}
       </select>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={refresh} className="rounded-lg border border-white/15 px-3 py-2 text-xs">Scan ulang</button>
+        <button type="button" onClick={refresh} className="rounded-lg border border-fg/15 px-3 py-2 text-xs">Scan ulang</button>
         <button type="button" onClick={runTestPrint} disabled={testStatus === "printing"} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:opacity-50">
           {testStatus === "printing" ? "Mencetak…" : "Test print"}
         </button>
@@ -354,7 +354,7 @@ function SyncPanel() {
     <div className="max-w-2xl space-y-5">
       <p className="eyebrow">SERVER & SYNC</p>
       <h2 className="font-display text-2xl font-bold">Koneksi ke server</h2>
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="space-y-3 rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
         <Row label="Status pairing" value={isKioskPaired() ? "Terhubung" : "Belum di-pairing"} />
         <Row label="Server URL" value={getApiBaseUrl()} />
         <Row label="Sync terakhir (sesi ini)" value={lastSync ? lastSync.toLocaleTimeString("id-ID") : "Belum pernah"} />
@@ -382,8 +382,8 @@ function SystemPanel() {
     <div className="max-w-2xl space-y-5">
       <p className="eyebrow">SISTEM</p>
       <h2 className="font-display text-2xl font-bold">Info perangkat</h2>
-      {!window.studiodo && <p className="text-sm text-white/40">Info sistem hanya tersedia di aplikasi desktop.</p>}
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      {!window.studiodo && <p className="text-sm text-fg/40">Info sistem hanya tersedia di aplikasi desktop.</p>}
+      <div className="space-y-3 rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
         <Row label="Versi aplikasi" value={version ?? "-"} />
         {diagnostics && (
           <>
@@ -398,7 +398,7 @@ function SystemPanel() {
         <button
           type="button"
           onClick={() => window.studiodo!.relaunchKiosk()}
-          className="rounded-lg border border-white/15 px-4 py-2 text-xs hover:border-red-400 hover:text-red-300"
+          className="rounded-lg border border-fg/15 px-4 py-2 text-xs hover:border-red-400 hover:text-red-300"
         >
           Restart layar kiosk
         </button>
@@ -427,22 +427,22 @@ function HistoryPanel() {
           <p className="eyebrow">RIWAYAT & LOG</p>
           <h2 className="font-display text-2xl font-bold">Sesi terakhir</h2>
         </div>
-        <button type="button" onClick={refresh} className="rounded-lg border border-white/15 px-3 py-2 text-xs">{loading ? "Memuat…" : "Muat ulang"}</button>
+        <button type="button" onClick={refresh} className="rounded-lg border border-fg/15 px-3 py-2 text-xs">{loading ? "Memuat…" : "Muat ulang"}</button>
       </div>
-      <p className="text-xs text-white/40">Buka detail sesi buat tunjukkin QR ke customer yang lupa scan, atau cetak ulang fotonya.</p>
-      <div className="divide-y divide-white/10 rounded-2xl border border-white/10">
+      <p className="text-xs text-fg/40">Buka detail sesi buat tunjukkin QR ke customer yang lupa scan, atau cetak ulang fotonya.</p>
+      <div className="divide-y divide-fg/10 rounded-2xl border border-fg/10">
         {sessions.map((session) => (
           <div key={session.id} className="flex items-center justify-between gap-3 p-4 text-sm">
             <div>
               <p className="font-semibold">{new Date(session.createdAt).toLocaleString("id-ID")}</p>
-              <p className="text-xs text-white/45">{session.paymentMethod ?? "-"} · {(session.photoUrls ?? []).length} foto</p>
+              <p className="text-xs text-fg/45">{session.paymentMethod ?? "-"} · {(session.photoUrls ?? []).length} foto</p>
             </div>
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase ${session.paymentStatus === "success" ? "border-emerald-400/30 text-emerald-300" : "border-white/15 text-white/50"}`}>
+            <span className={`rounded-full border px-2.5 py-1 text-[10px] uppercase ${session.paymentStatus === "success" ? "border-emerald-400/30 text-emerald-300" : "border-fg/15 text-fg/50"}`}>
               {session.paymentStatus}
             </span>
           </div>
         ))}
-        {!loading && sessions.length === 0 && <p className="p-6 text-center text-sm text-white/40">Belum ada sesi.</p>}
+        {!loading && sessions.length === 0 && <p className="p-6 text-center text-sm text-fg/40">Belum ada sesi.</p>}
       </div>
     </div>
   );

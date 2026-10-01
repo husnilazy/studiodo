@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 
-const inputClass = "mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-sm outline-none focus:border-accent";
+const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent";
 
 type KioskDiagnostics = { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null;
 type KioskKey = {
@@ -31,7 +31,7 @@ function isRecentlyActive(lastUsedAt: string | null) {
 }
 
 function DiagnosticsSummary({ diagnostics }: { diagnostics?: KioskDiagnostics }) {
-  if (!diagnostics) return <span className="text-white/30">Belum ada laporan</span>;
+  if (!diagnostics) return <span className="text-fg/30">Belum ada laporan</span>;
   const items: { label: string; ok: boolean }[] = [
     { label: "Kamera", ok: diagnostics.cameraOk },
     { label: "Printer", ok: diagnostics.printerOk },
@@ -192,16 +192,16 @@ export default function KioskKeys() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
+      <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
         <p className="eyebrow">KIOSK</p>
         <h3 className="mt-2 font-display text-3xl font-semibold">Kiosk API key</h3>
-        <p className="mt-2 max-w-xl text-sm text-white/45">
+        <p className="mt-2 max-w-xl text-sm text-fg/45">
           Tiap kiosk fisik butuh satu key untuk terhubung ke server. Tempel key ke layar
           "Setup / Pair kiosk ini" di aplikasi Electron kiosk tersebut. Satu key hanya bisa
           aktif di satu komputer — kalau ganti hardware, pakai "Reset device" di bawah,
           bukan membuat key baru.
         </p>
-        <p className="mt-2 text-xs text-white/40">
+        <p className="mt-2 text-xs text-fg/40">
           {activeKeyCount} / {kioskLimit ?? "∞"} kiosk aktif{planName ? ` — paket ${planName}` : ""}
           {atLimit && <span className="ml-2 text-amber-300">Sudah mencapai batas paket kamu. Cabut kiosk lain atau upgrade paket untuk menambah.</span>}
         </p>
@@ -211,16 +211,16 @@ export default function KioskKeys() {
             <p className="text-sm font-semibold text-emerald-200">Kiosk key baru dibuat — simpan sekarang, tidak akan ditampilkan lagi.</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <code className="flex-1 break-all rounded-lg bg-black/30 px-3 py-2 text-xs text-white/80">{newKey}</code>
-              <button type="button" onClick={copyKey} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/70 hover:border-accent hover:text-white">
+              <button type="button" onClick={copyKey} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/70 hover:border-accent hover:text-fg">
                 {copied ? "Tersalin!" : "Salin"}
               </button>
             </div>
-            <button type="button" onClick={() => setNewKey(null)} className="mt-3 text-xs text-white/40 hover:text-white/70">Tutup</button>
+            <button type="button" onClick={() => setNewKey(null)} className="mt-3 text-xs text-fg/40 hover:text-fg/70">Tutup</button>
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap items-end gap-3 border-t border-white/10 pt-5">
-          <label className="flex-1 text-sm text-white/60">
+        <div className="mt-6 flex flex-wrap items-end gap-3 border-t border-fg/10 pt-5">
+          <label className="flex-1 text-sm text-fg/60">
             Label (opsional, buat catatan kiosk mana)
             <input className={inputClass} placeholder="mis. Kiosk depan / Booth event Sabtu" value={label} onChange={(e) => setLabel(e.target.value)} />
           </label>
@@ -236,9 +236,9 @@ export default function KioskKeys() {
         </div>
         {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
 
-        <div className="mt-8 overflow-x-auto border-t border-white/10 pt-5">
+        <div className="mt-8 overflow-x-auto border-t border-fg/10 pt-5">
           <table className="w-full text-left text-sm">
-            <thead className="text-white/45">
+            <thead className="text-fg/45">
               <tr>
                 <th className="p-3">Label</th>
                 <th className="p-3">Online</th>
@@ -253,28 +253,28 @@ export default function KioskKeys() {
             </thead>
             <tbody>
               {visibleKeys.map((key) => (
-                <tr key={key.id} className="border-t border-white/10">
+                <tr key={key.id} className="border-t border-fg/10">
                   <td className="p-3">{key.label || "-"}</td>
                   <td className="p-3">
                     {!key.revokedAt && isRecentlyActive(key.lastUsedAt) ? (
                       <span className="inline-flex items-center gap-1.5 text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Online</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 text-white/40"><span className="h-1.5 w-1.5 rounded-full bg-white/30" />Offline</span>
+                      <span className="inline-flex items-center gap-1.5 text-fg/40"><span className="h-1.5 w-1.5 rounded-full bg-fg/30" />Offline</span>
                     )}
                   </td>
                   <td className="p-3">
                     {key.boundDeviceId ? (
-                      <span className="inline-flex items-center gap-1.5 text-white/60" title={key.boundDeviceId}>
+                      <span className="inline-flex items-center gap-1.5 text-fg/60" title={key.boundDeviceId}>
                         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                         Terpasang{key.boundAt ? ` · ${formatDate(key.boundAt)}` : ""}
                       </span>
                     ) : (
-                      <span className="text-white/30">Belum dipasang</span>
+                      <span className="text-fg/30">Belum dipasang</span>
                     )}
                   </td>
-                  <td className="p-3 text-white/60">{key.appVersion || "-"}</td>
+                  <td className="p-3 text-fg/60">{key.appVersion || "-"}</td>
                   <td className="p-3"><DiagnosticsSummary diagnostics={key.lastDiagnostics} /></td>
-                  <td className="p-3 text-white/60">{formatDate(key.lastUsedAt)}</td>
+                  <td className="p-3 text-fg/60">{formatDate(key.lastUsedAt)}</td>
                   <td className="p-3">
                     {key.revokedAt ? <span className="text-red-300">Dicabut</span> : <span className="text-emerald-300">Aktif</span>}
                   </td>
@@ -285,7 +285,7 @@ export default function KioskKeys() {
                         onClick={() => toggleAutoUpdate(key)}
                         disabled={togglingId === key.id}
                         title={key.autoUpdateEnabled ?? true ? "Update otomatis aktif — klik untuk matikan" : "Update otomatis mati — klik untuk aktifkan"}
-                        className={`relative h-6 w-11 shrink-0 rounded-full border transition disabled:opacity-50 ${(key.autoUpdateEnabled ?? true) ? "border-accent/40 bg-accent/60" : "border-white/15 bg-white/10"}`}
+                        className={`relative h-6 w-11 shrink-0 rounded-full border transition disabled:opacity-50 ${(key.autoUpdateEnabled ?? true) ? "border-accent/40 bg-accent/60" : "border-fg/15 bg-fg/10"}`}
                       >
                         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${(key.autoUpdateEnabled ?? true) ? "left-[22px]" : "left-0.5"}`} />
                       </button>
@@ -294,17 +294,17 @@ export default function KioskKeys() {
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-1.5">
                     {!key.revokedAt && (
-                      <button type="button" disabled={revealingId === key.id} onClick={() => toggleReveal(key.id)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white disabled:opacity-50">
+                      <button type="button" disabled={revealingId === key.id} onClick={() => toggleReveal(key.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg disabled:opacity-50">
                         {revealingId === key.id ? "Memuat…" : revealed[key.id] ? "Sembunyikan" : "Lihat key"}
                       </button>
                     )}
                     {!key.revokedAt && key.boundDeviceId && (
-                      <button type="button" disabled={resettingId === key.id} onClick={() => resetDevice(key.id)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white disabled:opacity-50">
+                      <button type="button" disabled={resettingId === key.id} onClick={() => resetDevice(key.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg disabled:opacity-50">
                         {resettingId === key.id ? "Mereset…" : "Reset device"}
                       </button>
                     )}
                     {!key.revokedAt && (
-                      <button type="button" onClick={() => revoke(key.id)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-red-400 hover:text-red-300">
+                      <button type="button" onClick={() => revoke(key.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-red-400 hover:text-red-300">
                         Cabut
                       </button>
                     )}
@@ -313,13 +313,13 @@ export default function KioskKeys() {
                 </tr>
               ))}
               {visibleKeys.map((key) => (revealed[key.id] || revealError[key.id]) && (
-                <tr key={`${key.id}-reveal`} className="border-t border-white/5 bg-black/20">
+                <tr key={`${key.id}-reveal`} className="border-t border-fg/5 bg-fg/5">
                   <td colSpan={8} className="p-3">
                     {revealed[key.id] ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-white/40">{key.label || "Kiosk key"}:</span>
+                        <span className="text-xs text-fg/40">{key.label || "Kiosk key"}:</span>
                         <code className="flex-1 break-all rounded-lg bg-black/30 px-3 py-2 text-xs text-white/80">{revealed[key.id]}</code>
-                        <button type="button" onClick={() => copyRevealedKey(key.id)} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/70 hover:border-accent hover:text-white">
+                        <button type="button" onClick={() => copyRevealedKey(key.id)} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/70 hover:border-accent hover:text-fg">
                           {copiedId === key.id ? "Tersalin!" : "Salin"}
                         </button>
                       </div>
@@ -330,10 +330,10 @@ export default function KioskKeys() {
                 </tr>
               ))}
               {loading && keys.length === 0 && (
-                <tr><td colSpan={8} className="p-6 text-center text-white/40">Memuat…</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-fg/40">Memuat…</td></tr>
               )}
               {!loading && keys.length === 0 && (
-                <tr><td colSpan={8} className="p-6 text-center text-white/40">Belum ada kiosk key. Buat satu untuk mulai pairing kiosk.</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-fg/40">Belum ada kiosk key. Buat satu untuk mulai pairing kiosk.</td></tr>
               )}
             </tbody>
           </table>
@@ -341,7 +341,7 @@ export default function KioskKeys() {
             <button
               type="button"
               onClick={() => setVisibleCount((count) => count + KIOSK_KEYS_PAGE_SIZE)}
-              className="mt-4 w-full rounded-xl border border-white/15 py-2.5 text-sm text-white/60 hover:border-accent hover:text-white"
+              className="mt-4 w-full rounded-xl border border-fg/15 py-2.5 text-sm text-fg/60 hover:border-accent hover:text-fg"
             >
               Muat lebih banyak ({keys.length - visibleCount} lagi)
             </button>

@@ -31,7 +31,7 @@ const sections: { id: Section; label: string; icon: string }[] = [
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  return <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-white/45">{label}</p><p className="mt-3 font-display text-3xl font-semibold">{value}</p>{detail && <p className="mt-2 text-xs text-accent">{detail}</p>}</div>;
+  return <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-fg/45">{label}</p><p className="mt-3 font-display text-3xl font-semibold">{value}</p>{detail && <p className="mt-2 text-xs text-accent">{detail}</p>}</div>;
 }
 
 // Shown only for the very first overview load — before this, the dashboard
@@ -43,8 +43,8 @@ function OverviewSkeleton() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className={panel}>
-            <div className="h-3 w-20 animate-pulse rounded bg-white/10" />
-            <div className="mt-4 h-8 w-16 animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-20 animate-pulse rounded bg-fg/10" />
+            <div className="mt-4 h-8 w-16 animate-pulse rounded bg-fg/10" />
           </div>
         ))}
       </div>
@@ -88,7 +88,7 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
     <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4 ${tone === "red" ? "border-red-400/30 bg-red-500/10" : "border-amber-400/30 bg-amber-500/10"}`}>
       <div>
         <p className={`text-sm font-semibold ${tone === "red" ? "text-red-200" : "text-amber-200"}`}>{title}</p>
-        <p className="mt-1 text-xs text-white/50">Perpanjang sebelum habis biar booth tidak berhenti.</p>
+        <p className="mt-1 text-xs text-fg/50">Perpanjang sebelum habis biar booth tidak berhenti.</p>
       </div>
       <div className="flex items-center gap-2">
         {renewUrl && (
@@ -97,7 +97,7 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
           </a>
         )}
         {!lockedNow && (
-          <button type="button" onClick={() => setDismissed(true)} className="text-sm text-white/40 hover:text-white/70">
+          <button type="button" onClick={() => setDismissed(true)} className="text-sm text-fg/40 hover:text-fg/70">
             Tutup
           </button>
         )}
@@ -130,34 +130,34 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <section className={`${panel} overflow-hidden`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><p className="text-xs uppercase tracking-[.16em] text-accent">ACTIVITY PULSE</p><h3 className="mt-2 font-display text-2xl font-semibold">Traffic harian</h3><p className="mt-1 text-sm text-white/45">Jumlah sesi yang dimulai per hari.</p></div>
-            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right"><p className="text-[10px] uppercase tracking-wider text-white/40">Peak</p><p className="text-lg font-semibold text-accent">{peak.visits}</p></div>
+            <div><p className="text-xs uppercase tracking-[.16em] text-accent">ACTIVITY PULSE</p><h3 className="mt-2 font-display text-2xl font-semibold">Traffic harian</h3><p className="mt-1 text-sm text-fg/45">Jumlah sesi yang dimulai per hari.</p></div>
+            <div className="rounded-xl border border-fg/10 bg-fg/5 px-3 py-2 text-right"><p className="text-[10px] uppercase tracking-wider text-fg/40">Peak</p><p className="text-lg font-semibold text-accent">{peak.visits}</p></div>
           </div>
           {sortedTraffic.length > 0 ? (
-            <div className="mt-8 flex h-72 items-end gap-2 overflow-x-auto border-b border-white/10 pb-0 sm:gap-3">
+            <div className="mt-8 flex h-72 items-end gap-2 overflow-x-auto border-b border-fg/10 pb-0 sm:gap-3">
               {sortedTraffic.map((item) => {
                 const height = Math.max(10, Math.round((item.visits / maxVisits) * 205));
-                return <div key={item.date} className="group flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-2 sm:min-w-16" title={`${formatDate(item.date)} · ${item.visits} sesi · ${money(item.revenue ?? 0)}`}><span className="text-xs font-semibold text-white/70">{item.visits}</span><div className="relative flex w-full max-w-16 items-end justify-center" style={{ height: `${height}px` }}><div className="h-full w-full rounded-t-xl bg-accent opacity-85 shadow-lg shadow-accent/10 transition duration-300 group-hover:opacity-100 group-hover:brightness-125" /><span className="absolute -top-6 text-[10px] text-white/0 transition group-hover:text-white/70">{money(item.revenue ?? 0)}</span></div><span className="text-[10px] text-white/40">{formatDate(item.date)}</span></div>;
+                return <div key={item.date} className="group flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-2 sm:min-w-16" title={`${formatDate(item.date)} · ${item.visits} sesi · ${money(item.revenue ?? 0)}`}><span className="text-xs font-semibold text-fg/70">{item.visits}</span><div className="relative flex w-full max-w-16 items-end justify-center" style={{ height: `${height}px` }}><div className="h-full w-full rounded-t-xl bg-accent opacity-85 shadow-lg shadow-accent/10 transition duration-300 group-hover:opacity-100 group-hover:brightness-125" /><span className="absolute -top-6 text-[10px] text-fg/0 transition group-hover:text-fg/70">{money(item.revenue ?? 0)}</span></div><span className="text-[10px] text-fg/40">{formatDate(item.date)}</span></div>;
               })}
             </div>
-          ) : <div className="mt-8 flex h-72 items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-white/35">Belum ada aktivitas traffic.</div>}
+          ) : <div className="mt-8 flex h-72 items-center justify-center rounded-xl border border-dashed border-fg/10 text-sm text-fg/35">Belum ada aktivitas traffic.</div>}
         </section>
 
         <section className={panel}>
           <p className="text-xs uppercase tracking-[.16em] text-accent">SESSION FUNNEL</p>
           <h3 className="mt-2 font-display text-2xl font-semibold">Status sesi</h3>
           <div className="mt-6 space-y-5">
-            {[{ label: "Berhasil bayar", value: successCount, color: "bg-emerald-400", text: "text-emerald-300" }, { label: "Menunggu", value: pendingCount, color: "bg-amber-300", text: "text-amber-200" }, { label: "Gagal / expired", value: failedCount, color: "bg-red-400", text: "text-red-300" }].map((item) => <div key={item.label}><div className="flex items-center justify-between text-sm"><span className="text-white/55">{item.label}</span><span className={`font-semibold ${item.text}`}>{item.value}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${metrics.totalSessions ? Math.max(item.value ? 4 : 0, (item.value / metrics.totalSessions) * 100) : 0}%` }} /></div></div>)}
+            {[{ label: "Berhasil bayar", value: successCount, color: "bg-emerald-400", text: "text-emerald-300" }, { label: "Menunggu", value: pendingCount, color: "bg-amber-300", text: "text-amber-200" }, { label: "Gagal / expired", value: failedCount, color: "bg-red-400", text: "text-red-300" }].map((item) => <div key={item.label}><div className="flex items-center justify-between text-sm"><span className="text-fg/55">{item.label}</span><span className={`font-semibold ${item.text}`}>{item.value}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-fg/10"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${metrics.totalSessions ? Math.max(item.value ? 4 : 0, (item.value / metrics.totalSessions) * 100) : 0}%` }} /></div></div>)}
           </div>
-          <div className="mt-8 grid grid-cols-2 gap-3 border-t border-white/10 pt-5"><div><p className="text-[10px] uppercase tracking-wider text-white/40">Foto dibuat</p><p className="mt-1 text-xl font-semibold">{metrics.photos ?? 0}</p></div><div><p className="text-[10px] uppercase tracking-wider text-white/40">Revenue</p><p className="mt-1 text-xl font-semibold text-accent">{money(metrics.revenue ?? 0)}</p></div></div>
+          <div className="mt-8 grid grid-cols-2 gap-3 border-t border-fg/10 pt-5"><div><p className="text-[10px] uppercase tracking-wider text-fg/40">Foto dibuat</p><p className="mt-1 text-xl font-semibold">{metrics.photos ?? 0}</p></div><div><p className="text-[10px] uppercase tracking-wider text-fg/40">Revenue</p><p className="mt-1 text-xl font-semibold text-accent">{money(metrics.revenue ?? 0)}</p></div></div>
         </section>
       </div>
 
       <section className={panel}>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[.16em] text-accent">LIVE LOG</p><h3 className="mt-2 font-display text-2xl font-semibold">Aktivitas sesi terbaru</h3></div><span className="text-xs text-white/40">{sessions.length} sesi total</span></div>
-        <div className="mt-5 divide-y divide-white/10">
-          {sessions.slice(-6).reverse().map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="text-sm font-semibold">Sesi {String(item.id).slice(0, 8)}</p><p className="mt-1 text-xs text-white/40">{new Date(item.createdAt).toLocaleString("id-ID")} · {item.paymentMethod ?? "belum dipilih"}</p></div><div className="flex items-center gap-4"><span className="text-sm text-white/60">{money(Number(item.totalAmount ?? 0))}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${item.paymentStatus === "success" ? "bg-emerald-400/15 text-emerald-200" : item.paymentStatus === "failed" || item.paymentStatus === "expired" ? "bg-red-400/15 text-red-200" : "bg-amber-300/15 text-amber-200"}`}>{item.paymentStatus}</span></div></div>)}
-          {sessions.length === 0 && <p className="py-8 text-sm text-white/40">Belum ada sesi tercatat.</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[.16em] text-accent">LIVE LOG</p><h3 className="mt-2 font-display text-2xl font-semibold">Aktivitas sesi terbaru</h3></div><span className="text-xs text-fg/40">{sessions.length} sesi total</span></div>
+        <div className="mt-5 divide-y divide-fg/10">
+          {sessions.slice(-6).reverse().map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="text-sm font-semibold">Sesi {String(item.id).slice(0, 8)}</p><p className="mt-1 text-xs text-fg/40">{new Date(item.createdAt).toLocaleString("id-ID")} · {item.paymentMethod ?? "belum dipilih"}</p></div><div className="flex items-center gap-4"><span className="text-sm text-fg/60">{money(Number(item.totalAmount ?? 0))}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${item.paymentStatus === "success" ? "bg-emerald-400/15 text-emerald-200" : item.paymentStatus === "failed" || item.paymentStatus === "expired" ? "bg-red-400/15 text-red-200" : "bg-amber-300/15 text-amber-200"}`}>{item.paymentStatus}</span></div></div>)}
+          {sessions.length === 0 && <p className="py-8 text-sm text-fg/40">Belum ada sesi tercatat.</p>}
         </div>
       </section>
     </div>
@@ -273,32 +273,32 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
           </div>
           <div className="flex flex-wrap gap-1.5">
             {[{ label: "Hari ini", days: 1 }, { label: "7 hari", days: 7 }, { label: "30 hari", days: 30 }, { label: "90 hari", days: 90 }].map((preset) => (
-              <button key={preset.days} type="button" onClick={() => setQuickRange(preset.days)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white">
+              <button key={preset.days} type="button" onClick={() => setQuickRange(preset.days)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">
                 {preset.label}
               </button>
             ))}
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="text-xs text-white/50">
+          <label className="text-xs text-fg/50">
             Dari tanggal
-            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-accent" />
+            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-xl border border-fg/15 bg-fg/5 px-3 py-2 text-sm text-fg outline-none focus:border-accent" />
           </label>
-          <label className="text-xs text-white/50">
+          <label className="text-xs text-fg/50">
             Sampai tanggal
-            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-accent" />
+            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-xl border border-fg/15 bg-fg/5 px-3 py-2 text-sm text-fg outline-none focus:border-accent" />
           </label>
-          <label className="min-w-[220px] flex-1 text-xs text-white/50">
+          <label className="min-w-[220px] flex-1 text-xs text-fg/50">
             Cari nomor WA / email / ID sesi
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="mis. 0812… atau nama@email.com" className="mt-1 block w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-accent" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="mis. 0812… atau nama@email.com" className="mt-1 block w-full rounded-xl border border-fg/15 bg-fg/5 px-3 py-2 text-sm text-fg outline-none focus:border-accent" />
           </label>
           {hasFilters && (
-            <button type="button" onClick={resetFilters} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-white/35 hover:text-white">
+            <button type="button" onClick={resetFilters} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-fg/35 hover:text-fg">
               Reset filter
             </button>
           )}
         </div>
-        <p className="mt-4 text-xs text-white/40">{filtered.length} sesi · {assetCount} aset{hasFilters ? " (terfilter)" : ""}</p>
+        <p className="mt-4 text-xs text-fg/40">{filtered.length} sesi · {assetCount} aset{hasFilters ? " (terfilter)" : ""}</p>
       </section>
 
       <div className="space-y-4">
@@ -313,13 +313,13 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">{new Date(session.createdAt).toLocaleString("id-ID")}</p>
-                  <p className="mt-1 text-xs text-white/40">
+                  <p className="mt-1 text-xs text-fg/40">
                     Sesi {String(session.id).slice(0, 8)} · {session.paymentMethod ?? "belum dipilih"} · {money(Number(session.totalAmount ?? 0))}
                   </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/55">
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg/55">
                     {session.customerWhatsapp && <span>📱 {session.customerWhatsapp}</span>}
                     {session.customerEmail && <span>✉️ {session.customerEmail}</span>}
-                    {!session.customerWhatsapp && !session.customerEmail && <span className="text-white/30">Belum ada kontak client</span>}
+                    {!session.customerWhatsapp && !session.customerEmail && <span className="text-fg/30">Belum ada kontak client</span>}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -333,11 +333,11 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                       <button
                         type="button"
                         onClick={() => copyShareLink(session.id, session.shareUrl)}
-                        className="rounded-xl border border-white/15 px-3 py-2 text-xs text-white/60 hover:border-accent hover:text-white"
+                        className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg"
                       >
                         {copiedId === session.id ? "Tersalin!" : "Salin link"}
                       </button>
-                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-white/15 px-3 py-2 text-xs text-white/60 hover:border-accent hover:text-white">
+                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">
                         Buka galeri
                       </a>
                     </>
@@ -347,9 +347,9 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
 
               <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
                 {assets.map((asset, assetIndex) => (
-                  <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                  <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
                     <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
-                      <div className="flex h-32 items-center justify-center bg-white/5">
+                      <div className="flex h-32 items-center justify-center bg-fg/5">
                         {asset.type === "Video" || asset.type === "GIF"
                           ? <video src={asset.url} muted preload="none" className="h-full w-full object-cover" />
                           : <img src={asset.url} alt={asset.type} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />}
@@ -366,7 +366,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                               type="button"
                               onClick={() => downloadAsset({ ...asset, session })}
                               disabled={isDownloading}
-                              className="flex-1 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] text-white/70 hover:border-accent hover:text-white disabled:cursor-wait disabled:opacity-50"
+                              className="flex-1 rounded-lg border border-fg/15 px-2 py-1.5 text-[11px] text-fg/70 hover:border-accent hover:text-fg disabled:cursor-wait disabled:opacity-50"
                             >
                               {isDownloading ? "Mengunduh…" : "Download"}
                             </button>
@@ -384,7 +384,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
           );
         })}
         {filtered.length === 0 && (
-          <div className={`${panel} text-center text-sm text-white/40`}>
+          <div className={`${panel} text-center text-sm text-fg/40`}>
             {sessionsWithMedia.length === 0 ? "Belum ada asset tersimpan." : "Tidak ada sesi yang cocok dengan filter ini."}
           </div>
         )}
@@ -392,7 +392,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + MEDIA_LIBRARY_PAGE_SIZE)}
-            className="w-full rounded-2xl border border-white/15 py-3 text-sm text-white/60 hover:border-accent hover:text-white"
+            className="w-full rounded-2xl border border-fg/15 py-3 text-sm text-fg/60 hover:border-accent hover:text-fg"
           >
             Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
           </button>
@@ -456,8 +456,8 @@ function AppVersionFooter() {
   })();
 
   return (
-    <div className="mt-auto border-t border-white/10 pt-4 text-center">
-      <p className="text-[11px] text-white/35">STUDIODO v{status?.currentVersion ?? "-"} — {statusLabel}</p>
+    <div className="mt-auto border-t border-fg/10 pt-4 text-center">
+      <p className="text-[11px] text-fg/35">STUDIODO v{status?.currentVersion ?? "-"} — {statusLabel}</p>
       <button type="button" onClick={checkNow} disabled={checking} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
         {checking ? "Mengecek..." : "Cek update"}
       </button>
@@ -603,13 +603,13 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex h-full overflow-hidden bg-[var(--kiosk-background)] text-[var(--kiosk-text)]">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-white/10 bg-black/20 p-5 md:flex">
-        <div className="mb-10"><p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p><h1 className="mt-2 font-display text-2xl font-bold">Admin OS</h1><p className="mt-1 text-xs text-white/40">Booth intelligence dashboard</p></div>
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-fg/10 bg-fg/5 p-5 md:flex">
+        <div className="mb-10"><p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p><h1 className="mt-2 font-display text-2xl font-bold">Admin OS</h1><p className="mt-1 text-xs text-fg/40">Booth intelligence dashboard</p></div>
         <nav className="space-y-2">
-          {sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-white/55 hover:bg-white/10 hover:text-white"}`}><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">{item.icon}</span>{item.label}</button>)}
-          <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm text-white/55 transition hover:bg-white/10 hover:text-white"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">🖼</span>Kelola Frame</Link>
+          {sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fg/10">{item.icon}</span>{item.label}</button>)}
+          <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm text-fg/55 transition hover:bg-fg/10 hover:text-fg"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fg/10">🖼</span>Kelola Frame</Link>
         </nav>
-        <div className="mt-8 space-y-2 border-t border-white/10 pt-6"><p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-white/30">Aksi cepat</p><Link href="/" className="block rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">← Kembali ke Kiosk</Link><Link href="/admin/customers" className="block rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">Buka CRM detail</Link><button type="button" onClick={logout} className="block w-full rounded-2xl border border-white/10 px-4 py-3 text-center text-sm text-white/55 hover:text-white">Logout</button></div>
+        <div className="mt-8 space-y-2 border-t border-fg/10 pt-6"><p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-fg/30">Aksi cepat</p><Link href="/" className="block rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">← Kembali ke Kiosk</Link><Link href="/admin/customers" className="block rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">Buka CRM detail</Link><button type="button" onClick={logout} className="block w-full rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">Logout</button></div>
         <AppVersionFooter />
       </aside>
       <main className="min-w-0 flex-1 overflow-y-auto p-5 md:p-10">
@@ -618,17 +618,17 @@ export default function AdminDashboard() {
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div><p className="eyebrow">COMMAND CENTER / {section.toUpperCase()}</p><h2 className="font-display text-4xl font-bold md:text-6xl">{sections.find((item) => item.id === section)?.label}</h2><p className="mt-2 text-[var(--kiosk-muted)]">Monitor, kelola, dan pahami performa booth kamu.</p></div>
             <div className="flex items-center gap-3">
-              {lastUpdated && <span className="hidden text-xs text-white/35 sm:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+              {lastUpdated && <span className="hidden text-xs text-fg/35 sm:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
               <button
                 type="button"
                 onClick={() => loadOverview()}
                 disabled={refreshing}
-                className="flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-accent hover:text-white disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-accent hover:text-fg disabled:opacity-50"
               >
                 {refreshing && <Spinner size="sm" />}
                 {refreshing ? "Memuat…" : "Refresh"}
               </button>
-              <div className="flex gap-2 md:hidden">{sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`rounded-xl px-3 py-2 text-xs ${section === item.id ? "bg-accent" : "bg-white/10"}`}>{item.icon}</button>)}</div>
+              <div className="flex gap-2 md:hidden">{sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`rounded-xl px-3 py-2 text-xs ${section === item.id ? "bg-accent" : "bg-fg/10"}`}>{item.icon}</button>)}</div>
             </div>
           </div>
           {initialLoading ? <OverviewSkeleton /> : (
@@ -644,13 +644,13 @@ export default function AdminDashboard() {
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
             <div className="space-y-6">
-              <nav className="flex gap-2 rounded-2xl border border-white/10 bg-black/25 p-1.5" aria-label="Kategori pengaturan kiosk">
+              <nav className="flex gap-2 rounded-2xl border border-fg/10 bg-fg/[0.07] p-1.5" aria-label="Kategori pengaturan kiosk">
                 {KIOSK_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setKioskSubtab(tab.id)}
-                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${kioskSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
+                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${kioskSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/5 hover:text-fg"}`}
                   >
                     {tab.label}
                   </button>
@@ -665,14 +665,14 @@ export default function AdminDashboard() {
           {section === "finance" && (
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} /><Metric label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} /><Metric label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris").length)} /><Metric label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} /></div>
-              <section className={panel}><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-white/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.slice(-12).reverse().map((item: any) => <tr key={item.id} className="border-t border-white/10"><td className="p-3 text-white/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3 uppercase">{item.paymentMethod}</td><td className="p-3"><span className={item.paymentStatus === "success" ? "text-emerald-300" : "text-amber-300"}>{item.paymentStatus}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>)}</tbody></table></div></section>
-              <nav className="flex gap-2 rounded-2xl border border-white/10 bg-black/25 p-1.5" aria-label="Kategori finance">
+              <section className={panel}><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.slice(-12).reverse().map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3 uppercase">{item.paymentMethod}</td><td className="p-3"><span className={item.paymentStatus === "success" ? "text-emerald-300" : "text-amber-300"}>{item.paymentStatus}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>)}</tbody></table></div></section>
+              <nav className="flex gap-2 rounded-2xl border border-fg/10 bg-fg/[0.07] p-1.5" aria-label="Kategori finance">
                 {FINANCE_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setFinanceSubtab(tab.id)}
-                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
+                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/5 hover:text-fg"}`}
                   >
                     {tab.label}
                   </button>
@@ -682,7 +682,7 @@ export default function AdminDashboard() {
               {financeSubtab === "promo" && <VoucherManagement />}
             </div>
           )}
-          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric label="Total clients" value={String(metrics.customers ?? 0)} /><Metric label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-white/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-white/10"><td className="p-3 text-white/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
+          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric label="Total clients" value={String(metrics.customers ?? 0)} /><Metric label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
           {section === "traffic" && <TrafficMonitor sessions={sessions} traffic={overview.traffic} metrics={metrics} />}
           {section === "media" && <MediaLibrary sessions={sessions} metrics={metrics} downloadAsset={downloadAsset} printAsset={printAsset} downloadingKeys={downloadingKeys} />}
             </motion.div>

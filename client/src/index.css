@@ -9,8 +9,7 @@
    together, proportionally, without having to touch every page. Combines vw
    and vh (not just vw) so it scales correctly in both portrait and landscape
    kiosk orientation. Admin/superadmin/public-gallery are normal desktop/phone
-   web pages, not a walk-up touchscreen, so they opt back out below.
-   Fase 10. */
+   web pages, not a walk-up touchscreen, so they opt back out below. */
 html {
   font-size: clamp(16px, 1vw + 1vh, 26px);
 }
@@ -25,15 +24,13 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  background: var(--kiosk-background, #17130f);
-  /* Was hardcoded "white" — harmless while the kiosk was always dark, but a real
-     bug now that light mode exists (Fase 7): anything that inherits color without
-     KioskShell's own inline override in its ancestry (e.g. a page mounted directly
-     inside ScreenBuilder's WYSIWYG canvas) rendered illegible dark-on-light text. */
-  color: var(--kiosk-text, #f5efe9);
+  background: var(--kiosk-background, #fafafd);
+  color: var(--kiosk-text, #0b1020);
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  font-family: var(--font-body, 'Plus Jakarta Sans'), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 html.public-gallery-mode,
@@ -51,11 +48,8 @@ body.public-gallery-mode .kinetic-shell {
   overflow: visible;
 }
 
-/* Same reasoning as .public-gallery-mode above, for the superadmin dashboard —
-   a normal scrollable admin page, not a fixed-viewport touchscreen kiosk. Without
-   this it inherits the kiosk's html/body/#root height:100%+overflow:hidden lock,
-   so any content past one screenful was simply unreachable — no scrollbar, no
-   scroll wheel, nothing. */
+/* A normal scrollable admin page, not a fixed-viewport touchscreen kiosk. Without this it inherits the kiosk's
+   html/body/#root height:100% + overflow:hidden lock, so any content past one screenful was unreachable. */
 html.superadmin-mode,
 body.superadmin-mode,
 body.superadmin-mode #root {
@@ -67,65 +61,60 @@ body.superadmin-mode #root {
   -webkit-user-select: auto;
 }
 
+/* ---------------------------------------------------------------------------------------------
+   Design tokens. The defaults below are the STUDIODO website look (light, indigo accent, glass);
+   applyThemeToDocument() overwrites the color variables from the tenant's saved theme at runtime.
+   --------------------------------------------------------------------------------------------- */
 :root {
-  --accent: #d97757;
-  --kiosk-background: #17130f;
-  --kiosk-surface: #241e19;
-  --kiosk-text: #f5efe9;
-  --kiosk-muted: #b8aa9c;
-  --button-radius: 0.75rem;
-  /* Neutral, warm shadow tokens (Fase 7) — replaces the old accent-tinted glow
-     everywhere so depth reads as soft/ambient instead of a neon halo. */
-  --kiosk-shadow-ambient: 0 20px 60px rgba(15, 10, 6, 0.45);
-  --kiosk-shadow-soft: 0 10px 30px rgba(15, 10, 6, 0.28);
-  --glass-border: color-mix(in srgb, var(--kiosk-text) 12%, transparent);
-  --glass-bg-1: color-mix(in srgb, var(--kiosk-text) 6%, transparent);
-  --glass-bg-2: color-mix(in srgb, var(--kiosk-text) 2%, transparent);
+  --accent: #4f4fe8;
+  --kiosk-background: #fafafd;
+  --kiosk-surface: #ffffff;
+  --kiosk-text: #0b1020;
+  --kiosk-muted: #5b6478;
+  --button-radius: 9999px;
+  --kiosk-shadow-ambient: 0 24px 60px rgba(60, 70, 140, 0.16);
+  --kiosk-shadow-soft: 0 10px 30px rgba(60, 70, 140, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-bg-1: rgba(255, 255, 255, 0.62);
+  --glass-bg-2: rgba(255, 255, 255, 0.48);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
   --display-shadow: var(--kiosk-shadow-ambient);
+  --hairline: color-mix(in srgb, var(--kiosk-text) 10%, transparent);
+  --blob-a: #bfc6ff;
+  --blob-b: #ffc8de;
+  --blob-c: #b8f0e6;
+  --blob-opacity: 0.55;
 }
 
-/* Structural-only overrides for light mode — actual colors come from the admin's
-   applied theme fields (see themePresets.ts); this block only touches things that
-   must genuinely invert (shadow tint, glass opacity, native input chrome). */
-[data-theme-mode="light"] {
-  --glass-border: color-mix(in srgb, var(--kiosk-text) 10%, transparent);
-  --glass-bg-1: color-mix(in srgb, white 70%, transparent);
-  --glass-bg-2: color-mix(in srgb, white 40%, transparent);
-  --kiosk-shadow-ambient: 0 20px 50px rgba(120, 92, 66, 0.16);
-  --kiosk-shadow-soft: 0 8px 24px rgba(120, 92, 66, 0.1);
+[data-theme-mode="dark"] {
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --glass-bg-1: rgba(255, 255, 255, 0.07);
+  --glass-bg-2: rgba(255, 255, 255, 0.035);
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --kiosk-shadow-ambient: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --kiosk-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.32);
+  --blob-opacity: 0.2;
+  color-scheme: dark;
 }
 
 [data-theme-mode="light"] select,
-[data-theme-mode="light"] input[type="text"],
-[data-theme-mode="light"] input[type="number"] {
+[data-theme-mode="light"] input {
   color-scheme: light;
 }
-
-[data-theme-mode="light"] .kinetic-heading,
-[data-theme-mode="light"] .kinetic-title {
-  text-shadow: none;
-}
-
-[data-theme-mode="light"] .kinetic-noise {
-  opacity: 0.02;
-}
-
-[data-theme-mode="light"] ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+[data-theme-mode="dark"] select,
+[data-theme-mode="dark"] input {
+  color-scheme: dark;
 }
 
 [data-button-style="pill"] {
   --button-radius: 9999px;
 }
-
 [data-button-style="square"] {
-  --button-radius: 0.25rem;
+  --button-radius: 0.375rem;
 }
-
 [data-button-style="rounded"] {
-  --button-radius: 0.75rem;
+  --button-radius: 0.875rem;
 }
-
 [data-button-style] button {
   border-radius: var(--button-radius);
 }
@@ -134,7 +123,6 @@ body.superadmin-mode #root {
 .bg-ink-900 {
   background-color: var(--kiosk-surface) !important;
 }
-
 .bg-ink-950 {
   background-color: var(--kiosk-background) !important;
 }
@@ -142,7 +130,6 @@ body.superadmin-mode #root {
 [data-kiosk-density="compact"] .gap-10 {
   gap: 1.5rem;
 }
-
 [data-kiosk-density="compact"] .gap-12 {
   gap: 2rem;
 }
@@ -166,8 +153,9 @@ body.superadmin-mode #root {
 
 button,
 input,
-select {
-  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+select,
+textarea {
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease, color 180ms ease;
 }
 
 button:not(:disabled):active {
@@ -176,25 +164,30 @@ button:not(:disabled):active {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Page shell: soft pastel blobs on the canvas, like the marketing site. Kept as a background-image
+   so every screen (and the Screen Builder canvas) gets it for free.
+   --------------------------------------------------------------------------------------------- */
 .kinetic-shell {
   isolation: isolate;
-  /* Fase 7 — was a bright, tight halo (22% opacity, 48% falloff); now a much
-     wider, softer wash so it reads as gentle ambient light, not a lamp. */
-  background-image: radial-gradient(circle at 50% -20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%);
+  background-image:
+    radial-gradient(42rem 42rem at 85% -8%, color-mix(in srgb, var(--blob-a) calc(var(--blob-opacity) * 100%), transparent), transparent 70%),
+    radial-gradient(34rem 34rem at -6% 95%, color-mix(in srgb, var(--blob-b) calc(var(--blob-opacity) * 100%), transparent), transparent 70%),
+    radial-gradient(30rem 30rem at 55% 115%, color-mix(in srgb, var(--blob-c) calc(var(--blob-opacity) * 100%), transparent), transparent 70%);
 }
 
 .kinetic-noise {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+  display: none;
 }
 
 .kinetic-page {
@@ -204,79 +197,154 @@ select:focus-visible {
 
 .kinetic-heading,
 .kinetic-title {
-  /* Fase 7 — was an accent-colored glow; a neutral, softer shadow reads as
-     depth rather than a neon halo. Light mode turns this off entirely above. */
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
 }
 
 .eyebrow {
   display: block;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.7rem;
   color: var(--accent);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.kinetic-card {
-  box-shadow: var(--display-shadow);
-  backdrop-filter: blur(18px);
-}
-
+/* Glass surfaces */
+.kinetic-card,
 .glass-panel {
   border: 1px solid var(--glass-border);
   background: linear-gradient(145deg, var(--glass-bg-1), var(--glass-bg-2));
-  box-shadow: var(--kiosk-shadow-ambient);
-  backdrop-filter: blur(20px);
+  box-shadow: var(--kiosk-shadow-soft), inset 0 1px 0 var(--glass-highlight);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
 }
 
-.kinetic-button {
+.glass-solid {
+  border: 1px solid var(--hairline);
+  background: var(--kiosk-surface);
   box-shadow: var(--kiosk-shadow-soft);
-  transition: transform 220ms ease, box-shadow 220ms ease, filter 220ms ease;
 }
 
-.kinetic-button:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--kiosk-shadow-ambient);
-  filter: brightness(1.04);
-}
-
-select,
-input[type="text"],
-input[type="number"] {
-  color-scheme: dark;
-}
-
-.kinetic-card-hover:hover {
-  /* Fase 7 — was -8px + rotate(-0.4deg), which read "playful/stiff"; a calmer
-     lift alone fits "smooth" better. */
-  transform: translateY(-4px);
-  box-shadow: var(--kiosk-shadow-ambient);
-}
-
+/* Buttons. Primary = the website's dark pill; accent = indigo for the one "do it" action per screen. */
 .kinetic-button,
 .kinetic-cta {
   box-shadow: var(--kiosk-shadow-soft);
 }
+.kinetic-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kiosk-shadow-ambient);
+}
+
+.k-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3.25rem;
+  padding: 0.75rem 1.75rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  border: 1px solid var(--hairline);
+  background: var(--glass-bg-1);
+  color: var(--kiosk-text);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--kiosk-shadow-soft);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.k-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--kiosk-shadow-ambient);
+}
+.k-btn:disabled {
+  opacity: 0.45;
+}
+.k-btn-primary {
+  background: var(--kiosk-text);
+  color: var(--kiosk-background);
+  border-color: transparent;
+}
+.k-btn-accent {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ff7ab6));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.k-btn-ghost {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+  color: var(--kiosk-muted);
+}
+.k-btn-ghost:hover:not(:disabled) {
+  color: var(--kiosk-text);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--kiosk-text) 6%, transparent);
+}
+.k-btn-lg {
+  min-height: 4rem;
+  padding: 1rem 2.5rem;
+  font-size: 1.15rem;
+}
+
+.k-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--hairline);
+  background: var(--glass-bg-1);
+  color: var(--kiosk-muted);
+}
+.k-chip-accent {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.k-input {
+  width: 100%;
+  border-radius: 0.875rem;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--kiosk-text) 4%, var(--kiosk-surface));
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  color: var(--kiosk-text);
+  outline: none;
+}
+.k-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.kinetic-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--kiosk-shadow-ambient);
+}
 
 .kinetic-cta {
   animation: kinetic-pulse 3.6s ease-in-out infinite;
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
 
-/* "Split — kamera + panel kontrol" is a layout choice for the photo-capture
-   screen specifically (see AdminPlaceholder's "Layout per sesi foto" field),
-   not every kiosk screen — .kinetic-page is shared by all of them, so this
-   stays scoped to the session screen's own class or it bleeds a stray
-   vertical line onto single-column screens like Pilih Paket. */
+/* "Split — kamera + panel kontrol" is a layout choice for the photo-capture screen specifically (see the
+   "Layout per sesi foto" field in the customizer), not every kiosk screen — .kinetic-page is shared by all
+   of them, so this stays scoped to the session screen's own class. */
 [data-session-layout="split"] .kinetic-page-session {
   background: linear-gradient(90deg, transparent 0 48%, color-mix(in srgb, var(--accent) 7%, transparent) 48% 49%, transparent 49%);
 }
-
 [data-session-layout="centered"] .kinetic-page {
   justify-content: center;
 }
-
 [data-session-layout="gallery"] .kinetic-card {
   min-height: 24rem;
 }
@@ -286,15 +354,54 @@ input[type="number"] {
   50% { transform: translateY(-3px); }
 }
 
-::-webkit-scrollbar {
-  width: 8px;
+/* Moving gradient used behind attract-mode content */
+@keyframes k-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(2%, -3%, 0) scale(1.06); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+.k-drift {
+  animation: k-drift 14s ease-in-out infinite;
 }
 
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--kiosk-text) 22%, transparent);
   border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Status colors written for dark backgrounds (text-red-300, text-emerald-200 …) are far too pale on the
+   light theme — darken them there. Tinted backgrounds/borders (bg-red-500/10) already work on both.
+   --------------------------------------------------------------------------------------------- */
+[data-theme-mode="light"] .text-red-100, [data-theme-mode="light"] .text-red-200, [data-theme-mode="light"] .text-red-300, [data-theme-mode="light"] .text-red-400 { color: #b42318; }
+[data-theme-mode="light"] .text-emerald-50, [data-theme-mode="light"] .text-emerald-100, [data-theme-mode="light"] .text-emerald-200, [data-theme-mode="light"] .text-emerald-300 { color: #0f6b45; }
+[data-theme-mode="light"] .text-green-100 { color: #0f6b45; }
+[data-theme-mode="light"] .text-amber-100, [data-theme-mode="light"] .text-amber-200, [data-theme-mode="light"] .text-amber-300, [data-theme-mode="light"] .text-amber-400 { color: #8a5a00; }
+[data-theme-mode="light"] .text-sky-300, [data-theme-mode="light"] .text-blue-300 { color: #1d4ed8; }
+[data-theme-mode="light"] .text-violet-300 { color: #6d28d9; }
+
+/* A subtree that must stay dark in any theme (operator console, camera overlays). */
+.force-dark {
+  --kiosk-background: #0a0d18;
+  --kiosk-surface: #141829;
+  --kiosk-text: #eceeff;
+  --kiosk-muted: #9aa3bd;
+  --accent: #8a8aff;
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --glass-bg-1: rgba(255, 255, 255, 0.07);
+  --glass-bg-2: rgba(255, 255, 255, 0.035);
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --hairline: rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+  color: var(--kiosk-text);
 }

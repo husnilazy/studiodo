@@ -16,7 +16,7 @@ const pickDraft = (config: BoothConfig): PrinterDraft => ({
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={`block ${className}`}>
-      <span className="text-sm text-white/60">{label}</span>
+      <span className="text-sm text-fg/60">{label}</span>
       {children}
     </label>
   );
@@ -114,16 +114,16 @@ export default function PrinterSettings() {
       <h2 className="font-display text-xl font-semibold">Cetak Otomatis</h2>
       <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Strip hasil selalu dicetak di ukuran 4R (10.2 × 15.2 cm), terpisah dari ukuran output digital yang dipilih customer.</p>
       <div className="mt-4 space-y-4">
-        <label className="flex items-center gap-3 border-b border-white/10 pb-4">
+        <label className="flex items-center gap-3 border-b border-fg/10 pb-4">
           <input type="checkbox" checked={draft.offlineModeEnabled} onChange={(e) => set("offlineModeEnabled", e.target.checked)} />
-          <span className="text-sm text-white/70">Izinkan Offline Mode (paket terakhir, bayar manual, foto dan print lokal)</span>
+          <span className="text-sm text-fg/70">Izinkan Offline Mode (paket terakhir, bayar manual, foto dan print lokal)</span>
         </label>
-        <div className="border-b border-white/10 pb-4">
+        <div className="border-b border-fg/10 pb-4">
           <p className="text-sm font-semibold">Additional Print</p>
-          <p className="mt-1 text-xs text-white/45">Customer dapat membeli lembar 4R tambahan dari halaman hasil setelah sesi utama lunas.</p>
+          <p className="mt-1 text-xs text-fg/45">Customer dapat membeli lembar 4R tambahan dari halaman hasil setelah sesi utama lunas.</p>
           <label className="mt-3 flex items-center gap-3">
             <input type="checkbox" checked={additionalPrintConfig.enabled} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, enabled: e.target.checked })} />
-            <span className="text-sm text-white/70">Aktifkan pembelian print tambahan</span>
+            <span className="text-sm text-fg/70">Aktifkan pembelian print tambahan</span>
           </label>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <Field label="Label customer"><input className={inputClass} value={additionalPrintConfig.label} onChange={(e) => setAdditionalPrintConfig({ ...additionalPrintConfig, label: e.target.value })} /></Field>
@@ -134,7 +134,7 @@ export default function PrinterSettings() {
         </div>
         <label className="flex items-center gap-3">
           <input type="checkbox" checked={draft.autoPrintEnabled} onChange={(e) => set("autoPrintEnabled", e.target.checked)} />
-          <span className="text-sm text-white/70">Cetak otomatis begitu hasil selesai dirender (tanpa perlu tekan tombol Print)</span>
+          <span className="text-sm text-fg/70">Cetak otomatis begitu hasil selesai dirender (tanpa perlu tekan tombol Print)</span>
         </label>
         <Field label="Printer">
           <select className={inputClass} value={draft.printerName ?? ""} onChange={(e) => set("printerName", e.target.value || null)}>
@@ -146,19 +146,19 @@ export default function PrinterSettings() {
             ))}
           </select>
           {printersError && <p className="mt-1 text-xs text-red-300">{printersError}</p>}
-          {!window.studiodo?.listPrinters && <p className="mt-1 text-xs text-white/40">Daftar printer hanya bisa dibaca dari aplikasi desktop STUDIODO (Electron).</p>}
+          {!window.studiodo?.listPrinters && <p className="mt-1 text-xs text-fg/40">Daftar printer hanya bisa dibaca dari aplikasi desktop STUDIODO (Electron).</p>}
         </Field>
         <Field label="Jumlah salinan per sesi">
           <input type="number" min={1} max={10} className={inputClass} value={draft.printCopies} onChange={(e) => set("printCopies", Math.max(1, Math.min(10, Number(e.target.value))))} />
         </Field>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={runTestPrint} disabled={testPrintStatus === "printing"} className="rounded-xl border border-white/15 px-4 py-2 text-sm hover:border-accent disabled:opacity-50">
+          <button type="button" onClick={runTestPrint} disabled={testPrintStatus === "printing"} className="rounded-xl border border-fg/15 px-4 py-2 text-sm hover:border-accent disabled:opacity-50">
             {testPrintStatus === "printing" ? "Mencetak..." : "Test print"}
           </button>
           {testPrintStatus === "ok" && <span className="text-xs text-emerald-300">● Terkirim ke printer</span>}
           {testPrintStatus === "error" && <span className="text-xs text-red-300">● {testPrintError}</span>}
         </div>
-        <div className="flex items-center gap-3 border-t border-white/10 pt-4">
+        <div className="flex items-center gap-3 border-t border-fg/10 pt-4">
           <button
             type="button"
             onClick={save}
@@ -169,7 +169,7 @@ export default function PrinterSettings() {
             {saving ? "Menyimpan…" : "Simpan"}
           </button>
           {dirty && (
-            <button type="button" onClick={cancel} className="text-sm text-white/50 hover:text-white">
+            <button type="button" onClick={cancel} className="text-sm text-fg/50 hover:text-fg">
               Batalkan perubahan
             </button>
           )}

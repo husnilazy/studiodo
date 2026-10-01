@@ -22,7 +22,7 @@ import { CreatorsPanel } from "@/components/CreatorsPanel";
 import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
 import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
 
-const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
+const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 
 function formatDate(value: string | null) {
@@ -41,7 +41,7 @@ function StatusPill({ subscriptionEndsAt, locked }: { subscriptionEndsAt: string
   // days-remaining countdown.
   if (locked) return <span className="rounded-full border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-xs font-semibold text-red-200">Terkunci</span>;
   const days = daysRemaining(subscriptionEndsAt);
-  if (days === null) return <span className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/40">Belum diset</span>;
+  if (days === null) return <span className="rounded-full border border-fg/15 px-2.5 py-1 text-xs text-fg/40">Belum diset</span>;
   if (days < 0) return <span className="rounded-full border border-red-400/30 px-2.5 py-1 text-xs text-red-300">Kedaluwarsa {Math.abs(days)}h lalu</span>;
   if (days <= 14) return <span className="rounded-full border border-amber-400/30 px-2.5 py-1 text-xs text-amber-300">{days} hari lagi</span>;
   return <span className="rounded-full border border-emerald-400/30 px-2.5 py-1 text-xs text-emerald-300">{days} hari lagi</span>;
@@ -49,10 +49,10 @@ function StatusPill({ subscriptionEndsAt, locked }: { subscriptionEndsAt: string
 
 function StatCard({ label, value, detail, tone }: { label: string; value: string; detail?: string; tone?: "amber" }) {
   return (
-    <div className={`rounded-2xl border p-4 ${tone === "amber" ? "border-amber-400/30 bg-amber-500/10" : "border-white/10 bg-white/[0.03]"}`}>
-      <p className={`text-xs uppercase tracking-[.14em] ${tone === "amber" ? "text-amber-300" : "text-white/45"}`}>{label}</p>
+    <div className={`rounded-2xl border p-4 ${tone === "amber" ? "border-amber-400/30 bg-amber-500/10" : "border-fg/10 bg-fg/[0.03]"}`}>
+      <p className={`text-xs uppercase tracking-[.14em] ${tone === "amber" ? "text-amber-300" : "text-fg/45"}`}>{label}</p>
       <p className="mt-2 font-display text-2xl font-bold">{value}</p>
-      {detail && <p className="mt-1 text-xs text-white/40">{detail}</p>}
+      {detail && <p className="mt-1 text-xs text-fg/40">{detail}</p>}
     </div>
   );
 }
@@ -79,7 +79,7 @@ const STATUS_ORDER: { key: string; color: string; barClass: string }[] = [
 
 function TenantStatusBars({ byStatus, total }: { byStatus: Record<string, number>; total: number }) {
   const known = new Set(STATUS_ORDER.map((s) => s.key));
-  const rows = [...STATUS_ORDER, ...Object.keys(byStatus).filter((k) => !known.has(k)).map((key) => ({ key, color: "#8b8b86", barClass: "bg-white/30" }))];
+  const rows = [...STATUS_ORDER, ...Object.keys(byStatus).filter((k) => !known.has(k)).map((key) => ({ key, color: "#8b8b86", barClass: "bg-fg/30" }))];
 
   return (
     <div className="space-y-3">
@@ -89,16 +89,16 @@ function TenantStatusBars({ byStatus, total }: { byStatus: Record<string, number
         return (
           <div key={key}>
             <div className="mb-1 flex items-baseline justify-between text-sm">
-              <span className="text-white/70">{STATUS_LABEL[key] ?? key}</span>
-              <span className="font-semibold text-white">{count}</span>
+              <span className="text-fg/70">{STATUS_LABEL[key] ?? key}</span>
+              <span className="font-semibold text-fg">{count}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="h-2 overflow-hidden rounded-full bg-fg/[0.06]">
               <div className={`h-full rounded-full ${barClass} transition-[width] duration-500`} style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }} />
             </div>
           </div>
         );
       })}
-      {total === 0 && <p className="text-sm text-white/40">Belum ada tenant.</p>}
+      {total === 0 && <p className="text-sm text-fg/40">Belum ada tenant.</p>}
     </div>
   );
 }
@@ -147,14 +147,14 @@ function RevenueTrendChart({ data }: { data: OverviewTimeseriesPoint[] }) {
     <div>
       <div className="flex items-baseline justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[.14em] text-white/45">Revenue {data.length} hari terakhir</p>
+          <p className="text-xs uppercase tracking-[.14em] text-fg/45">Revenue {data.length} hari terakhir</p>
           <p className="mt-1 font-display text-2xl font-bold text-accent">{money(totalRevenue)}</p>
         </div>
         {hovered && (
           <div className="text-right text-xs">
-            <p className="text-white/70">{new Date(hovered.date).toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</p>
+            <p className="text-fg/70">{new Date(hovered.date).toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</p>
             <p className="font-semibold text-accent">{money(hovered.revenue)}</p>
-            <p className="text-white/40">{hovered.sessions} sesi</p>
+            <p className="text-fg/40">{hovered.sessions} sesi</p>
           </div>
         )}
       </div>
@@ -256,14 +256,14 @@ function PlatformOverviewPanel() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
           <div className="flex items-center justify-end gap-1.5">
             {[7, 30, 90].map((d) => (
               <button
                 key={d}
                 type="button"
                 onClick={() => setRangeDays(d)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${rangeDays === d ? "bg-accent text-white" : "text-white/45 hover:text-white/70"}`}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${rangeDays === d ? "bg-accent text-white" : "text-fg/45 hover:text-fg/70"}`}
               >
                 {d}h
               </button>
@@ -271,8 +271,8 @@ function PlatformOverviewPanel() {
           </div>
           <RevenueTrendChart data={timeseries} />
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <p className="text-xs uppercase tracking-[.14em] text-white/45">Tenant per status</p>
+        <div className="rounded-2xl border border-fg/10 bg-fg/[0.03] p-5">
+          <p className="text-xs uppercase tracking-[.14em] text-fg/45">Tenant per status</p>
           <div className="mt-4">
             <TenantStatusBars byStatus={tenants.byStatus} total={tenants.total} />
           </div>
@@ -297,31 +297,31 @@ const BUSINESS_TYPE_OPTIONS = [
 function ProfileFieldsGrid({ value, onChange }: { value: Partial<TenantProfileFields>; onChange: (patch: Partial<TenantProfileFields>) => void }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="text-sm text-white/60">Nama pemilik
+      <label className="text-sm text-fg/60">Nama pemilik
         <input className={inputClass} value={value.ownerName ?? ""} onChange={(e) => onChange({ ownerName: e.target.value })} />
       </label>
-      <label className="text-sm text-white/60">WhatsApp pemilik
+      <label className="text-sm text-fg/60">WhatsApp pemilik
         <input className={inputClass} placeholder="628xxxxxxxxxx" value={value.ownerWhatsapp ?? ""} onChange={(e) => onChange({ ownerWhatsapp: e.target.value })} />
       </label>
-      <label className="text-sm text-white/60">Jenis usaha
+      <label className="text-sm text-fg/60">Jenis usaha
         <select className={inputClass} value={value.businessType ?? ""} onChange={(e) => onChange({ businessType: e.target.value })}>
           {BUSINESS_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
       </label>
-      <label className="text-sm text-white/60">Kota
+      <label className="text-sm text-fg/60">Kota
         <input className={inputClass} value={value.city ?? ""} onChange={(e) => onChange({ city: e.target.value })} />
       </label>
-      <label className="text-sm text-white/60 sm:col-span-2">Alamat
+      <label className="text-sm text-fg/60 sm:col-span-2">Alamat
         <input className={inputClass} value={value.address ?? ""} onChange={(e) => onChange({ address: e.target.value })} />
       </label>
-      <label className="text-sm text-white/60">Website</label>
+      <label className="text-sm text-fg/60">Website</label>
       <input className={`${inputClass} -mt-3`} placeholder="https://" value={value.website ?? ""} onChange={(e) => onChange({ website: e.target.value })} />
-      <label className="text-sm text-white/60">Instagram</label>
+      <label className="text-sm text-fg/60">Instagram</label>
       <input className={`${inputClass} -mt-3`} placeholder="@nama.studio" value={value.instagramHandle ?? ""} onChange={(e) => onChange({ instagramHandle: e.target.value })} />
-      <label className="text-sm text-white/60 sm:col-span-2">Sumber referral (dari mana tahu STUDIODO?)
+      <label className="text-sm text-fg/60 sm:col-span-2">Sumber referral (dari mana tahu STUDIODO?)
         <input className={inputClass} value={value.referralSource ?? ""} onChange={(e) => onChange({ referralSource: e.target.value })} />
       </label>
-      <label className="text-sm text-white/60 sm:col-span-2">Catatan internal (tidak terlihat tenant)
+      <label className="text-sm text-fg/60 sm:col-span-2">Catatan internal (tidak terlihat tenant)
         <textarea className={`${inputClass} min-h-[70px]`} value={value.internalNotes ?? ""} onChange={(e) => onChange({ internalNotes: e.target.value })} />
       </label>
     </div>
@@ -356,7 +356,7 @@ function FleetAlertsPanel() {
           const diag = kiosk.lastDiagnostics;
           const issues = diag ? [!diag.cameraOk && "kamera", !diag.printerOk && "printer", !diag.networkOk && "jaringan"].filter(Boolean) : [];
           return (
-            <div key={kiosk.id} className="rounded-xl border border-red-400/20 bg-black/20 px-3 py-2 text-sm">
+            <div key={kiosk.id} className="rounded-xl border border-red-400/20 bg-fg/5 px-3 py-2 text-sm">
               <p className="font-semibold text-red-100">{kiosk.tenantName} <span className="font-normal text-red-200/60">· {kiosk.label ?? "(tanpa label)"}</span></p>
               <p className="text-xs text-red-200/60">
                 {kiosk.lastUsedAt ? `Terakhir online ${formatDate(kiosk.lastUsedAt)}` : "Belum pernah online"}
@@ -395,10 +395,10 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 
   return (
     <div className="flex h-screen items-center justify-center bg-[#0b0b10] px-4 text-white">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 shadow-2xl">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl">
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
-        <p className="mt-2 text-sm text-white/45">Panel superadmin — kelola semua tenant di platform ini.</p>
+        <p className="mt-2 text-sm text-fg/45">Panel superadmin — kelola semua tenant di platform ini.</p>
         <div className="mt-6 space-y-3">
           <input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={inputClass} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className={inputClass} />
@@ -454,34 +454,34 @@ function PlatformSettingsPanel() {
   if (!settings) return null;
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <p className="text-xs uppercase tracking-[.16em] text-accent">PENGATURAN PLATFORM</p>
       <h2 className="mt-2 font-display text-xl font-semibold">Default trial & kontak renewal</h2>
-      <p className="mt-1 text-sm text-white/45">Berlaku untuk tenant baru dan tombol "Perpanjang" di dashboard semua tenant.</p>
+      <p className="mt-1 text-sm text-fg/45">Berlaku untuk tenant baru dan tombol "Perpanjang" di dashboard semua tenant.</p>
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm text-white/60">
+        <label className="text-sm text-fg/60">
           Trial default (hari)
           <input type="number" min={0} className={inputClass} value={draft.defaultTrialDays} onChange={(e) => setDraft({ ...draft, defaultTrialDays: e.target.value })} />
         </label>
-        <label className="text-sm text-white/60">
+        <label className="text-sm text-fg/60">
           Masa tenggang (hari)
           <input type="number" min={0} className={inputClass} value={draft.gracePeriodDays} onChange={(e) => setDraft({ ...draft, gracePeriodDays: e.target.value })} />
         </label>
-        <label className="text-sm text-white/60">
+        <label className="text-sm text-fg/60">
           Nomor WhatsApp renewal
           <input placeholder="628xxxxxxxxxx" className={inputClass} value={draft.renewalWhatsapp} onChange={(e) => setDraft({ ...draft, renewalWhatsapp: e.target.value })} />
         </label>
-        <label className="text-sm text-white/60">
+        <label className="text-sm text-fg/60">
           Link checkout (opsional)
           <input placeholder="https://studiodo.id/pricing" className={inputClass} value={draft.renewalCheckoutUrl} onChange={(e) => setDraft({ ...draft, renewalCheckoutUrl: e.target.value })} />
         </label>
       </div>
-      <p className="mt-3 text-xs text-white/35">Masa tenggang = berapa hari setelah langganan lewat sebelum kiosk benar-benar terkunci.</p>
+      <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan lewat sebelum kiosk benar-benar terkunci.</p>
       <div className="mt-5 flex items-center gap-3">
         <button type="button" onClick={save} disabled={saving} className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
           {saving ? "Menyimpan…" : "Simpan"}
         </button>
-        {message && <span className="text-sm text-white/50">{message}</span>}
+        {message && <span className="text-sm text-fg/50">{message}</span>}
       </div>
     </section>
   );
@@ -576,29 +576,29 @@ function PlansPanel({ onPlansChanged }: { onPlansChanged?: () => void }) {
   };
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-[.16em] text-accent">SUBSCRIPTION PLANS</p>
           <h2 className="mt-2 font-display text-xl font-semibold">{plans.length} plan terdaftar</h2>
-          <p className="mt-1 text-sm text-white/45">Menu plan yang dipilih saat mengonlinekan tenant baru atau mencatat pembayaran.</p>
+          <p className="mt-1 text-sm text-fg/45">Menu plan yang dipilih saat mengonlinekan tenant baru atau mencatat pembayaran.</p>
         </div>
-        <button type="button" onClick={load} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/60">{loading ? "Memuat…" : "Muat ulang"}</button>
+        <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
       </div>
 
       <div className="mt-5 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Buat plan baru</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-sm text-white/60">Nama<input className={inputClass} placeholder="Pro" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
-          <label className="text-sm text-white/60">Slug<input className={inputClass} placeholder="pro" value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })} /></label>
-          <label className="text-sm text-white/60">Harga (Rp)<input className={inputClass} type="number" min={0} placeholder="299000" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} /></label>
-          <label className="text-sm text-white/60">Interval<select className={inputClass} value={draft.billingInterval} onChange={(e) => setDraft({ ...draft, billingInterval: e.target.value })}><option value="monthly">Bulanan</option><option value="yearly">Tahunan</option></select></label>
-          <label className="text-sm text-white/60">Limit kiosk<input className={inputClass} type="number" min={0} placeholder="Kosongkan = tanpa batas" value={draft.kioskLimit} onChange={(e) => setDraft({ ...draft, kioskLimit: e.target.value })} /></label>
+          <label className="text-sm text-fg/60">Nama<input className={inputClass} placeholder="Pro" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+          <label className="text-sm text-fg/60">Slug<input className={inputClass} placeholder="pro" value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })} /></label>
+          <label className="text-sm text-fg/60">Harga (Rp)<input className={inputClass} type="number" min={0} placeholder="299000" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} /></label>
+          <label className="text-sm text-fg/60">Interval<select className={inputClass} value={draft.billingInterval} onChange={(e) => setDraft({ ...draft, billingInterval: e.target.value })}><option value="monthly">Bulanan</option><option value="yearly">Tahunan</option></select></label>
+          <label className="text-sm text-fg/60">Limit kiosk<input className={inputClass} type="number" min={0} placeholder="Kosongkan = tanpa batas" value={draft.kioskLimit} onChange={(e) => setDraft({ ...draft, kioskLimit: e.target.value })} /></label>
           <div className="flex items-center gap-4 self-end pb-2.5">
-            <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={draft.screenBuilderEnabled} onChange={(e) => setDraft({ ...draft, screenBuilderEnabled: e.target.checked })} /> Screen Builder</label>
-            <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={draft.gifVideoEnabled} onChange={(e) => setDraft({ ...draft, gifVideoEnabled: e.target.checked })} /> GIF & Video</label>
+            <label className="flex items-center gap-2 text-sm text-fg/60"><input type="checkbox" checked={draft.screenBuilderEnabled} onChange={(e) => setDraft({ ...draft, screenBuilderEnabled: e.target.checked })} /> Screen Builder</label>
+            <label className="flex items-center gap-2 text-sm text-fg/60"><input type="checkbox" checked={draft.gifVideoEnabled} onChange={(e) => setDraft({ ...draft, gifVideoEnabled: e.target.checked })} /> GIF & Video</label>
           </div>
-          <label className="text-sm text-white/60 sm:col-span-2 lg:col-span-3">Deskripsi<input className={inputClass} placeholder="mis. Untuk studio dengan 1-2 booth aktif" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label>
+          <label className="text-sm text-fg/60 sm:col-span-2 lg:col-span-3">Deskripsi<input className={inputClass} placeholder="mis. Untuk studio dengan 1-2 booth aktif" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label>
         </div>
         {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
         <button type="button" onClick={create} disabled={!draft.name.trim() || !draft.slug.trim()} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">+ Tambah plan</button>
@@ -606,7 +606,7 @@ function PlansPanel({ onPlansChanged }: { onPlansChanged?: () => void }) {
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => (
-          <div key={plan.id} className={`rounded-2xl border p-4 ${plan.active ? "border-white/10 bg-black/20" : "border-white/10 bg-white/5 opacity-60"}`}>
+          <div key={plan.id} className={`rounded-2xl border p-4 ${plan.active ? "border-fg/10 bg-fg/5" : "border-fg/10 bg-fg/5 opacity-60"}`}>
             {editingId === plan.id ? (
               <div className="grid gap-2">
                 <input className={inputClass} value={editingDraft.name ?? ""} onChange={(e) => setEditingDraft({ ...editingDraft, name: e.target.value })} />
@@ -616,45 +616,45 @@ function PlansPanel({ onPlansChanged }: { onPlansChanged?: () => void }) {
                 </div>
                 <input className={inputClass} type="number" placeholder="Limit kiosk (kosong = tanpa batas)" value={editingDraft.kioskLimit ?? ""} onChange={(e) => setEditingDraft({ ...editingDraft, kioskLimit: e.target.value })} />
                 <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-xs text-white/60"><input type="checkbox" checked={editingDraft.screenBuilderEnabled !== "false"} onChange={(e) => setEditingDraft({ ...editingDraft, screenBuilderEnabled: String(e.target.checked) })} /> Screen Builder</label>
-                  <label className="flex items-center gap-2 text-xs text-white/60"><input type="checkbox" checked={editingDraft.gifVideoEnabled !== "false"} onChange={(e) => setEditingDraft({ ...editingDraft, gifVideoEnabled: String(e.target.checked) })} /> GIF & Video</label>
+                  <label className="flex items-center gap-2 text-xs text-fg/60"><input type="checkbox" checked={editingDraft.screenBuilderEnabled !== "false"} onChange={(e) => setEditingDraft({ ...editingDraft, screenBuilderEnabled: String(e.target.checked) })} /> Screen Builder</label>
+                  <label className="flex items-center gap-2 text-xs text-fg/60"><input type="checkbox" checked={editingDraft.gifVideoEnabled !== "false"} onChange={(e) => setEditingDraft({ ...editingDraft, gifVideoEnabled: String(e.target.checked) })} /> GIF & Video</label>
                 </div>
                 <input className={inputClass} placeholder="Deskripsi" value={editingDraft.description ?? ""} onChange={(e) => setEditingDraft({ ...editingDraft, description: e.target.value })} />
-                <div className="mt-1 flex gap-2"><button onClick={saveEdit} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Simpan</button><button onClick={() => setEditingId(null)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs">Batal</button></div>
+                <div className="mt-1 flex gap-2"><button onClick={saveEdit} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Simpan</button><button onClick={() => setEditingId(null)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs">Batal</button></div>
               </div>
             ) : (
               <>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-display text-lg font-semibold">{plan.name}</p>
-                    <p className="text-xs text-white/40">{plan.slug}</p>
+                    <p className="text-xs text-fg/40">{plan.slug}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${plan.active ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/50"}`}>{plan.active ? "Aktif" : "Nonaktif"}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${plan.active ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>{plan.active ? "Aktif" : "Nonaktif"}</span>
                 </div>
-                <p className="mt-2 text-2xl font-bold text-accent">{money(Number(plan.price))}<span className="text-sm font-normal text-white/40">{BILLING_LABEL[plan.billingInterval]}</span></p>
-                <p className="mt-1 text-xs text-white/45">{plan.kioskLimit === null ? "Tanpa batas kiosk" : `Maks ${plan.kioskLimit} kiosk`}</p>
+                <p className="mt-2 text-2xl font-bold text-accent">{money(Number(plan.price))}<span className="text-sm font-normal text-fg/40">{BILLING_LABEL[plan.billingInterval]}</span></p>
+                <p className="mt-1 text-xs text-fg/45">{plan.kioskLimit === null ? "Tanpa batas kiosk" : `Maks ${plan.kioskLimit} kiosk`}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${plan.screenBuilderEnabled ? "bg-emerald-400/15 text-emerald-200" : "bg-white/5 text-white/30 line-through"}`}>Screen Builder</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${plan.gifVideoEnabled ? "bg-emerald-400/15 text-emerald-200" : "bg-white/5 text-white/30 line-through"}`}>GIF & Video</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${plan.screenBuilderEnabled ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/5 text-fg/30 line-through"}`}>Screen Builder</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${plan.gifVideoEnabled ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/5 text-fg/30 line-through"}`}>GIF & Video</span>
                 </div>
-                {plan.description && <p className="mt-2 text-xs text-white/50">{plan.description}</p>}
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-                  <button onClick={() => beginEdit(plan)} className="rounded-full border border-white/15 px-3 py-1 text-xs">Edit</button>
-                  <button onClick={() => toggleActive(plan)} className="rounded-full border border-white/15 px-3 py-1 text-xs">{plan.active ? "Nonaktifkan" : "Aktifkan"}</button>
+                {plan.description && <p className="mt-2 text-xs text-fg/50">{plan.description}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-fg/10 pt-3">
+                  <button onClick={() => beginEdit(plan)} className="rounded-full border border-fg/15 px-3 py-1 text-xs">Edit</button>
+                  <button onClick={() => toggleActive(plan)} className="rounded-full border border-fg/15 px-3 py-1 text-xs">{plan.active ? "Nonaktifkan" : "Aktifkan"}</button>
                   <button onClick={() => remove(plan)} className="text-xs text-red-300 hover:text-red-200">Hapus</button>
                 </div>
               </>
             )}
           </div>
         ))}
-        {!loading && plans.length === 0 && <p className="text-sm text-white/40">Belum ada plan. Buat plan pertama di atas.</p>}
+        {!loading && plans.length === 0 && <p className="text-sm text-fg/40">Belum ada plan. Buat plan pertama di atas.</p>}
       </div>
     </section>
   );
 }
 
 const LEVEL_STYLE: Record<PlatformEvent["level"], string> = {
-  info: "border-white/15 text-white/50",
+  info: "border-fg/15 text-fg/50",
   warning: "border-amber-400/30 bg-amber-400/10 text-amber-200",
   error: "border-red-400/30 bg-red-400/10 text-red-200",
 };
@@ -683,25 +683,25 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [level, category, tenantId]);
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[.16em] text-accent">AKTIVITAS & ERROR</p>
           <h2 className="mt-2 font-display text-xl font-semibold">Log platform</h2>
-          <p className="mt-1 text-sm text-white/45">Semua perubahan tenant/billing/plan, dan error server yang belum tertangani.</p>
+          <p className="mt-1 text-sm text-fg/45">Semua perubahan tenant/billing/plan, dan error server yang belum tertangani.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select className="rounded-lg border border-white/15 bg-black/20 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
+          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
             <option value="all">Semua level</option>
             <option value="info">Info</option>
             <option value="warning">Warning</option>
             <option value="error">Error</option>
           </select>
-          <select className="rounded-lg border border-white/15 bg-black/20 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="all">Semua kategori</option>
             {Object.entries(CATEGORY_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
-          <select className="rounded-lg border border-white/15 bg-black/20 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
             <option value="">Semua tenant</option>
             {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -710,22 +710,22 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
 
       <div className="mt-5 space-y-2">
         {events.map((event) => (
-          <div key={event.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+          <div key={event.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${LEVEL_STYLE[event.level]}`}>{event.level}</span>
-                <span className="text-[10px] uppercase tracking-wide text-white/35">{CATEGORY_LABEL[event.category] ?? event.category}</span>
+                <span className="text-[10px] uppercase tracking-wide text-fg/35">{CATEGORY_LABEL[event.category] ?? event.category}</span>
                 {event.tenantName && <span className="text-xs text-accent">{event.tenantName}</span>}
               </div>
-              <p className="mt-1 text-sm text-white/80">{event.message}</p>
-              <p className="mt-0.5 text-xs text-white/35">{new Date(event.createdAt).toLocaleString("id-ID")}{event.actorLabel ? ` · ${event.actorLabel}` : ""}</p>
+              <p className="mt-1 text-sm text-fg/80">{event.message}</p>
+              <p className="mt-0.5 text-xs text-fg/35">{new Date(event.createdAt).toLocaleString("id-ID")}{event.actorLabel ? ` · ${event.actorLabel}` : ""}</p>
             </div>
           </div>
         ))}
-        {!loading && events.length === 0 && <p className="py-6 text-center text-sm text-white/40">Belum ada event yang cocok dengan filter ini.</p>}
+        {!loading && events.length === 0 && <p className="py-6 text-center text-sm text-fg/40">Belum ada event yang cocok dengan filter ini.</p>}
       </div>
       {hasMore && events.length > 0 && (
-        <button type="button" disabled={loading} onClick={() => load(events[events.length - 1].createdAt)} className="mt-4 w-full rounded-xl border border-white/15 py-2.5 text-sm text-white/60 hover:border-accent disabled:opacity-50">
+        <button type="button" disabled={loading} onClick={() => load(events[events.length - 1].createdAt)} className="mt-4 w-full rounded-xl border border-fg/15 py-2.5 text-sm text-fg/60 hover:border-accent disabled:opacity-50">
           {loading ? "Memuat…" : "Muat lebih banyak"}
         </button>
       )}
@@ -782,16 +782,16 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
   };
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[.16em] text-accent">APLIKASI TENANT</p>
           <h2 className="mt-2 font-display text-xl font-semibold">{applications.length} {showAll ? "aplikasi" : "menunggu review"}</h2>
-          <p className="mt-1 text-sm text-white/45">Masuk dari form pendaftaran publik STUDIODO (landing page).</p>
+          <p className="mt-1 text-sm text-fg/45">Masuk dari form pendaftaran publik STUDIODO (landing page).</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setShowAll((v) => !v)} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/60">{showAll ? "Hanya pending" : "Lihat semua"}</button>
-          <button type="button" onClick={load} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/60">{loading ? "Memuat…" : "Muat ulang"}</button>
+          <button type="button" onClick={() => setShowAll((v) => !v)} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{showAll ? "Hanya pending" : "Lihat semua"}</button>
+          <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
         </div>
       </div>
 
@@ -806,26 +806,26 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
 
       <div className="mt-4 space-y-3">
         {applications.map((application) => (
-          <div key={application.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <div key={application.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-display text-lg font-semibold">{application.businessName}</p>
-                <p className="text-xs text-white/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""}</p>
-                <p className="mt-1 text-xs text-white/35">
+                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""}</p>
+                <p className="mt-1 text-xs text-fg/35">
                   {[application.businessType, application.city, application.referralSource ? `via ${application.referralSource}` : null].filter(Boolean).join(" · ")}
                 </p>
-                {application.message && <p className="mt-2 text-sm text-white/60">"{application.message}"</p>}
-                <p className="mt-1 text-xs text-white/30">Diajukan {formatDate(application.createdAt)}</p>
+                {application.message && <p className="mt-2 text-sm text-fg/60">"{application.message}"</p>}
+                <p className="mt-1 text-xs text-fg/30">Diajukan {formatDate(application.createdAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {application.status !== "pending" ? (
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/50"}`}>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>
                     {application.status === "converted" ? "Diterima" : "Ditolak"}
                   </span>
                 ) : (
                   <>
                     <button type="button" onClick={() => startConvert(application)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Terima & buat tenant</button>
-                    <button type="button" onClick={() => reject(application)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-red-300 hover:border-red-400">Tolak</button>
+                    <button type="button" onClick={() => reject(application)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-red-300 hover:border-red-400">Tolak</button>
                   </>
                 )}
               </div>
@@ -834,23 +834,23 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
             {convertingId === application.id && (
               <div className="mt-4 rounded-xl border border-accent/20 bg-accent/[0.04] p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm text-white/60">Slug tenant
+                  <label className="text-sm text-fg/60">Slug tenant
                     <input className={inputClass} value={convertDraft.slug} onChange={(e) => setConvertDraft({ ...convertDraft, slug: slugify(e.target.value) })} />
                   </label>
-                  <label className="text-sm text-white/60">Password admin awal
+                  <label className="text-sm text-fg/60">Password admin awal
                     <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={convertDraft.password} onChange={(e) => setConvertDraft({ ...convertDraft, password: e.target.value })} autoComplete="new-password" />
                   </label>
                 </div>
                 {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={() => submitConvert(application)} disabled={!convertDraft.slug || convertDraft.password.length < 6} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">Buat tenant</button>
-                  <button type="button" onClick={() => setConvertingId(null)} className="rounded-lg border border-white/15 px-4 py-2 text-xs">Batal</button>
+                  <button type="button" onClick={() => setConvertingId(null)} className="rounded-lg border border-fg/15 px-4 py-2 text-xs">Batal</button>
                 </div>
               </div>
             )}
           </div>
         ))}
-        {!loading && applications.length === 0 && <p className="py-6 text-center text-sm text-white/40">{showAll ? "Belum ada aplikasi masuk." : "Tidak ada aplikasi yang menunggu review."}</p>}
+        {!loading && applications.length === 0 && <p className="py-6 text-center text-sm text-fg/40">{showAll ? "Belum ada aplikasi masuk." : "Tidak ada aplikasi yang menunggu review."}</p>}
       </div>
     </section>
   );
@@ -905,20 +905,20 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
   });
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[.16em] text-accent">SEMUA TENANT</p>
           <h2 className="mt-2 font-display text-xl font-semibold">{filtered.length} dari {tenants.length} tenant</h2>
         </div>
         <div className="flex items-center gap-2">
-          <input placeholder="Cari nama, slug, atau email admin…" value={query} onChange={(e) => setQuery(e.target.value)} className="w-64 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-xs outline-none focus:border-accent" />
-          <button type="button" onClick={load} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/60">{loading ? "Memuat…" : "Muat ulang"}</button>
+          <input placeholder="Cari nama, slug, atau email admin…" value={query} onChange={(e) => setQuery(e.target.value)} className="w-64 rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-xs outline-none focus:border-accent" />
+          <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
         </div>
       </div>
       <div className="mt-5 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-white/45">
+          <thead className="text-fg/45">
             <tr>
               <th className="p-3">Tenant</th>
               <th className="p-3">Admin</th>
@@ -940,15 +940,15 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
               const nearingExpiry = days !== null && days <= 7;
               const knownPlan = plans.some((p) => p.slug === draft.plan);
               return (
-                <tr key={tenant.id} className={`border-t border-white/10 ${nearingExpiry ? (days! < 0 ? "bg-red-500/[0.06]" : "bg-amber-500/[0.06]") : ""}`}>
+                <tr key={tenant.id} className={`border-t border-fg/10 ${nearingExpiry ? (days! < 0 ? "bg-red-500/[0.06]" : "bg-amber-500/[0.06]") : ""}`}>
                   <td className="p-3">
                     <button type="button" onClick={() => onSelectTenant(tenant.id)} className="font-semibold text-left hover:text-accent hover:underline">{tenant.name}</button>
-                    <p className="text-xs text-white/40">{tenant.slug}</p>
+                    <p className="text-xs text-fg/40">{tenant.slug}</p>
                   </td>
-                  <td className="p-3 text-white/60">{tenant.adminEmail ?? "-"}</td>
+                  <td className="p-3 text-fg/60">{tenant.adminEmail ?? "-"}</td>
                   <td className="p-3">
                     <select
-                      className="w-28 rounded border border-white/15 bg-black/20 px-2 py-1 text-xs"
+                      className="w-28 rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={knownPlan ? draft.plan : "__custom__"}
                       onChange={(e) => {
                         if (e.target.value === "__custom__") return;
@@ -961,7 +961,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                   </td>
                   <td className="p-3">
                     <select
-                      className="rounded border border-white/15 bg-black/20 px-2 py-1 text-xs"
+                      className="rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={draft.status}
                       onChange={(e) => setDrafts({ ...drafts, [tenant.id]: { ...draft, status: e.target.value } })}
                     >
@@ -972,17 +972,17 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/45">{formatDate(tenant.subscriptionEndsAt)}</span>
+                      <span className="text-xs text-fg/45">{formatDate(tenant.subscriptionEndsAt)}</span>
                       <StatusPill subscriptionEndsAt={tenant.subscriptionEndsAt} locked={tenant.locked} />
                     </div>
                   </td>
-                  <td className="p-3 text-white/60">{tenant.onlineKioskCount}/{tenant.kioskCount}</td>
-                  <td className="p-3 text-white/60">{tenant.sessionCount}</td>
-                  <td className="p-3 text-white/60">{money(tenant.revenue)}</td>
+                  <td className="p-3 text-fg/60">{tenant.onlineKioskCount}/{tenant.kioskCount}</td>
+                  <td className="p-3 text-fg/60">{tenant.sessionCount}</td>
+                  <td className="p-3 text-fg/60">{money(tenant.revenue)}</td>
                   <td className="p-3">
                     <div className="flex gap-1.5">
-                      <button type="button" disabled={busyId === tenant.id} onClick={() => extend(tenant.id, 7)} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs hover:border-accent disabled:opacity-50">+7h</button>
-                      <button type="button" disabled={busyId === tenant.id} onClick={() => extend(tenant.id, 30)} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs hover:border-accent disabled:opacity-50">+30h</button>
+                      <button type="button" disabled={busyId === tenant.id} onClick={() => extend(tenant.id, 7)} className="rounded-lg border border-fg/15 px-2.5 py-1.5 text-xs hover:border-accent disabled:opacity-50">+7h</button>
+                      <button type="button" disabled={busyId === tenant.id} onClick={() => extend(tenant.id, 30)} className="rounded-lg border border-fg/15 px-2.5 py-1.5 text-xs hover:border-accent disabled:opacity-50">+30h</button>
                     </div>
                   </td>
                   <td className="p-3 text-right">
@@ -992,14 +992,14 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                           Simpan
                         </button>
                       )}
-                      <button type="button" onClick={() => onSelectTenant(tenant.id)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white">Detail</button>
+                      <button type="button" onClick={() => onSelectTenant(tenant.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">Detail</button>
                     </div>
                   </td>
                 </tr>
               );
             })}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={10} className="p-6 text-center text-white/40">{tenants.length === 0 ? "Belum ada tenant." : "Tidak ada tenant yang cocok."}</td></tr>
+              <tr><td colSpan={10} className="p-6 text-center text-fg/40">{tenants.length === 0 ? "Belum ada tenant." : "Tidak ada tenant yang cocok."}</td></tr>
             )}
           </tbody>
         </table>
@@ -1053,7 +1053,7 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
           <p className="text-xs uppercase tracking-[.16em] text-accent">ONBOARDING</p>
           <h2 className="mt-2 font-display text-xl font-semibold">Tenant baru</h2>
         </div>
-        <button type="button" onClick={() => { setOpen((v) => !v); setResult(null); }} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/70 hover:border-accent">
+        <button type="button" onClick={() => { setOpen((v) => !v); setResult(null); }} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/70 hover:border-accent">
           {open ? "Tutup" : "+ Tambah tenant"}
         </button>
       </div>
@@ -1077,24 +1077,24 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
               </div>
               <p className="mt-2 text-xs text-emerald-100/50">Tempel key ini ke layar "Setup / Pair kiosk ini" di aplikasi Electron tenant ini.</p>
             </div>
-            <button type="button" onClick={() => setResult(null)} className="mt-4 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60">Buat tenant lain</button>
+            <button type="button" onClick={() => setResult(null)} className="mt-4 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60">Buat tenant lain</button>
           </div>
         ) : (
           <div className="mt-5">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-sm text-white/60">Nama studio
+              <label className="text-sm text-fg/60">Nama studio
                 <input className={inputClass} placeholder="Studio Kenangan" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value, slug: draft.slug || slugify(e.target.value) })} />
               </label>
-              <label className="text-sm text-white/60">Slug
+              <label className="text-sm text-fg/60">Slug
                 <input className={inputClass} placeholder="studio-kenangan" value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: slugify(e.target.value) })} />
               </label>
-              <label className="text-sm text-white/60">Email admin
+              <label className="text-sm text-fg/60">Email admin
                 <input className={inputClass} type="email" placeholder="owner@studio.com" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
               </label>
-              <label className="text-sm text-white/60">Password admin
+              <label className="text-sm text-fg/60">Password admin
                 <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} autoComplete="new-password" />
               </label>
-              <label className="text-sm text-white/60 sm:col-span-2">Plan awal (opsional)
+              <label className="text-sm text-fg/60 sm:col-span-2">Plan awal (opsional)
                 <select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
                   <option value="">Trial (default)</option>
                   {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
@@ -1106,7 +1106,7 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
               {showProfile ? "− Sembunyikan detail bisnis" : "+ Detail bisnis (opsional — pemilik, kontak, referral)"}
             </button>
             {showProfile && (
-              <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-4">
+              <div className="mt-3 rounded-xl border border-fg/10 bg-fg/5 p-4">
                 <ProfileFieldsGrid value={profile} onChange={(patch) => setProfile({ ...profile, ...patch })} />
               </div>
             )}
@@ -1169,15 +1169,15 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
     <div className="rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Catat pembayaran</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="text-sm text-white/60 sm:col-span-2">Plan (opsional — isi otomatis nominal & periode)
+        <label className="text-sm text-fg/60 sm:col-span-2">Plan (opsional — isi otomatis nominal & periode)
           <select className={inputClass} value={planId} onChange={(e) => applyPlan(e.target.value)}>
             <option value="">Tanpa plan (manual)</option>
             {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {money(Number(plan.price))}{BILLING_LABEL[plan.billingInterval]}</option>)}
           </select>
         </label>
-        <label className="text-sm text-white/60">Nominal (Rp)<input className={inputClass} type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-        <label className="text-sm text-white/60">Perpanjang (hari)<input className={inputClass} type="number" min={1} value={periodDays} onChange={(e) => setPeriodDays(e.target.value)} /></label>
-        <label className="text-sm text-white/60">Metode
+        <label className="text-sm text-fg/60">Nominal (Rp)<input className={inputClass} type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Perpanjang (hari)<input className={inputClass} type="number" min={1} value={periodDays} onChange={(e) => setPeriodDays(e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Metode
           <select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="manual">Manual</option>
             <option value="transfer">Transfer bank</option>
@@ -1185,7 +1185,7 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
             <option value="other">Lainnya</option>
           </select>
         </label>
-        <label className="text-sm text-white/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       </div>
       {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
       <button type="button" onClick={submit} disabled={submitting || !amount} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">
@@ -1234,14 +1234,14 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   };
 
   return (
-    <section className="rounded-[2rem] border border-accent/30 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-accent/30 bg-fg/[0.045] p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[.16em] text-accent">DETAIL TENANT</p>
           <h2 className="mt-2 font-display text-xl font-semibold">{tenant?.name ?? (loading ? "Memuat…" : "Tenant tidak ditemukan")}</h2>
-          {tenant && <p className="mt-1 text-sm text-white/45">{tenant.slug} · dibuat {formatDate(tenant.createdAt)}</p>}
+          {tenant && <p className="mt-1 text-sm text-fg/45">{tenant.slug} · dibuat {formatDate(tenant.createdAt)}</p>}
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/60 hover:border-white/30">Tutup</button>
+        <button type="button" onClick={onClose} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-fg/30">Tutup</button>
       </div>
 
       {tenant && (
@@ -1250,75 +1250,75 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
             <RecordPaymentForm tenant={tenant} plans={plans} onRecorded={refreshAll} />
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Riwayat pembayaran ({tenant.payments.length})</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Riwayat pembayaran ({tenant.payments.length})</p>
               <div className="mt-3 space-y-2">
                 {tenant.payments.map((payment) => (
-                  <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm">
+                  <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3 text-sm">
                     <div>
-                      <p className="font-semibold">{money(Number(payment.amount))} <span className="font-normal text-white/40">· +{payment.periodDays} hari</span></p>
-                      <p className="text-xs text-white/40">{payment.planName ?? "Tanpa plan"} · {payment.method} · {formatDate(payment.createdAt)}{payment.recordedBy ? ` · oleh ${payment.recordedBy}` : ""}</p>
-                      {payment.note && <p className="mt-1 text-xs text-white/50">{payment.note}</p>}
+                      <p className="font-semibold">{money(Number(payment.amount))} <span className="font-normal text-fg/40">· +{payment.periodDays} hari</span></p>
+                      <p className="text-xs text-fg/40">{payment.planName ?? "Tanpa plan"} · {payment.method} · {formatDate(payment.createdAt)}{payment.recordedBy ? ` · oleh ${payment.recordedBy}` : ""}</p>
+                      {payment.note && <p className="mt-1 text-xs text-fg/50">{payment.note}</p>}
                     </div>
                   </div>
                 ))}
-                {tenant.payments.length === 0 && <p className="text-sm text-white/40">Belum ada pembayaran tercatat.</p>}
+                {tenant.payments.length === 0 && <p className="text-sm text-fg/40">Belum ada pembayaran tercatat.</p>}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Profil bisnis</p>
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Profil bisnis</p>
               <div className="mt-3">
                 <ProfileFieldsGrid value={profileDraft} onChange={(patch) => setProfileDraft({ ...profileDraft, ...patch })} />
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <button type="button" onClick={saveProfile} disabled={savingProfile} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:opacity-50">{savingProfile ? "Menyimpan…" : "Simpan profil"}</button>
-                {profileMessage && <span className="text-xs text-white/50">{profileMessage}</span>}
+                {profileMessage && <span className="text-xs text-fg/50">{profileMessage}</span>}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Aktivitas terbaru</p>
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Aktivitas terbaru</p>
               <div className="mt-2 space-y-2">
                 {tenant.recentEvents.map((event) => (
                   <div key={event.id} className="text-sm">
                     <span className={`mr-2 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${LEVEL_STYLE[event.level]}`}>{event.level}</span>
-                    <span className="text-white/70">{event.message}</span>
-                    <p className="ml-[3.1rem] text-xs text-white/35">{new Date(event.createdAt).toLocaleString("id-ID")}</p>
+                    <span className="text-fg/70">{event.message}</span>
+                    <p className="ml-[3.1rem] text-xs text-fg/35">{new Date(event.createdAt).toLocaleString("id-ID")}</p>
                   </div>
                 ))}
-                {tenant.recentEvents.length === 0 && <p className="text-sm text-white/40">Belum ada aktivitas tercatat untuk tenant ini.</p>}
+                {tenant.recentEvents.length === 0 && <p className="text-sm text-fg/40">Belum ada aktivitas tercatat untuk tenant ini.</p>}
               </div>
             </div>
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Status langganan</p>
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Status langganan</p>
               <div className="mt-2 flex items-center gap-2">
-                <span className="text-sm text-white/70">{formatDate(tenant.subscriptionEndsAt)}</span>
+                <span className="text-sm text-fg/70">{formatDate(tenant.subscriptionEndsAt)}</span>
                 <StatusPill subscriptionEndsAt={tenant.subscriptionEndsAt} locked={tenant.locked} />
               </div>
-              <p className="mt-2 text-xs text-white/40">Plan saat ini: {plans.find((p) => p.slug === tenant.plan)?.name ?? tenant.plan}</p>
+              <p className="mt-2 text-xs text-fg/40">Plan saat ini: {plans.find((p) => p.slug === tenant.plan)?.name ?? tenant.plan}</p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Admin ({tenant.admins.length})</p>
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Admin ({tenant.admins.length})</p>
               <div className="mt-2 space-y-1.5">
-                {tenant.admins.map((admin) => <p key={admin.id} className="text-sm text-white/70">{admin.email}</p>)}
-                {tenant.admins.length === 0 && <p className="text-sm text-white/40">Belum ada admin.</p>}
+                {tenant.admins.map((admin) => <p key={admin.id} className="text-sm text-fg/70">{admin.email}</p>)}
+                {tenant.admins.length === 0 && <p className="text-sm text-fg/40">Belum ada admin.</p>}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Kiosk key ({tenant.kioskKeys.length})</p>
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Kiosk key ({tenant.kioskKeys.length})</p>
               <div className="mt-2 space-y-2">
                 {tenant.kioskKeys.map((key) => {
                   const diag = key.lastDiagnostics;
                   const issues = diag ? [!diag.cameraOk && "kamera", !diag.printerOk && "printer", !diag.networkOk && "jaringan"].filter(Boolean) as string[] : [];
                   return (
                     <div key={key.id} className="text-sm">
-                      <p className="text-white/70">{key.label ?? "(tanpa label)"} {key.revokedAt && <span className="text-red-300">· dicabut</span>}{key.appVersion && <span className="text-white/30"> · v{key.appVersion}</span>}</p>
-                      <p className="text-xs text-white/40">
+                      <p className="text-fg/70">{key.label ?? "(tanpa label)"} {key.revokedAt && <span className="text-red-300">· dicabut</span>}{key.appVersion && <span className="text-fg/30"> · v{key.appVersion}</span>}</p>
+                      <p className="text-xs text-fg/40">
                         {key.boundDeviceId ? "Device terpasang" : "Belum terpasang di device manapun"} · Terakhir dipakai {key.lastUsedAt ? formatDate(key.lastUsedAt) : "belum pernah"}
                       </p>
                       {diag && (
@@ -1329,7 +1329,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
                     </div>
                   );
                 })}
-                {tenant.kioskKeys.length === 0 && <p className="text-sm text-white/40">Belum ada kiosk key.</p>}
+                {tenant.kioskKeys.length === 0 && <p className="text-sm text-fg/40">Belum ada kiosk key.</p>}
               </div>
             </div>
           </div>
@@ -1446,20 +1446,20 @@ export default function SuperadminDashboard() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
             <h1 className="mt-1 font-display text-3xl font-bold">Admin Pusat</h1>
-            {email && <p className="mt-1 text-sm text-white/45">Masuk sebagai {email}</p>}
+            {email && <p className="mt-1 text-sm text-fg/45">Masuk sebagai {email}</p>}
           </div>
-          <button type="button" onClick={logout} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-red-400 hover:text-red-300">
+          <button type="button" onClick={logout} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-red-400 hover:text-red-300">
             Keluar
           </button>
         </header>
 
-        <nav className="flex flex-wrap gap-2 border-b border-white/10 pb-4">
+        <nav className="flex flex-wrap gap-2 border-b border-fg/10 pb-4">
           {SECTIONS.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setSection(item.id)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-white/55 hover:bg-white/10 hover:text-white"}`}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}
             >
               <span className="opacity-70">{item.icon}</span>
               {item.label}

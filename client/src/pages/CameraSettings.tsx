@@ -77,18 +77,18 @@ function CameraPropertiesPanel({ bridgeUrl, enabled }: { bridgeUrl: string; enab
     <section className={sectionClass}>
       <div className="flex items-center justify-between gap-3">
         <div><p className="eyebrow">TETHER CONTROL</p><h2 className="font-display text-xl font-semibold">Pengaturan kamera</h2></div>
-        <button type="button" onClick={load} disabled={loading} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:text-white disabled:opacity-50">
+        <button type="button" onClick={load} disabled={loading} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg disabled:opacity-50">
           {loading ? "Memuat…" : "Refresh"}
         </button>
       </div>
       {!properties ? (
-        <p className="mt-4 text-xs text-white/40">Memuat pengaturan kamera...</p>
+        <p className="mt-4 text-xs text-fg/40">Memuat pengaturan kamera...</p>
       ) : (
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {Object.entries(properties).map(([name, state]) => (
             <Field key={name} label={PROPERTY_LABELS[name] ?? name}>
               {state.error || state.choices.length === 0 ? (
-                <p className="mt-2 text-xs text-white/30">Tidak tersedia di kamera ini</p>
+                <p className="mt-2 text-xs text-fg/30">Tidak tersedia di kamera ini</p>
               ) : (
                 <select
                   className={inputClass}
@@ -102,7 +102,7 @@ function CameraPropertiesPanel({ bridgeUrl, enabled }: { bridgeUrl: string; enab
           ))}
         </div>
       )}
-      <p className="mt-3 text-xs text-white/40">Langsung mengubah kamera fisik yang terhubung — bukan preset, ini kontrol langsung ke hardware.</p>
+      <p className="mt-3 text-xs text-fg/40">Langsung mengubah kamera fisik yang terhubung — bukan preset, ini kontrol langsung ke hardware.</p>
       <div className="mt-4">
         <button
           type="button"
@@ -131,7 +131,7 @@ const pickDraft = (config: BoothConfig): CameraDraft => ({
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={`block ${className}`}>
-      <span className="text-sm text-white/60">{label}</span>
+      <span className="text-sm text-fg/60">{label}</span>
       {children}
     </label>
   );
@@ -177,9 +177,9 @@ function AdminLiveView({ bridgeUrl, enabled }: { bridgeUrl: string; enabled: boo
         {enabled && <span className="rounded-full border border-emerald-300/30 px-2 py-1 text-[0.625rem] text-emerald-200">LIVE</span>}
       </div>
       <div className="mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/50">
-        {enabled && imageUrl ? <img src={imageUrl} alt="Live view kamera" className="h-full w-full object-contain" /> : <p className="px-5 text-center text-xs text-white/35">Aktifkan mode tether dan pastikan bridge kamera terhubung untuk melihat live view.</p>}
+        {enabled && imageUrl ? <img src={imageUrl} alt="Live view kamera" className="h-full w-full object-contain" /> : <p className="px-5 text-center text-xs text-fg/35">Aktifkan mode tether dan pastikan bridge kamera terhubung untuk melihat live view.</p>}
       </div>
-      <p className="mt-3 text-xs text-white/40">Preview ini hanya memantau kamera. Pengambilan foto tetap dilakukan dari sesi kiosk.</p>
+      <p className="mt-3 text-xs text-fg/40">Preview ini hanya memantau kamera. Pengambilan foto tetap dilakukan dari sesi kiosk.</p>
     </section>
   );
 }
@@ -242,11 +242,11 @@ export default function CameraSettings() {
           </div>
           <label className="flex items-center gap-3">
             <input type="checkbox" checked={draft.beepEnabled} onChange={(e) => set("beepEnabled", e.target.checked)} />
-            <span className="text-sm text-white/70">Suara beep countdown</span>
+            <span className="text-sm text-fg/70">Suara beep countdown</span>
           </label>
           <label className="flex items-center gap-3">
             <input type="checkbox" checked={draft.autoCaptureEnabled} onChange={(e) => set("autoCaptureEnabled", e.target.checked)} />
-            <span className="text-sm text-white/70">Jepret otomatis (kiosk lanjut sendiri ke foto berikutnya, tanpa perlu customer menekan tombol tiap kali)</span>
+            <span className="text-sm text-fg/70">Jepret otomatis (kiosk lanjut sendiri ke foto berikutnya, tanpa perlu customer menekan tombol tiap kali)</span>
           </label>
           <Field label="Mode kamera">
             <select className={inputClass} value={draft.cameraMode} onChange={(e) => set("cameraMode", e.target.value as BoothConfig["cameraMode"])}>
@@ -258,13 +258,13 @@ export default function CameraSettings() {
             <Field label="URL tether bridge">
               <div className="flex gap-2">
                 <input className={`${inputClass} flex-1`} value={draft.tetherBridgeUrl} onChange={(e) => set("tetherBridgeUrl", e.target.value)} placeholder="http://127.0.0.1:5510" />
-                <button type="button" onClick={checkBridgeNow} className="mt-1 shrink-0 rounded-lg border border-white/15 px-3 text-xs text-white/60 hover:text-white">
+                <button type="button" onClick={checkBridgeNow} className="mt-1 shrink-0 rounded-lg border border-fg/15 px-3 text-xs text-fg/60 hover:text-fg">
                   {bridgeChecking ? "Cek..." : "Cek koneksi"}
                 </button>
               </div>
               <p className="mt-2 text-xs">
                 {bridgeHealth === null ? (
-                  <span className="text-white/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
+                  <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable ? (
                   <span className="text-emerald-300">● Bridge aktif, digiCamControl terhubung ({bridgeHealth.digicamUrl})</span>
                 ) : bridgeHealth.ok ? (
@@ -287,7 +287,7 @@ export default function CameraSettings() {
             {saving ? "Menyimpan…" : "Simpan"}
           </button>
           {dirty && (
-            <button type="button" onClick={cancel} className="text-sm text-white/50 hover:text-white">
+            <button type="button" onClick={cancel} className="text-sm text-fg/50 hover:text-fg">
               Batalkan perubahan
             </button>
           )}

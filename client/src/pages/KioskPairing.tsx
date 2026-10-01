@@ -3,7 +3,7 @@ import { setApiBaseUrl, setKioskKey, getApiBaseUrl } from "@/lib/apiConfig";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { ApiError } from "@/lib/api";
 
-const inputClass = "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm outline-none focus:border-accent";
+const inputClass = "w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent";
 
 export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
   const [apiBaseUrl, setApiBaseUrlInput] = useState(() => (getApiBaseUrl() === "/api" ? "" : getApiBaseUrl()));
@@ -53,10 +53,10 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
 
   return (
     <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] px-4 text-[var(--kiosk-text)]">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Setup kiosk ini</h1>
-        <p className="mt-2 text-sm text-white/45">
+        <p className="mt-2 text-sm text-fg/45">
           Tempel kiosk API key dari dashboard admin (Admin → Kiosk) untuk menghubungkan kiosk ini ke tenant kamu.
         </p>
 

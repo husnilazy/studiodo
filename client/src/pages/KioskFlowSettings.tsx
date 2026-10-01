@@ -84,21 +84,21 @@ export default function KioskFlowSettings() {
   if (loading) return null;
 
   return (
-    <section className="mx-auto max-w-4xl rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
+    <section className="mx-auto max-w-4xl rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
       <p className="eyebrow">KIOSK</p>
       <h3 className="mt-2 font-display text-3xl font-semibold">Flow Kiosk</h3>
-      <p className="mt-2 max-w-xl text-sm text-white/45">
+      <p className="mt-2 max-w-xl text-sm text-fg/45">
         Atur urutan layar yang dilihat customer, dan nyalakan/matikan step opsional. Drag untuk pindah urutan.
         Step bertanda "Wajib" tidak bisa dimatikan atau dilepas dari urutan relatifnya karena dibutuhkan datanya
         oleh step lain (mis. Pembayaran butuh paket sudah dipilih).
       </p>
 
-      <div className="mt-6 flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+      <div className="mt-6 flex items-center justify-between rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
         <div>
           <p className="text-sm font-semibold">Halaman Awal (Idle)</p>
-          <p className="text-xs text-white/40">Layar pertama yang dilihat customer, sebelum menyentuh layar.</p>
+          <p className="text-xs text-fg/40">Layar pertama yang dilihat customer, sebelum menyentuh layar.</p>
         </div>
-        <Link href="/admin/screen-builder/idle" className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white">
+        <Link href="/admin/screen-builder/idle" className="shrink-0 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">
           Desain
         </Link>
       </div>
@@ -123,21 +123,21 @@ export default function KioskFlowSettings() {
               }}
               onDragEnd={() => { dragIndex.current = null; setDragOverIndex(null); }}
               className={`flex cursor-grab items-center gap-3 rounded-xl border px-4 py-3 transition active:cursor-grabbing ${
-                dragOverIndex === index ? "border-accent bg-accent/10" : "border-white/10 bg-black/20"
+                dragOverIndex === index ? "border-accent bg-accent/10" : "border-fg/10 bg-fg/5"
               } ${isOff ? "opacity-50" : ""}`}
             >
-              <span className="select-none text-white/30">⠿</span>
-              <span className="w-6 shrink-0 text-center text-xs text-white/40">{index + 1}</span>
+              <span className="select-none text-fg/30">⠿</span>
+              <span className="w-6 shrink-0 text-center text-xs text-fg/40">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{def.label}</p>
-                <p className="truncate text-xs text-white/40">{def.hint}</p>
+                <p className="truncate text-xs text-fg/40">{def.hint}</p>
               </div>
               {DESIGNABLE_SCREENS.has(key) ? (
-                <Link href={`/admin/screen-builder/${key}`} className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:border-accent hover:text-white">
+                <Link href={`/admin/screen-builder/${key}`} className="shrink-0 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">
                   Desain
                 </Link>
               ) : (
-                <span className="shrink-0 rounded-lg border border-white/5 px-3 py-1.5 text-xs text-white/20" title="Belum bisa didesain (Fase 5b)">Desain</span>
+                <span className="shrink-0 rounded-lg border border-fg/5 px-3 py-1.5 text-xs text-fg/20" title="Belum bisa didesain (Fase 5b)">Desain</span>
               )}
               {isLocked ? (
                 <span className="shrink-0 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent">Wajib</span>
@@ -145,7 +145,7 @@ export default function KioskFlowSettings() {
                 <button
                   type="button"
                   onClick={() => toggle(key)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${isOff ? "bg-white/15" : "bg-accent"}`}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${isOff ? "bg-fg/15" : "bg-accent"}`}
                   aria-label={`Aktifkan/matikan ${def.label}`}
                 >
                   <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${isOff ? "left-0.5" : "left-[22px]"}`} />
@@ -169,10 +169,10 @@ export default function KioskFlowSettings() {
         >
           {saving ? "Menyimpan…" : "Simpan"}
         </button>
-        <button type="button" onClick={resetDefault} className="rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 hover:text-white">
+        <button type="button" onClick={resetDefault} className="rounded-xl border border-fg/15 px-4 py-3 text-sm text-fg/60 hover:text-fg">
           Reset ke default
         </button>
-        {message && <span className="text-sm text-white/50">{message}</span>}
+        {message && <span className="text-sm text-fg/50">{message}</span>}
       </div>
     </section>
   );

@@ -21,8 +21,8 @@ export default function SubscriptionLockedScreen() {
       <span className="rounded-full border border-red-400/30 bg-red-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
         Kiosk Terkunci
       </span>
-      <h1 className="font-display text-4xl font-bold text-white md:text-5xl">{config.brandName}</h1>
-      <p className="max-w-md text-white/50">
+      <h1 className="font-display text-4xl font-bold text-fg md:text-5xl">{config.brandName}</h1>
+      <p className="max-w-md text-fg/50">
         Langganan STUDIODO untuk booth ini sudah berakhir dan melewati masa tenggang.
         Hubungi admin untuk memperpanjang supaya kiosk bisa dipakai lagi.
       </p>

@@ -105,7 +105,7 @@ export default function Positionable({ id, type, label, children, className }: P
     <div
       ref={wrapperRef}
       style={style ?? { position: "relative" }}
-      className={`${isSelected ? "outline outline-2 outline-offset-2 outline-accent" : "outline outline-1 outline-dashed outline-white/25 hover:outline-white/50"} cursor-move ${className ?? ""}`}
+      className={`${isSelected ? "outline outline-2 outline-offset-2 outline-accent" : "outline outline-1 outline-dashed outline-fg/25 hover:outline-fg/50"} cursor-move ${className ?? ""}`}
       onPointerDown={(event) => beginDrag(event, "move")}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

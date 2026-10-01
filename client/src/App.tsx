@@ -104,7 +104,7 @@ function AnimatedRoutes() {
           <Route path="/superadmin" component={SuperadminDashboard} />
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>
-            <div className="flex h-full items-center justify-center text-white/50">Halaman tidak ditemukan</div>
+            <div className="flex h-full items-center justify-center text-fg/50">Halaman tidak ditemukan</div>
           </Route>
         </Switch>
       </motion.div>

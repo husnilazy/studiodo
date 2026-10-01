@@ -17,10 +17,10 @@ export default function DeviceMismatchScreen() {
       <span className="rounded-full border border-red-400/30 bg-red-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
         Kiosk Terkunci — Device Lain
       </span>
-      <h1 className="font-display text-4xl font-bold text-white md:text-5xl">{config.brandName}</h1>
-      <p className="max-w-md text-white/50">
+      <h1 className="font-display text-4xl font-bold text-fg md:text-5xl">{config.brandName}</h1>
+      <p className="max-w-md text-fg/50">
         Kiosk key ini sudah terpasang di komputer lain — satu key hanya bisa dipakai di satu device.
-        Minta admin buka dashboard <span className="text-white/70">Kiosk</span> dan pilih "Reset device"
+        Minta admin buka dashboard <span className="text-fg/70">Kiosk</span> dan pilih "Reset device"
         pada key ini untuk memindahkannya ke komputer ini, atau buat kiosk key baru khusus untuk booth ini.
       </p>
     </div>

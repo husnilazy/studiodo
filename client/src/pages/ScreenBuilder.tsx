@@ -33,13 +33,13 @@ const SCREEN_COMPONENTS: Partial<Record<string, React.ComponentType>> = {
   result: Hasil,
 };
 
-const inputClass = "w-20 rounded-lg border border-white/15 bg-black/20 px-2 py-1.5 text-sm outline-none focus:border-accent";
-const fieldInputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-2.5 py-2 text-sm outline-none focus:border-accent";
+const inputClass = "w-20 rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-sm outline-none focus:border-accent";
+const fieldInputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-2.5 py-2 text-sm outline-none focus:border-accent";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-xs text-white/50">{label}</span>
+      <span className="text-xs text-fg/50">{label}</span>
       {children}
     </label>
   );
@@ -68,7 +68,7 @@ function BrandingPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-white/35">Logo & Nama</p>
+        <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-fg/35">Logo & Nama</p>
         <div className="space-y-3">
           <Field label="Logo PNG">
             <input className={fieldInputClass} type="file" accept="image/png" onChange={(event) => {
@@ -78,7 +78,7 @@ function BrandingPanel() {
               reader.onload = () => set("logoUrl", String(reader.result));
               reader.readAsDataURL(file);
             }} />
-            {config.logoUrl && <img src={config.logoUrl} className="mt-2 h-10 w-auto rounded-lg bg-white/10 p-1.5 object-contain" />}
+            {config.logoUrl && <img src={config.logoUrl} className="mt-2 h-10 w-auto rounded-lg bg-fg/10 p-1.5 object-contain" />}
           </Field>
           <Field label={`Ukuran logo (${config.logoScale}%)`}>
             <input type="range" min={60} max={180} value={config.logoScale} onChange={(e) => set("logoScale", Number(e.target.value))} className="mt-2 w-full accent-[var(--accent)]" />
@@ -90,12 +90,12 @@ function BrandingPanel() {
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-[.16em] text-white/35">Warna & Font</p>
-          <button type="button" onClick={() => applyThemePreset(config.themeMode)} className="text-[10px] text-white/40 underline decoration-dotted hover:text-white/70">Reset preset</button>
+          <p className="text-[10px] uppercase tracking-[.16em] text-fg/35">Warna & Font</p>
+          <button type="button" onClick={() => applyThemePreset(config.themeMode)} className="text-[10px] text-fg/40 underline decoration-dotted hover:text-fg/70">Reset preset</button>
         </div>
-        <div className="mb-3 inline-flex rounded-lg border border-white/15 p-1 text-xs">
+        <div className="mb-3 inline-flex rounded-lg border border-fg/15 p-1 text-xs">
           {([["dark", "Gelap"], ["light", "Terang"]] as const).map(([mode, label]) => (
-            <button key={mode} type="button" onClick={() => set("themeMode", mode)} className={`rounded px-2.5 py-1 ${config.themeMode === mode ? "bg-accent text-white" : "text-white/50"}`}>{label}</button>
+            <button key={mode} type="button" onClick={() => set("themeMode", mode)} className={`rounded px-2.5 py-1 ${config.themeMode === mode ? "bg-accent text-white" : "text-fg/50"}`}>{label}</button>
           ))}
         </div>
         <div className="space-y-3">
@@ -114,7 +114,7 @@ function BrandingPanel() {
         </div>
       </div>
 
-      <button type="button" onClick={reset} className="w-full rounded-lg border border-white/15 py-2 text-xs text-white/50 hover:text-white">Reset semua branding ke default</button>
+      <button type="button" onClick={reset} className="w-full rounded-lg border border-fg/15 py-2 text-xs text-fg/50 hover:text-fg">Reset semua branding ke default</button>
     </div>
   );
 }
@@ -296,61 +296,61 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-[#0b0b10] px-6 text-center text-white">
         <p className="text-xs uppercase tracking-[.16em] text-accent">Screen Builder</p>
         <h1 className="font-display text-2xl font-semibold">Fitur ini tidak termasuk paket kamu saat ini</h1>
-        <p className="max-w-md text-sm text-white/50">
+        <p className="max-w-md text-sm text-fg/50">
           {planName ? `Paket "${planName}" tidak menyertakan Screen Builder.` : "Screen Builder tidak menyertai paket kamu saat ini."} Kiosk tetap jalan normal dengan tata letak bawaan. Hubungi admin platform untuk upgrade paket kalau butuh kustomisasi layar.
         </p>
-        <Link href="/admin" className="mt-2 rounded-xl border border-white/15 px-5 py-2.5 text-sm text-white/70 hover:border-accent hover:text-white">← Kembali ke dashboard</Link>
+        <Link href="/admin" className="mt-2 rounded-xl border border-fg/15 px-5 py-2.5 text-sm text-fg/70 hover:border-accent hover:text-fg">← Kembali ke dashboard</Link>
       </div>
     );
   }
 
   return (
     <div className="flex h-screen flex-col bg-[#0b0b10] text-white">
-      <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3">
+      <header className="flex shrink-0 items-center justify-between border-b border-fg/10 px-5 py-3">
         <div className="flex items-center gap-4">
-          <Link href="/admin" className="text-sm text-white/50 hover:text-white">← Kembali</Link>
+          <Link href="/admin" className="text-sm text-fg/50 hover:text-fg">← Kembali</Link>
           <div>
             <p className="text-xs uppercase tracking-[.16em] text-accent">Editor WYSIWYG</p>
             <h1 className="font-display text-lg font-semibold capitalize">{screenKey}</h1>
           </div>
-          <div className="flex rounded-lg border border-white/15 p-1 text-xs">
-            <button type="button" onClick={() => setOrientation("portrait")} className={`rounded px-3 py-1.5 ${orientation === "portrait" ? "bg-accent" : "text-white/50"}`}>Portrait</button>
-            <button type="button" onClick={() => setOrientation("landscape")} className={`rounded px-3 py-1.5 ${orientation === "landscape" ? "bg-accent" : "text-white/50"}`}>Landscape</button>
+          <div className="flex rounded-lg border border-fg/15 p-1 text-xs">
+            <button type="button" onClick={() => setOrientation("portrait")} className={`rounded px-3 py-1.5 ${orientation === "portrait" ? "bg-accent" : "text-fg/50"}`}>Portrait</button>
+            <button type="button" onClick={() => setOrientation("landscape")} className={`rounded px-3 py-1.5 ${orientation === "landscape" ? "bg-accent" : "text-fg/50"}`}>Landscape</button>
           </div>
-          <div className="flex items-center gap-1 rounded-lg border border-white/15 p-1 text-xs">
-            <button type="button" onClick={() => setZoom((z) => Math.max(0.4, Math.round((z - 0.15) * 100) / 100))} className="rounded px-2.5 py-1.5 text-white/60 hover:bg-white/10 hover:text-white" title="Zoom out">−</button>
-            <button type="button" onClick={() => setZoom(1)} className="min-w-14 rounded px-2 py-1.5 text-white/60 hover:bg-white/10 hover:text-white" title="Reset ke ukuran pas layar">{Math.round(zoom * 100)}%</button>
-            <button type="button" onClick={() => setZoom((z) => Math.min(3, Math.round((z + 0.15) * 100) / 100))} className="rounded px-2.5 py-1.5 text-white/60 hover:bg-white/10 hover:text-white" title="Zoom in">+</button>
+          <div className="flex items-center gap-1 rounded-lg border border-fg/15 p-1 text-xs">
+            <button type="button" onClick={() => setZoom((z) => Math.max(0.4, Math.round((z - 0.15) * 100) / 100))} className="rounded px-2.5 py-1.5 text-fg/60 hover:bg-fg/10 hover:text-fg" title="Zoom out">−</button>
+            <button type="button" onClick={() => setZoom(1)} className="min-w-14 rounded px-2 py-1.5 text-fg/60 hover:bg-fg/10 hover:text-fg" title="Reset ke ukuran pas layar">{Math.round(zoom * 100)}%</button>
+            <button type="button" onClick={() => setZoom((z) => Math.min(3, Math.round((z + 0.15) * 100) / 100))} className="rounded px-2.5 py-1.5 text-fg/60 hover:bg-fg/10 hover:text-fg" title="Zoom in">+</button>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={resetDefault} disabled={saving} className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/60 hover:text-white disabled:opacity-50">Reset ke default</button>
+          <button type="button" onClick={resetDefault} disabled={saving} className="rounded-lg border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:text-fg disabled:opacity-50">Reset ke default</button>
           <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving ? "Menyimpan…" : "Simpan"}</button>
-          {message && <span className="text-xs text-white/50">{message}</span>}
+          {message && <span className="text-xs text-fg/50">{message}</span>}
         </div>
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-[220px_1fr_260px]">
-        <aside className="overflow-y-auto border-r border-white/10 p-4">
-          <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-white/35">Tambah elemen</p>
+        <aside className="overflow-y-auto border-r border-fg/10 p-4">
+          <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-fg/35">Tambah elemen</p>
           <div className="mb-5 flex gap-2">
-            <label className="flex-1 cursor-pointer rounded-lg border border-dashed border-white/20 px-2.5 py-2 text-center text-xs text-white/60 hover:border-accent hover:text-white">
+            <label className="flex-1 cursor-pointer rounded-lg border border-dashed border-fg/20 px-2.5 py-2 text-center text-xs text-fg/60 hover:border-accent hover:text-fg">
               + Gambar
               <input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) addCustomImage(file); event.target.value = ""; }} />
             </label>
-            <button type="button" onClick={addCustomText} className="flex-1 rounded-lg border border-dashed border-white/20 px-2.5 py-2 text-xs text-white/60 hover:border-accent hover:text-white">+ Teks</button>
+            <button type="button" onClick={addCustomText} className="flex-1 rounded-lg border border-dashed border-fg/20 px-2.5 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">+ Teks</button>
           </div>
-          <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-white/35">Layers</p>
+          <p className="mb-2 text-[10px] uppercase tracking-[.16em] text-fg/35">Layers</p>
           {(["sistem", "teks", "media"] as const).map((group) => (
             <div key={group} className="mb-4">
-              <p className="mb-1 text-[10px] uppercase tracking-wide text-white/30">{group === "sistem" ? "Sistem" : group === "teks" ? "Teks" : "Gambar & Video"} {grouped[group].length}</p>
-              {grouped[group].length === 0 && <p className="text-xs text-white/25">— kosong —</p>}
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-fg/30">{group === "sistem" ? "Sistem" : group === "teks" ? "Teks" : "Gambar & Video"} {grouped[group].length}</p>
+              {grouped[group].length === 0 && <p className="text-xs text-fg/25">— kosong —</p>}
               {grouped[group].map((el) => (
                 <button
                   key={el.id}
                   type="button"
                   onClick={() => setSelectedId(el.id)}
-                  className={`mb-1 block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs ${selectedId === el.id ? "bg-accent text-white" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
+                  className={`mb-1 block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs ${selectedId === el.id ? "bg-accent text-white" : "bg-fg/5 text-fg/60 hover:bg-fg/10"}`}
                 >
                   {el.label}
                 </button>
@@ -361,7 +361,7 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
 
         <main ref={canvasWrapRef} className="relative flex min-h-0 items-center justify-center overflow-auto bg-black/40 p-8">
           {loading ? (
-            <p className="text-sm text-white/40">Memuat…</p>
+            <p className="text-sm text-fg/40">Memuat…</p>
           ) : (
             (() => {
               // Real kiosk pages assume a full-viewport-sized container (lots of
@@ -381,7 +381,7 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
                 <div
                   ref={canvasRef}
                   onClick={() => setSelectedId(null)}
-                  className="relative shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-[var(--kiosk-background,#111)] text-[var(--kiosk-text,#fff)] shadow-2xl"
+                  className="relative shrink-0 overflow-hidden rounded-2xl border border-fg/15 bg-[var(--kiosk-background,#111)] text-[var(--kiosk-text,#fff)] shadow-2xl"
                   style={{ width: DISPLAY.width, height: DISPLAY.height }}
                 >
                   <PositionableProvider
@@ -395,12 +395,12 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
                     scale={scale}
                   >
                     <div style={{ width: VIRTUAL.width, height: VIRTUAL.height, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-                      {ScreenComponent ? <ScreenComponent /> : <p className="p-8 text-sm text-white/40">Layar ini belum bisa didesain (Fase 5b).</p>}
+                      {ScreenComponent ? <ScreenComponent /> : <p className="p-8 text-sm text-fg/40">Layar ini belum bisa didesain (Fase 5b).</p>}
                       {Object.values(overrides).filter((el) => el.id.startsWith("custom-")).map((el) => (
                         <Positionable key={el.id} id={el.id} type={el.type} label={el.type === "image" ? "Gambar custom" : "Teks custom"}>
                           {el.type === "image"
                             ? <img src={el.content} alt="" className="h-full w-full object-contain" />
-                            : <p className="flex h-full w-full items-center text-white" style={el.fontSizeVw ? { fontSize: `${el.fontSizeVw}vw` } : undefined}>{el.content}</p>}
+                            : <p className="flex h-full w-full items-center text-fg" style={el.fontSizeVw ? { fontSize: `${el.fontSizeVw}vw` } : undefined}>{el.content}</p>}
                         </Positionable>
                       ))}
                     </div>
@@ -411,44 +411,44 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
           )}
         </main>
 
-        <aside className="overflow-y-auto border-l border-white/10 p-4">
-          <div className="mb-3 flex rounded-lg border border-white/15 p-1 text-xs">
-            <button type="button" onClick={() => setRightTab("elemen")} className={`flex-1 rounded px-2.5 py-1.5 ${rightTab === "elemen" ? "bg-accent text-white" : "text-white/50 hover:text-white"}`}>Elemen</button>
-            <button type="button" onClick={() => setRightTab("branding")} className={`flex-1 rounded px-2.5 py-1.5 ${rightTab === "branding" ? "bg-accent text-white" : "text-white/50 hover:text-white"}`}>Branding</button>
+        <aside className="overflow-y-auto border-l border-fg/10 p-4">
+          <div className="mb-3 flex rounded-lg border border-fg/15 p-1 text-xs">
+            <button type="button" onClick={() => setRightTab("elemen")} className={`flex-1 rounded px-2.5 py-1.5 ${rightTab === "elemen" ? "bg-accent text-white" : "text-fg/50 hover:text-fg"}`}>Elemen</button>
+            <button type="button" onClick={() => setRightTab("branding")} className={`flex-1 rounded px-2.5 py-1.5 ${rightTab === "branding" ? "bg-accent text-white" : "text-fg/50 hover:text-fg"}`}>Branding</button>
           </div>
 
           {rightTab === "branding" ? (
             <BrandingPanel />
           ) : !selected ? (
-            <p className="text-xs text-white/30">Pilih elemen di canvas atau panel Layers.</p>
+            <p className="text-xs text-fg/30">Pilih elemen di canvas atau panel Layers.</p>
           ) : (
             <div className="space-y-4">
               <p className="text-sm font-semibold">{registeredElements.find((el) => el.id === selected.id)?.label ?? selected.id}</p>
               {selected.id.startsWith("custom-") && selected.type === "text" && (
-                <label className="block text-xs text-white/50">
+                <label className="block text-xs text-fg/50">
                   Isi teks
                   <textarea rows={2} className={`${inputClass} mt-1 w-full`} value={selected.content ?? ""} onChange={(e) => updateOverride(selected.id, { content: e.target.value })} />
                 </label>
               )}
               {selected.type === "text" && (
-                <label className="block text-xs text-white/50">
+                <label className="block text-xs text-fg/50">
                   Ukuran font (vw)
                   <input type="number" min={0.5} step={0.5} className={`${inputClass} mt-1 w-full`} value={selected.fontSizeVw ?? ""} onChange={(e) => updateOverride(selected.id, { fontSizeVw: Number(e.target.value) || undefined })} />
                 </label>
               )}
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-white/50">X %<input type="number" className={inputClass} value={Math.round(selected.xPct)} onChange={(e) => updateOverride(selected.id, { xPct: Number(e.target.value) })} /></label>
-                <label className="text-xs text-white/50">Y %<input type="number" className={inputClass} value={Math.round(selected.yPct)} onChange={(e) => updateOverride(selected.id, { yPct: Number(e.target.value) })} /></label>
-                <label className="text-xs text-white/50">Width %<input type="number" className={inputClass} value={Math.round(selected.widthPct)} onChange={(e) => updateOverride(selected.id, { widthPct: Number(e.target.value) })} /></label>
-                <label className="text-xs text-white/50">Height %<input type="number" className={inputClass} value={Math.round(selected.heightPct)} onChange={(e) => updateOverride(selected.id, { heightPct: Number(e.target.value) })} /></label>
+                <label className="text-xs text-fg/50">X %<input type="number" className={inputClass} value={Math.round(selected.xPct)} onChange={(e) => updateOverride(selected.id, { xPct: Number(e.target.value) })} /></label>
+                <label className="text-xs text-fg/50">Y %<input type="number" className={inputClass} value={Math.round(selected.yPct)} onChange={(e) => updateOverride(selected.id, { yPct: Number(e.target.value) })} /></label>
+                <label className="text-xs text-fg/50">Width %<input type="number" className={inputClass} value={Math.round(selected.widthPct)} onChange={(e) => updateOverride(selected.id, { widthPct: Number(e.target.value) })} /></label>
+                <label className="text-xs text-fg/50">Height %<input type="number" className={inputClass} value={Math.round(selected.heightPct)} onChange={(e) => updateOverride(selected.id, { heightPct: Number(e.target.value) })} /></label>
               </div>
               <div>
-                <p className="mb-1.5 text-[10px] uppercase tracking-wide text-white/30">Ke canvas</p>
-                <button type="button" onClick={fitToCanvas} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs hover:border-accent">Fit</button>
+                <p className="mb-1.5 text-[10px] uppercase tracking-wide text-fg/30">Ke canvas</p>
+                <button type="button" onClick={fitToCanvas} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs hover:border-accent">Fit</button>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={sendToBack} className="flex-1 rounded-lg border border-white/15 px-3 py-1.5 text-xs hover:border-accent">Ke Belakang</button>
-                <button type="button" onClick={bringToFront} className="flex-1 rounded-lg border border-white/15 px-3 py-1.5 text-xs hover:border-accent">Ke Depan</button>
+                <button type="button" onClick={sendToBack} className="flex-1 rounded-lg border border-fg/15 px-3 py-1.5 text-xs hover:border-accent">Ke Belakang</button>
+                <button type="button" onClick={bringToFront} className="flex-1 rounded-lg border border-fg/15 px-3 py-1.5 text-xs hover:border-accent">Ke Depan</button>
               </div>
               {selected.id.startsWith("custom-") && (
                 <button type="button" onClick={() => removeCustomElement(selected.id)} className="w-full rounded-lg border border-red-400/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-400/10">Hapus elemen ini</button>

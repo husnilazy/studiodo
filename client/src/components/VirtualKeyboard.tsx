@@ -43,10 +43,10 @@ export default function VirtualKeyboard({ value, onChange, onClose }: Props) {
           </div>
         ))}
         <div className="flex gap-2">
-          <button onClick={() => setShift((current) => !current)} className="min-h-11 rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">Shift</button>
-          <button onClick={() => setSymbols((current) => !current)} className="min-h-11 rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">#+=</button>
-          <button onClick={() => onChange(value.slice(0, -1))} className="min-h-11 flex-1 rounded-xl border border-white/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">⌫</button>
-          <button onClick={() => append(" ")} className="min-h-11 flex-[3] rounded-xl border border-white/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">Spasi</button>
+          <button onClick={() => setShift((current) => !current)} className="min-h-11 rounded-xl border border-fg/15 px-3 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">Shift</button>
+          <button onClick={() => setSymbols((current) => !current)} className="min-h-11 rounded-xl border border-fg/15 px-3 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">#+=</button>
+          <button onClick={() => onChange(value.slice(0, -1))} className="min-h-11 flex-1 rounded-xl border border-fg/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">⌫</button>
+          <button onClick={() => append(" ")} className="min-h-11 flex-[3] rounded-xl border border-fg/15 px-2 py-2 text-sm sm:min-h-12 sm:text-base">Spasi</button>
           <button onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-accent px-2 py-2 text-sm font-semibold sm:min-h-12 sm:text-base">Selesai</button>
         </div>
       </div>

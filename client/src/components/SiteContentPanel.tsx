@@ -6,7 +6,7 @@ import { getApiBaseUrl } from "@/lib/apiConfig";
 // whatever field schema the server sends (server/lib/siteContent.ts), so adding a
 // field or a whole section there needs no change here.
 
-const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
+const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 type Values = Record<string, unknown>;
 
 function blankValues(fields: SiteContentField[]): Values {
@@ -50,20 +50,20 @@ export function ImageField({ label, hint, value, onChange }: { label: string; hi
   };
 
   return (
-    <div className="text-sm text-white/60">
+    <div className="text-sm text-fg/60">
       {label}
-      <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-black/20 p-3">
-        <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-white/10">
-          {value ? <img src={assetPreviewUrl(value)} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-white/30">Belum ada</span>}
+      <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg border border-fg/15 bg-fg/5 p-3">
+        <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-fg/10">
+          {value ? <img src={assetPreviewUrl(value)} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-fg/30">Belum ada</span>}
         </div>
-        <label className="cursor-pointer rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/15">
+        <label className="cursor-pointer rounded-lg bg-fg/10 px-3 py-2 text-xs font-semibold text-fg hover:bg-fg/15">
           {busy ? "Mengunggah…" : value ? "Ganti gambar" : "Unggah gambar"}
           <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="sr-only" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
         </label>
         {value && <button type="button" onClick={() => onChange("")} className="rounded-lg px-3 py-2 text-xs text-red-300 hover:bg-red-500/15">Hapus</button>}
         {error && <span role="alert" className="text-xs text-red-300">{error}</span>}
       </div>
-      {hint && <span className="mt-1 block text-xs text-white/35">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-fg/35">{hint}</span>}
     </div>
   );
 }
@@ -85,22 +85,22 @@ function FieldsEditor({ fields, values, onChange }: { fields: SiteContentField[]
             update(next);
           };
           return (
-            <div key={f.key} className="rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div key={f.key} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-semibold text-white/80">{f.label} <span className="font-normal text-white/35">({items.length}/{max})</span></span>
-                <button type="button" disabled={items.length >= max} onClick={() => update([...items, blankValues(f.itemFields)])} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/15 disabled:opacity-40">
+                <span className="text-sm font-semibold text-fg/80">{f.label} <span className="font-normal text-fg/35">({items.length}/{max})</span></span>
+                <button type="button" disabled={items.length >= max} onClick={() => update([...items, blankValues(f.itemFields)])} className="rounded-lg bg-fg/10 px-3 py-1.5 text-xs font-semibold hover:bg-fg/15 disabled:opacity-40">
                   + Tambah {f.itemLabel.toLowerCase()}
                 </button>
               </div>
-              {items.length === 0 && <p className="text-xs text-white/35">Belum ada item.</p>}
+              {items.length === 0 && <p className="text-xs text-fg/35">Belum ada item.</p>}
               <div className="grid gap-3">
                 {items.map((item, i) => (
-                  <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs text-white/45">
+                  <div key={i} className="rounded-xl border border-fg/10 bg-fg/[0.03] p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs text-fg/45">
                       <span>{f.itemLabel} #{i + 1}</span>
                       <span className="flex gap-1">
-                        <button type="button" aria-label="Naikkan" onClick={() => move(i, -1)} disabled={i === 0} className="rounded px-2 py-0.5 hover:bg-white/10 disabled:opacity-30">↑</button>
-                        <button type="button" aria-label="Turunkan" onClick={() => move(i, 1)} disabled={i === items.length - 1} className="rounded px-2 py-0.5 hover:bg-white/10 disabled:opacity-30">↓</button>
+                        <button type="button" aria-label="Naikkan" onClick={() => move(i, -1)} disabled={i === 0} className="rounded px-2 py-0.5 hover:bg-fg/10 disabled:opacity-30">↑</button>
+                        <button type="button" aria-label="Turunkan" onClick={() => move(i, 1)} disabled={i === items.length - 1} className="rounded px-2 py-0.5 hover:bg-fg/10 disabled:opacity-30">↓</button>
                         <button type="button" aria-label="Hapus" onClick={() => update(items.filter((_, k) => k !== i))} className="rounded px-2 py-0.5 text-red-300 hover:bg-red-500/15">Hapus</button>
                       </span>
                     </div>
@@ -117,25 +117,25 @@ function FieldsEditor({ fields, values, onChange }: { fields: SiteContentField[]
         }
         if (f.type === "select") {
           return (
-            <label key={f.key} className="text-sm text-white/60">
+            <label key={f.key} className="text-sm text-fg/60">
               {f.label}
               <select className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)}>
                 <option value="">— tanpa ikon —</option>
                 {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              {f.hint && <span className="mt-1 block text-xs text-white/35">{f.hint}</span>}
+              {f.hint && <span className="mt-1 block text-xs text-fg/35">{f.hint}</span>}
             </label>
           );
         }
         return (
-          <label key={f.key} className="text-sm text-white/60">
+          <label key={f.key} className="text-sm text-fg/60">
             {f.label}
             {f.type === "textarea" ? (
               <textarea rows={3} maxLength={f.max} className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)} />
             ) : (
               <input maxLength={f.max} className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)} />
             )}
-            {f.hint && <span className="mt-1 block text-xs text-white/35">{f.hint}</span>}
+            {f.hint && <span className="mt-1 block text-xs text-fg/35">{f.hint}</span>}
           </label>
         );
       })}
@@ -164,21 +164,21 @@ function SectionEditor({ section, onSaved }: { section: SiteContentSection; onSa
   };
 
   return (
-    <div className="mt-4 border-t border-white/10 pt-4">
+    <div className="mt-4 border-t border-fg/10 pt-4">
       <FieldsEditor fields={section.fields} values={draft} onChange={setDraft} />
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <button type="button" disabled={busy || !dirty} onClick={() => run(() => superadminApi.saveSiteContent(section.key, { data: draft }), "Tersimpan. Tampil di website dalam ±1 menit.")} className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:opacity-40">
           {busy ? "Menyimpan…" : "Simpan"}
         </button>
-        <button type="button" disabled={busy || !dirty} onClick={() => { setDraft(section.data); setMessage(""); }} className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
+        <button type="button" disabled={busy || !dirty} onClick={() => { setDraft(section.data); setMessage(""); }} className="rounded-xl bg-fg/10 px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
           Batalkan perubahan
         </button>
         {section.customized && (
-          <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Kembalikan "${section.label}" ke teks bawaan? Perubahan Anda akan hilang.`)) run(() => superadminApi.resetSiteContent(section.key), "Dikembalikan ke default."); }} className="rounded-xl px-4 py-2.5 text-sm text-white/50 hover:bg-white/10">
+          <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Kembalikan "${section.label}" ke teks bawaan? Perubahan Anda akan hilang.`)) run(() => superadminApi.resetSiteContent(section.key), "Dikembalikan ke default."); }} className="rounded-xl px-4 py-2.5 text-sm text-fg/50 hover:bg-fg/10">
             Kembalikan ke default
           </button>
         )}
-        {message && <span className="text-sm text-white/55" role="status">{message}</span>}
+        {message && <span className="text-sm text-fg/55" role="status">{message}</span>}
       </div>
     </div>
   );
@@ -198,7 +198,7 @@ export function SiteContentPanel() {
   useEffect(load, []);
 
   if (error) return <p className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</p>;
-  if (!sections) return <p role="status" className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-sm text-white/50">Memuat konten website…</p>;
+  if (!sections) return <p role="status" className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6 text-sm text-fg/50">Memuat konten website…</p>;
 
   const reorderable = sections.filter((s) => !s.fixed);
   const fixed = sections.filter((s) => s.fixed);
@@ -217,24 +217,24 @@ export function SiteContentPanel() {
   };
 
   const card = (s: SiteContentSection, index?: number) => (
-    <div key={s.key} className={`rounded-2xl border p-4 ${s.enabled ? "border-white/10 bg-white/[0.03]" : "border-white/5 bg-white/[0.015] opacity-70"}`}>
+    <div key={s.key} className={`rounded-2xl border p-4 ${s.enabled ? "border-fg/10 bg-fg/[0.03]" : "border-fg/5 bg-fg/[0.015] opacity-70"}`}>
       <div className="flex flex-wrap items-center gap-3">
         {index !== undefined && (
           <span className="flex flex-col">
-            <button type="button" aria-label={`Naikkan ${s.label}`} disabled={busyKey !== null || index === 0} onClick={() => move(index, -1)} className="rounded px-2 text-xs leading-4 hover:bg-white/10 disabled:opacity-30">▲</button>
-            <button type="button" aria-label={`Turunkan ${s.label}`} disabled={busyKey !== null || index === reorderable.length - 1} onClick={() => move(index, 1)} className="rounded px-2 text-xs leading-4 hover:bg-white/10 disabled:opacity-30">▼</button>
+            <button type="button" aria-label={`Naikkan ${s.label}`} disabled={busyKey !== null || index === 0} onClick={() => move(index, -1)} className="rounded px-2 text-xs leading-4 hover:bg-fg/10 disabled:opacity-30">▲</button>
+            <button type="button" aria-label={`Turunkan ${s.label}`} disabled={busyKey !== null || index === reorderable.length - 1} onClick={() => move(index, 1)} className="rounded px-2 text-xs leading-4 hover:bg-fg/10 disabled:opacity-30">▼</button>
           </span>
         )}
         <div className="min-w-0 flex-1">
           <div className="font-semibold">{s.label} {s.customized && <span className="ml-1 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">diubah</span>}</div>
-          <div className="text-xs text-white/40">{s.description}</div>
+          <div className="text-xs text-fg/40">{s.description}</div>
         </div>
         {!s.fixed && (
-          <button type="button" disabled={busyKey !== null} onClick={() => toggle(s)} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${s.enabled ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-white/50"}`} aria-pressed={s.enabled}>
+          <button type="button" disabled={busyKey !== null} onClick={() => toggle(s)} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${s.enabled ? "bg-emerald-500/20 text-emerald-200" : "bg-fg/10 text-fg/50"}`} aria-pressed={s.enabled}>
             {s.enabled ? "Tampil" : "Disembunyikan"}
           </button>
         )}
-        <button type="button" onClick={() => setOpenKey(openKey === s.key ? null : s.key)} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/15">
+        <button type="button" onClick={() => setOpenKey(openKey === s.key ? null : s.key)} className="rounded-xl bg-fg/10 px-4 py-2 text-sm font-semibold hover:bg-fg/15">
           {openKey === s.key ? "Tutup" : "Edit"}
         </button>
       </div>
@@ -243,12 +243,12 @@ export function SiteContentPanel() {
   );
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <p className="text-xs uppercase tracking-[.16em] text-accent">KONTEN WEBSITE</p>
       <h2 className="mt-2 font-display text-xl font-semibold">Landing page STUDIODO</h2>
-      <p className="mt-1 text-sm text-white/45">Ubah teks, tampilkan/sembunyikan, dan atur urutan bagian di halaman utama website. Bagian Harga otomatis mengikuti menu Plans.</p>
+      <p className="mt-1 text-sm text-fg/45">Ubah teks, tampilkan/sembunyikan, dan atur urutan bagian di halaman utama website. Bagian Harga otomatis mengikuti menu Plans.</p>
       <div className="mt-5 grid gap-3">{reorderable.map((s, i) => card(s, i))}</div>
-      {fixed.length > 0 && <div className="mt-6"><p className="mb-2 text-xs uppercase tracking-[.16em] text-white/35">Umum</p><div className="grid gap-3">{fixed.map((s) => card(s))}</div></div>}
+      {fixed.length > 0 && <div className="mt-6"><p className="mb-2 text-xs uppercase tracking-[.16em] text-fg/35">Umum</p><div className="grid gap-3">{fixed.map((s) => card(s))}</div></div>}
     </section>
   );
 }

@@ -3,10 +3,10 @@ import { Link } from "wouter";
 import { api } from "@/lib/api";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 
-const inputClass = "mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-sm outline-none focus:border-accent";
+const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block text-sm text-white/60">{label}{children}</label>;
+  return <label className="block text-sm text-fg/60">{label}{children}</label>;
 }
 
 export default function GalleryProfile() {
@@ -33,10 +33,10 @@ export default function GalleryProfile() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
+      <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-5 shadow-2xl shadow-black/10 backdrop-blur-xl md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><p className="eyebrow">PUBLIC GALLERY</p><h3 className="mt-2 font-display text-3xl font-semibold">Profil halaman hasil</h3><p className="mt-2 max-w-xl text-sm text-white/45">Informasi ini tampil di halaman yang dibuka customer setelah scan QR.</p></div>
-          <Link href="/" className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/60 hover:border-accent hover:text-white">Lihat kiosk</Link>
+          <div><p className="eyebrow">PUBLIC GALLERY</p><h3 className="mt-2 font-display text-3xl font-semibold">Profil halaman hasil</h3><p className="mt-2 max-w-xl text-sm text-fg/45">Informasi ini tampil di halaman yang dibuka customer setelah scan QR.</p></div>
+          <Link href="/" className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-accent hover:text-fg">Lihat kiosk</Link>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <Field label="Nama brand"><input className={inputClass} value={config.brandName} onChange={(e) => set("brandName", e.target.value)} /></Field>
@@ -57,10 +57,10 @@ export default function GalleryProfile() {
             reader.readAsDataURL(file);
           }} />
         </Field>
-        {config.logoUrl && <img src={config.logoUrl} alt={config.brandName} className="mt-3 h-20 w-20 rounded-xl bg-white/10 object-contain p-2" />}
-        <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
+        {config.logoUrl && <img src={config.logoUrl} alt={config.brandName} className="mt-3 h-20 w-20 rounded-xl bg-fg/10 object-contain p-2" />}
+        <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-fg/10 pt-5">
           <button type="button" onClick={save} className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/20">{saved ? "Profil tersimpan" : "Simpan profil gallery"}</button>
-          <span className="text-xs text-white/35">Link hasil: https://qr.studiodo.id/#/share/session-id</span>
+          <span className="text-xs text-fg/35">Link hasil: https://qr.studiodo.id/#/share/session-id</span>
         </div>
       </section>
     </div>
