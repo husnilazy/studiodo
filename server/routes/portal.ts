@@ -190,7 +190,10 @@ portalRouter.post("/billing/checkout", async (req, res) => {
   const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
   if (!admin || !tenant) return res.status(404).json({ error: "Akun tidak ditemukan" });
 
-  const finishUrl = process.env.PORTAL_BASE_URL ? `${process.env.PORTAL_BASE_URL.replace(/\/$/, "")}/portal/tagihan?status=selesai` : undefined;
+  // Where the gateway sends the tenant back after paying. Defaults to the public website so the payer is never
+  // left stranded on the gateway's page when PORTAL_BASE_URL was not configured.
+  const portalBase = (process.env.PORTAL_BASE_URL || "https://www.studiodo.id").replace(/\/$/, "");
+  const finishUrl = `${portalBase}/portal/tagihan?status=selesai`;
   const itemName = `${plan.name} (${periodDays} hari)`;
 
   for (const gw of gateways) {
@@ -231,6 +234,15 @@ export const billingWebhookRouter = Router();
 // Webhooks are accepted whenever a key exists, even if the gateway was switched off in the meantime —
 // a customer may well have paid just before it was disabled, and that payment must still be honoured.
 
+// A correctly authenticated notification for an order we don't know (the gateway dashboard's "test" button,
+// or another product sharing the same merchant account) is acknowledged with 200: answering 404 just makes the
+// gateway retry it for days and shows a failed test. It is logged so a genuinely lost order is still visible.
+function ackUnknownOrder(res: import("express").Response, provider: "midtrans" | "xendit", orderId: unknown) {
+  logEvent({ level: "info", category: "billing", action: "webhook.unknown_order", message: `Notifikasi ${provider} untuk order tak dikenal diabaikan (${String(orderId ?? "?").slice(0, 60)})`, actorType: "system" });
+  void noteWebhook(provider, `order tak dikenal diabaikan (${String(orderId ?? "?").slice(0, 40)})`).catch(() => undefined);
+  return res.json({ ok: true, ignored: true });
+}
+
 // POST /api/billing/midtrans/notification — authenticated by the SHA512 signature
 billingWebhookRouter.post("/midtrans/notification", async (req, res) => {
   const cfg = await loadGateway("midtrans");
@@ -244,7 +256,7 @@ billingWebhookRouter.post("/midtrans/notification", async (req, res) => {
   }
 
   const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, String(n.order_id)));
-  if (!order || order.provider !== "midtrans") return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (!order || order.provider !== "midtrans") return ackUnknownOrder(res, "midtrans", n.order_id);
 
   // The signature covers gross_amount, but also confirm it matches what we charged — never
   // extend a subscription because a differently-priced payment happened to carry a valid order id.
@@ -272,7 +284,7 @@ billingWebhookRouter.post("/xendit/notification", async (req, res) => {
 
   const cb = (req.body ?? {}) as XenditInvoiceCallback;
   const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, String(cb.external_id ?? "")));
-  if (!order || order.provider !== "xendit") return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (!order || order.provider !== "xendit") return ackUnknownOrder(res, "xendit", cb.external_id);
 
   const outcome = outcomeFromInvoice(cb);
   // For a paid invoice, the amount actually paid must match the order (Xendit reports paid_amount; amount is the invoice total).
