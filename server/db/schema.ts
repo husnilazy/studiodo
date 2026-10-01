@@ -9,7 +9,11 @@ import {
   numeric,
   index,
   unique,
+  customType,
 } from "drizzle-orm/pg-core";
+
+// Postgres bytea <-> Node Buffer (drizzle has no built-in bytea column).
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 // Root of multi-tenancy — one row per photobooth business.
 export const tenants = pgTable("tenants", {
@@ -529,3 +533,16 @@ export const creatorSubmissions = pgTable("creator_submissions", {
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("creator_submissions_status_idx").on(table.status, table.createdAt)]);
+
+// Images uploaded from the Superadmin CMS for the marketing website (client logos, site logo).
+// Stored in the database rather than the per-tenant file storage: these are tiny, platform-owned,
+// and must not depend on any tenant's storage settings. Served by GET /api/public/assets/:id.
+export const siteAssets = pgTable("site_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(), // only image/png | image/jpeg | image/webp (verified from the bytes)
+  data: bytea("data").notNull(),
+  size: integer("size").notNull(),
+  uploadedBy: text("uploaded_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

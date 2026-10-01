@@ -148,6 +148,13 @@
       "when": 1790819481265,
       "tag": "0020_tenant_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790822697747,
+      "tag": "0021_site_assets",
+      "breakpoints": true
     }
   ]
 }

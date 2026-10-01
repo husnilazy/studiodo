@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { superadminApi, type SiteContentField, type SiteContentSection } from "@/lib/superadminApi";
+import { getApiBaseUrl } from "@/lib/apiConfig";
 
 // Superadmin editor for the marketing website's content. Fully generic: it renders
 // whatever field schema the server sends (server/lib/siteContent.ts), so adding a
@@ -12,6 +13,59 @@ function blankValues(fields: SiteContentField[]): Values {
   const out: Values = {};
   for (const f of fields) out[f.key] = f.type === "list" ? [] : "";
   return out;
+}
+
+const MAX_IMAGE_BYTES = 600 * 1024;
+
+// Stored image values are API-relative paths ("/api/public/assets/<id>"); to preview one in the
+// admin UI we need the API's origin, which getApiBaseUrl() knows.
+function assetPreviewUrl(path: string): string {
+  try { return new URL(path, new URL(getApiBaseUrl(), window.location.href).origin).toString(); } catch { return path; }
+}
+
+function ImageField({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (next: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError("");
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { setError("Format harus PNG, JPG, atau WebP"); return; }
+    if (file.size > MAX_IMAGE_BYTES) { setError("Ukuran maksimal 600 KB"); return; }
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Gagal membaca file"));
+        reader.readAsDataURL(file);
+      });
+      const result = await superadminApi.uploadSiteAsset(file.name, dataUrl.split(",")[1] ?? "");
+      if (result) onChange(result.url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal mengunggah");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="text-sm text-white/60">
+      {label}
+      <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg border border-white/15 bg-black/20 p-3">
+        <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-white/10">
+          {value ? <img src={assetPreviewUrl(value)} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-white/30">Belum ada</span>}
+        </div>
+        <label className="cursor-pointer rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/15">
+          {busy ? "Mengunggah…" : value ? "Ganti gambar" : "Unggah gambar"}
+          <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="sr-only" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
+        {value && <button type="button" onClick={() => onChange("")} className="rounded-lg px-3 py-2 text-xs text-red-300 hover:bg-red-500/15">Hapus</button>}
+        {error && <span role="alert" className="text-xs text-red-300">{error}</span>}
+      </div>
+      {hint && <span className="mt-1 block text-xs text-white/35">{hint}</span>}
+    </div>
+  );
 }
 
 function FieldsEditor({ fields, values, onChange }: { fields: SiteContentField[]; values: Values; onChange: (next: Values) => void }) {
@@ -58,6 +112,21 @@ function FieldsEditor({ fields, values, onChange }: { fields: SiteContentField[]
           );
         }
         const value = typeof values[f.key] === "string" ? (values[f.key] as string) : "";
+        if (f.type === "image") {
+          return <ImageField key={f.key} label={f.label} hint={f.hint} value={value} onChange={(next) => set(f.key, next)} />;
+        }
+        if (f.type === "select") {
+          return (
+            <label key={f.key} className="text-sm text-white/60">
+              {f.label}
+              <select className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)}>
+                <option value="">— tanpa ikon —</option>
+                {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              {f.hint && <span className="mt-1 block text-xs text-white/35">{f.hint}</span>}
+            </label>
+          );
+        }
         return (
           <label key={f.key} className="text-sm text-white/60">
             {f.label}

@@ -6,7 +6,34 @@
 export type FieldDef =
   | { key: string; label: string; type: "text"; max?: number; hint?: string }
   | { key: string; label: string; type: "textarea"; max?: number; hint?: string }
+  | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
+  // Value is the path of an uploaded site asset ("/api/public/assets/<uuid>") or "" for none.
+  | { key: string; label: string; type: "image"; hint?: string }
   | { key: string; label: string; type: "list"; itemLabel: string; itemFields: FieldDef[]; maxItems?: number };
+
+/** Icon names the website can draw (see studiodo-web src/components/Icon.tsx — keep the two lists in sync). */
+export const ICON_OPTIONS: { value: string; label: string }[] = [
+  { value: "qr", label: "Kode QR (QRIS)" },
+  { value: "ticket", label: "Tiket (voucher)" },
+  { value: "layout", label: "Tata letak" },
+  { value: "camera", label: "Kamera" },
+  { value: "image", label: "Foto" },
+  { value: "video", label: "Video" },
+  { value: "monitor", label: "Layar / kiosk" },
+  { value: "printer", label: "Printer" },
+  { value: "cloud", label: "Awan" },
+  { value: "wallet", label: "Dompet" },
+  { value: "sparkles", label: "Kilau" },
+  { value: "chart", label: "Grafik" },
+  { value: "users", label: "Pengguna" },
+  { value: "map-pin", label: "Lokasi" },
+  { value: "bolt", label: "Kilat" },
+  { value: "shield", label: "Perisai" },
+  { value: "palette", label: "Palet warna" },
+  { value: "clock", label: "Jam" },
+  { value: "heart", label: "Hati" },
+];
+export const ASSET_PATH_RE = /^\/api\/public\/assets\/[0-9a-f-]{36}$/i;
 
 export type SectionDef = {
   key: string;
@@ -48,7 +75,7 @@ export const SECTION_DEFS: SectionDef[] = [
     description: "Baris nama/logo bisnis yang memakai STUDIODO. Kosongkan daftar untuk menyembunyikan baris logo.",
     fields: [
       { key: "caption", label: "Keterangan", type: "text", max: 120 },
-      { key: "logos", label: "Klien", type: "list", itemLabel: "Klien", maxItems: 10, itemFields: [{ key: "name", label: "Nama", type: "text", max: 50 }] },
+      { key: "logos", label: "Klien", type: "list", itemLabel: "Klien", maxItems: 10, itemFields: [{ key: "name", label: "Nama", type: "text", max: 50 }, { key: "image", label: "Logo (gambar, opsional)", type: "image", hint: "Jika ada logo, logo yang tampil; nama dipakai sebagai teks alternatif." }] },
     ],
     // Empty until real clients are added — the website hides this row when there are no logos, so a
     // fresh install never shows made-up customers.
@@ -61,18 +88,18 @@ export const SECTION_DEFS: SectionDef[] = [
     fields: [
       { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
       { key: "title", label: "Judul", type: "text", max: 120 },
-      { key: "items", label: "Fitur", type: "list", itemLabel: "Fitur", maxItems: 9, itemFields: [{ key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "textarea", max: 200 }] },
+      { key: "items", label: "Fitur", type: "list", itemLabel: "Fitur", maxItems: 9, itemFields: [{ key: "icon", label: "Ikon", type: "select", options: ICON_OPTIONS }, { key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "textarea", max: 200 }] },
     ],
     defaults: {
       eyebrow: "Fitur",
       title: "Semua yang booth Anda butuhkan, dalam satu tempat.",
       items: [
-        { title: "QRIS otomatis", body: "Pelanggan bayar langsung dari layar kiosk, dana masuk otomatis." },
-        { title: "Voucher promo", body: "Buat kode diskon dan pantau performanya per event." },
-        { title: "Screen Builder", body: "Atur tampilan kiosk sesuai brand Anda tanpa coding." },
-        { title: "Kontrol kamera live", body: "ISO, shutter, aperture, dan white balance dari dashboard." },
-        { title: "Foto, GIF, dan video", body: "Galeri cloud dengan link share dan cetak tambahan." },
-        { title: "Satu akun, banyak kiosk", body: "Pantau semua lokasi dan update otomatis dari satu dashboard." },
+        { icon: "qr", title: "QRIS otomatis", body: "Pelanggan bayar langsung dari layar kiosk, dana masuk otomatis." },
+        { icon: "ticket", title: "Voucher promo", body: "Buat kode diskon dan pantau performanya per event." },
+        { icon: "layout", title: "Screen Builder", body: "Atur tampilan kiosk sesuai brand Anda tanpa coding." },
+        { icon: "camera", title: "Kontrol kamera live", body: "ISO, shutter, aperture, dan white balance dari dashboard." },
+        { icon: "image", title: "Foto, GIF, dan video", body: "Galeri cloud dengan link share dan cetak tambahan." },
+        { icon: "monitor", title: "Satu akun, banyak kiosk", body: "Pantau semua lokasi dan update otomatis dari satu dashboard." },
       ],
     },
   },
@@ -129,16 +156,16 @@ export const SECTION_DEFS: SectionDef[] = [
       { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
       { key: "title", label: "Judul", type: "text", max: 120 },
       { key: "body", label: "Paragraf", type: "textarea", max: 400 },
-      { key: "perks", label: "Manfaat", type: "list", itemLabel: "Manfaat", maxItems: 6, itemFields: [{ key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "text", max: 100 }] },
+      { key: "perks", label: "Manfaat", type: "list", itemLabel: "Manfaat", maxItems: 6, itemFields: [{ key: "icon", label: "Ikon", type: "select", options: ICON_OPTIONS }, { key: "title", label: "Judul", type: "text", max: 60 }, { key: "body", label: "Deskripsi", type: "text", max: 100 }] },
     ],
     defaults: {
       eyebrow: "Komunitas",
       title: "Tumbuh bareng sesama pemilik booth.",
       body: "Temukan dan ditemukan: tampilkan booth Anda di direktori publik, pasang frame dari para desainer, atau kirim desain sendiri untuk ikut mengisi katalog.",
       perks: [
-        { title: "Direktori booth", body: "Calon pelanggan mencari booth di kotanya" },
-        { title: "Marketplace template", body: "Frame siap pakai dari desainer, dipasang satu klik" },
-        { title: "Blog dan panduan", body: "Tips bisnis photobooth dan cara memakai STUDIODO" },
+        { icon: "map-pin", title: "Direktori booth", body: "Calon pelanggan mencari booth di kotanya" },
+        { icon: "palette", title: "Marketplace template", body: "Frame siap pakai dari desainer, dipasang satu klik" },
+        { icon: "sparkles", title: "Blog dan panduan", body: "Tips bisnis photobooth dan cara memakai STUDIODO" },
       ],
     },
   },
@@ -192,11 +219,12 @@ export const SECTION_DEFS: SectionDef[] = [
     description: "Kontak dan teks footer yang dipakai di seluruh halaman.",
     fixed: true,
     fields: [
+      { key: "logoUrl", label: "Logo situs (opsional)", type: "image", hint: "Tampil di navbar dan footer menggantikan logo bawaan. Disarankan PNG/WebP transparan, tinggi ≥ 64 px." },
       { key: "tagline", label: "Teks footer", type: "text", max: 160 },
       { key: "whatsappNumber", label: "Nomor WhatsApp (628…, tanpa + atau spasi)", type: "text", max: 20, hint: "Dipakai untuk tombol konsultasi. Kosongkan untuk menyembunyikan." },
       { key: "supportEmail", label: "Email dukungan", type: "text", max: 100 },
     ],
-    defaults: { tagline: "Platform photobooth oleh Frameless Creative.", whatsappNumber: "", supportEmail: "" },
+    defaults: { logoUrl: "", tagline: "Platform photobooth oleh Frameless Creative.", whatsappNumber: "", supportEmail: "" },
   },
 ];
 
@@ -220,6 +248,14 @@ function sanitizeFields(fields: FieldDef[], input: unknown, path: string): Recor
       const max = f.maxItems ?? DEFAULT_LIST_MAX;
       if (items.length > max) throw new Error(`${path}${f.label}: maksimal ${max} item`);
       out[f.key] = items.map((it, i) => sanitizeFields(f.itemFields, it, `${f.label} #${i + 1} → `));
+    } else if (f.type === "select") {
+      const v = raw === undefined || raw === "" ? "" : String(raw);
+      if (v && !f.options.some((o) => o.value === v)) throw new Error(`${path}${f.label}: pilihan tidak valid`);
+      out[f.key] = v;
+    } else if (f.type === "image") {
+      const v = raw === undefined || raw === null ? "" : String(raw).trim();
+      if (v && !ASSET_PATH_RE.test(v)) throw new Error(`${path}${f.label}: gambar tidak valid (unggah lewat tombol Unggah)`);
+      out[f.key] = v;
     } else {
       if (raw !== undefined && typeof raw !== "string") throw new Error(`${path}${f.label}: harus berupa teks`);
       const max = f.max ?? (f.type === "textarea" ? DEFAULT_TEXTAREA_MAX : DEFAULT_TEXT_MAX);

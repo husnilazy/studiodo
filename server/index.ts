@@ -23,6 +23,7 @@ import { publicBlogRouter } from "./routes/blog.js";
 import { publicMarketplaceRouter, marketplaceTenantRouter } from "./routes/marketplace.js";
 import { publicCreatorsRouter } from "./routes/creators.js";
 import { publicDirectoryRouter, directoryTenantRouter } from "./routes/directory.js";
+import { publicAssetsRouter } from "./routes/siteAssets.js";
 import { client } from "./db/client.js";
 import { logEvent } from "./lib/platformEvents.js";
 
@@ -76,6 +77,7 @@ app.use("/api/public", publicBlogRouter);
 app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
+app.use("/api/public", publicAssetsRouter);
 app.use("/api/portal/directory", directoryTenantRouter);
 app.use("/api/portal/marketplace", marketplaceTenantRouter);
 app.use("/api/portal", portalRouter);

@@ -10,6 +10,7 @@ import { siteContentAdminRouter } from "./siteContent.js";
 import { blogAdminRouter } from "./blog.js";
 import { marketplaceAdminRouter } from "./marketplace.js";
 import { creatorsAdminRouter } from "./creators.js";
+import { siteAssetsAdminRouter } from "./siteAssets.js";
 import { extendSubscription } from "../lib/subscription.js";
 import { computeLocked } from "../lib/subscription.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -80,6 +81,7 @@ superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);
 superadminRouter.use("/marketplace", marketplaceAdminRouter);
 superadminRouter.use("/creators", creatorsAdminRouter);
+superadminRouter.use("/assets", siteAssetsAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of

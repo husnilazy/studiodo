@@ -30,6 +30,8 @@ export function setSuperadminToken(token: string | null) {
 // --- Marketing-website content (CMS) — schema comes from server/lib/siteContent.ts ---
 export type SiteContentField =
   | { key: string; label: string; type: "text" | "textarea"; max?: number; hint?: string }
+  | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; hint?: string }
+  | { key: string; label: string; type: "image"; hint?: string }
   | { key: string; label: string; type: "list"; itemLabel: string; itemFields: SiteContentField[]; maxItems?: number };
 export type SiteContentSection = {
   key: string;
@@ -280,6 +282,8 @@ export const superadminApi = {
   },
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
 
+  uploadSiteAsset: (filename: string, dataBase64: string) =>
+    request<{ id: string; url: string }>("/assets", { method: "POST", body: JSON.stringify({ filename, dataBase64 }) }),
   getSiteContent: () => request<SiteContentSection[]>("/site-content"),
   saveSiteContent: (key: string, body: { data?: Record<string, unknown>; enabled?: boolean }) =>
     request<{ ok: boolean }>(`/site-content/${key}`, { method: "PUT", body: JSON.stringify(body) }),
