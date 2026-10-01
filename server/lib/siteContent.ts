@@ -219,12 +219,14 @@ export const SECTION_DEFS: SectionDef[] = [
     description: "Kontak dan teks footer yang dipakai di seluruh halaman.",
     fixed: true,
     fields: [
-      { key: "logoUrl", label: "Logo situs (opsional)", type: "image", hint: "Tampil di navbar dan footer menggantikan logo bawaan. Disarankan PNG/WebP transparan, tinggi ≥ 64 px." },
+      { key: "logoUrl", label: "Logo situs — mode terang (opsional)", type: "image", hint: "Tampil di navbar dan footer menggantikan logo bawaan. Disarankan PNG/WebP transparan, tinggi ≥ 64 px. Pakai versi yang gelap/berwarna supaya terlihat di latar terang." },
+      { key: "logoDarkUrl", label: "Logo situs — mode gelap (opsional)", type: "image", hint: "Versi logo yang terbaca di latar gelap (biasanya putih/terang). Bila kosong, logo mode terang dipakai di kedua mode." },
+      { key: "faviconUrl", label: "Favicon (ikon tab browser, opsional)", type: "image", hint: "PNG/WebP persegi, minimal 64×64 px (disarankan 256×256)." },
       { key: "tagline", label: "Teks footer", type: "text", max: 160 },
       { key: "whatsappNumber", label: "Nomor WhatsApp (628…, tanpa + atau spasi)", type: "text", max: 20, hint: "Dipakai untuk tombol konsultasi. Kosongkan untuk menyembunyikan." },
       { key: "supportEmail", label: "Email dukungan", type: "text", max: 100 },
     ],
-    defaults: { logoUrl: "", tagline: "Platform photobooth oleh Frameless Creative.", whatsappNumber: "", supportEmail: "" },
+    defaults: { logoUrl: "", logoDarkUrl: "", faviconUrl: "", tagline: "Platform photobooth oleh Frameless Creative.", whatsappNumber: "", supportEmail: "" },
   },
 ];
 
