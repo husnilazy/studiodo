@@ -84,6 +84,10 @@ function ActionRow({ icon, label, sub, onClick, loading, disabled }: { icon: Rea
   );
 }
 
+// The URL's extension decides GIF vs video. Local fallbacks are blob: URLs, so SesiFoto tags those with a
+// "#clip.gif" / "#clip.webm" fragment — strip query/fragment before looking at the extension.
+const isGifUrl = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif");
+
 function canvasToJpegBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -150,6 +154,8 @@ export default function Hasil() {
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<"idle" | "ok" | "error">("idle");
+  // What the full-screen print overlay shows: preparing the 4R file is the slow, UI-blocking part, so say so.
+  const [printStage, setPrintStage] = useState<"idle" | "preparing" | "sending" | "done" | "error">("idle");
   const [printError, setPrintError] = useState<string | null>(null);
   const autoPrintTriggeredRef = useRef(false);
   const [keyboardField, setKeyboardField] = useState<"whatsapp" | "email" | null>(null);
@@ -371,12 +377,12 @@ export default function Hasil() {
       await downloadFile(stripDataUrl, `${slug}-strip.jpg`);
       for (let i = 0; i < mediaUrls.length; i++) {
         const url = mediaUrls[i];
-        await downloadFile(url, `${slug}-clip-${i + 1}.${url.toLowerCase().endsWith(".gif") ? "gif" : "webm"}`);
+        await downloadFile(url, `${slug}-clip-${i + 1}.${isGifUrl(url) ? "gif" : "webm"}`);
       }
       for (let i = 0; i < slotClipUrls.length; i++) {
         const url = slotClipUrls[i];
         if (!url) continue;
-        await downloadFile(url, `${slug}-foto-${i + 1}.${url.toLowerCase().endsWith(".gif") ? "gif" : "webm"}`);
+        await downloadFile(url, `${slug}-foto-${i + 1}.${isGifUrl(url) ? "gif" : "webm"}`);
       }
     } finally {
       setDownloadingAll(false);
@@ -449,26 +455,36 @@ export default function Hasil() {
     setPrinting(true);
     setPrintStatus("idle");
     setPrintError(null);
+    setPrintStage("preparing");
     try {
       if (window.studiodo?.printImage) {
+        // Let the overlay paint before the heavy canvas render starts, otherwise it freezes on the old screen.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 60));
         const printDataUrl = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored);
+        setPrintStage("sending");
         const result = await window.studiodo.printImage({
           dataUrl: printDataUrl,
           printerName: config.printerName,
           copies,
         });
-        if (result.ok) setPrintStatus("ok");
-        else {
+        if (result.ok) {
+          setPrintStatus("ok");
+          setPrintStage("done");
+          window.setTimeout(() => setPrintStage((stage) => (stage === "done" ? "idle" : stage)), 3500);
+        } else {
           setPrintStatus("error");
           setPrintError(result.error ?? "Print gagal");
+          setPrintStage("error");
         }
       } else {
         // Fallback saat dijalankan di browser biasa (bukan aplikasi desktop STUDIODO)
+        setPrintStage("idle");
         window.setTimeout(() => window.print(), 200);
       }
     } catch (error) {
       setPrintStatus("error");
       setPrintError(error instanceof Error ? error.message : "Print gagal");
+      setPrintStage("error");
     } finally {
       setPrinting(false);
     }
@@ -549,7 +565,7 @@ export default function Hasil() {
   const showExtraMediaSlide = (awaitingMedia || mediaFetchFailed) && mediaUrls.length === 0;
   const previewCount = 1 + mediaUrls.length + (showExtraMediaSlide ? 1 : 0);
   const currentMediaUrl = previewIndex > 0 && previewIndex <= mediaUrls.length ? mediaUrls[previewIndex - 1] : null;
-  const currentMediaIsGif = currentMediaUrl?.toLowerCase().endsWith(".gif") ?? false;
+  const currentMediaIsGif = currentMediaUrl ? isGifUrl(currentMediaUrl) : false;
 
   // A media src that fails to load (e.g. a transient permission-propagation
   // hiccup right after upload) used to just sit there as a permanently
@@ -596,24 +612,27 @@ export default function Hasil() {
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
-              <h3 className="font-display text-lg font-semibold">Preview Foto</h3>
+              <h3 className="font-display text-lg font-semibold">Hasil Fotomu</h3>
             </div>
-            <span className="shrink-0 rounded-full border border-fg/10 bg-fg/5 px-3 py-1 text-xs font-medium text-fg/60">{photoUrls.length} Foto</span>
           </div>
 
-          <div className="relative flex min-h-[clamp(240px,42vh,420px)] items-center justify-center">
-            {previewCount > 1 && (
-              <button
-                type="button"
-                onClick={() => setPreviewIndex((i) => Math.max(0, i - 1))}
-                disabled={previewIndex === 0}
-                className="absolute left-0 z-20 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white/15 bg-black/50 text-xl text-white shadow-lg backdrop-blur-sm transition hover:border-accent/60 hover:bg-black/70 disabled:opacity-20"
-                aria-label="Sebelumnya"
-              >
-                ‹
-              </button>
-            )}
+          {/* Only the finished frame, plus the GIF/video when the package has one — switch with these tabs. */}
+          {previewCount > 1 && (
+            <div role="tablist" className="mb-3 flex shrink-0 gap-1.5 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
+              {Array.from({ length: previewCount }).map((_, index) => {
+                const url = index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
+                const label = index === 0 ? "Foto" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
+                return (
+                  <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
+                    {!url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
+          <div className="relative flex min-h-[clamp(280px,46vh,520px)] items-center justify-center">
             {/* Canvas sized off vh (viewport height), not a percentage of its
                 flex parent — a percentage height here would be circular (the
                 parent's own height comes FROM its content, i.e. this canvas),
@@ -625,7 +644,7 @@ export default function Hasil() {
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: stripRendering ? 0 : 1, scale: stripRendering ? 0.97 : 1 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl"
+                className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl"
               />
               {stripRendering && (
                 <div className="absolute flex flex-col items-center gap-3">
@@ -637,8 +656,8 @@ export default function Hasil() {
             </div>
             {currentMediaUrl && (
               currentMediaIsGif
-                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
-                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} controls loop playsInline className="max-h-[clamp(240px,42vh,420px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
+                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
+                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} controls loop playsInline className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
             )}
             {showExtraMediaSlide && previewIndex === previewCount - 1 && (
               awaitingMedia ? (
@@ -655,31 +674,7 @@ export default function Hasil() {
               )
             )}
 
-            {previewCount > 1 && (
-              <button
-                type="button"
-                onClick={() => setPreviewIndex((i) => Math.min(previewCount - 1, i + 1))}
-                disabled={previewIndex === previewCount - 1}
-                className="absolute right-0 z-20 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white/15 bg-black/50 text-xl text-white shadow-lg backdrop-blur-sm transition hover:border-accent/60 hover:bg-black/70 disabled:opacity-20"
-                aria-label="Selanjutnya"
-              >
-                ›
-              </button>
-            )}
           </div>
-
-          {previewCount > 1 && (
-            <div className="mt-4 flex shrink-0 items-center justify-center gap-2">
-              {Array.from({ length: previewCount }).map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => setPreviewIndex(index)}
-                  className={`h-1.5 rounded-full transition-all ${previewIndex === index ? "w-6 bg-accent" : "w-1.5 bg-fg/25 hover:bg-fg/40"}`}
-                  aria-label={index === 0 ? "Strip hasil" : `Klip ${index}`}
-                />
-              ))}
-            </div>
-          )}
 
           {currentMediaUrl && (
             <a
@@ -843,29 +838,7 @@ export default function Hasil() {
         </aside>
       </main>
 
-      {slotClipUrls.some(Boolean) && (
-        <div className="mx-auto mt-6 max-w-6xl">
-          <p className="eyebrow mb-3">KLIP TIAP FOTO</p>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {slotClipUrls.map((clipUrl, index) => {
-              if (!clipUrl) return null;
-              const isGif = clipUrl.toLowerCase().endsWith(".gif");
-              return (
-                <div key={clipUrl} className="glass-panel flex w-40 shrink-0 flex-col items-center gap-2 rounded-2xl p-3">
-                  {isGif
-                    ? <img src={clipUrl} alt={`Klip foto ${index + 1}`} className="h-32 w-full rounded-xl border border-fg/10 object-cover" />
-                    : <video src={clipUrl} muted loop autoPlay playsInline className="h-32 w-full rounded-xl border border-fg/10 object-cover" />}
-                  <a href={clipUrl} download={`${config.brandName.toLowerCase().replace(/\s+/g, "-")}-foto-${index + 1}.${isGif ? "gif" : "webm"}`} className="text-xs text-accent hover:underline">
-                    ↓ Foto {index + 1}
-                  </a>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="mx-auto mt-6 flex max-w-6xl flex-wrap items-center justify-center gap-3">
+      <div className="sticky bottom-0 z-30 -mx-5 mt-6 border-t border-fg/10 bg-canvas/90 px-5 py-3 backdrop-blur-md sm:-mx-10 sm:px-10"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-3">
         {/* Hidden when auto-print is on — the strip already prints itself the
             moment it's ready (see the autoPrintEnabled effect above). Leaving
             this button up on top of that just invites a customer to mash it
@@ -888,12 +861,46 @@ export default function Hasil() {
         <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-7 py-3 font-semibold shadow-lg shadow-accent/20 sm:w-auto">
           <IconRefresh className="h-4 w-4" /> Mulai Sesi Baru
         </button>
-        <span className="w-full text-center text-xs text-fg/40">Kembali ke awal otomatis dalam {autoResetSeconds} detik</span>
-        {printStatus === "ok" && <span className="text-xs text-emerald-300">● Terkirim ke printer (4R)</span>}
-        {printStatus === "error" && <span className="text-xs text-red-300">● Print gagal: {printError}</span>}
-        {uploadStatus === "pending" && <span className="text-xs text-fg/40">● Menyimpan hasil ke server...</span>}
+        <span className="w-full text-center text-xs text-fg/45">Kembali ke awal otomatis dalam {autoResetSeconds} detik</span>
+        {uploadStatus === "pending" && <span className="flex items-center gap-2 rounded-full bg-fg/[0.06] px-3 py-1 text-xs font-semibold text-fg/60"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan hasil ke server…</span>}
         {uploadStatus === "error" && <span className="text-xs text-red-300">● Gagal menyimpan hasil — coba scan QR lagi nanti atau hubungi admin.</span>}
-      </div>
+      </div></div>
+
+      <AnimatePresence>
+        {printStage !== "idle" && (
+          <motion.div key="print-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-canvas/80 p-6 backdrop-blur-md" role="status" aria-live="polite">
+            <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} className="glass-panel flex w-full max-w-md flex-col items-center gap-5 rounded-[2rem] p-8 text-center">
+              {printStage === "done" ? (
+                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-500 ring-4 ring-emerald-400/30"><IconCheck className="h-10 w-10" /></span>
+              ) : printStage === "error" ? (
+                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-red-400/15 text-3xl font-bold text-red-500 ring-4 ring-red-400/30">!</span>
+              ) : (
+                <div className="relative flex h-20 w-20 items-center justify-center">
+                  <span className="absolute inset-0 animate-ping rounded-full bg-accent/20" />
+                  <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-accent/12 text-accent"><IconPrinter className="h-9 w-9" /></span>
+                </div>
+              )}
+              <div>
+                <p className="font-display text-2xl font-semibold">
+                  {printStage === "preparing" ? "Menyiapkan cetakan…" : printStage === "sending" ? "Mengirim ke printer…" : printStage === "done" ? "Terkirim ke printer!" : "Print gagal"}
+                </p>
+                <p className="mt-1.5 text-sm text-fg/55">
+                  {printStage === "preparing" ? "Foto sedang disusun ke kertas 4R. Layar bisa terasa berat sebentar." : printStage === "sending" ? "Hampir selesai, jangan matikan printer." : printStage === "done" ? "Ambil hasil cetakmu di printer ya." : (printError ?? "Terjadi kesalahan saat mencetak.")}
+                </p>
+              </div>
+              {(printStage === "preparing" || printStage === "sending") && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-fg/10"><div className={`h-full rounded-full bg-accent transition-all duration-700 ${printStage === "preparing" ? "w-1/2" : "w-5/6"}`} /></div>
+              )}
+              {printStage === "error" && (
+                <div className="flex w-full gap-2">
+                  <button type="button" onClick={() => setPrintStage("idle")} className="flex-1 rounded-xl border border-fg/15 px-4 py-3 text-sm font-semibold">Tutup</button>
+                  <button type="button" onClick={() => printNow()} className="flex-1 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-on-accent">Coba lagi</button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {keyboardField && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeyboardField(null); }}>

@@ -9,7 +9,7 @@ import { renderTemplate } from "@/lib/output";
 import { getNextRoute } from "@/lib/kioskFlow";
 import { useTemplateLibrary } from "@/lib/templateStore";
 import { addPendingPhoto, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
-import { encodeGif, type GifFrame } from "@/lib/gifEncoder";
+import { encodeGifAsync, type GifFrame } from "@/lib/gifEncoder";
 import { prepareClipFrameStyle, drawClipFrame, pickClipCanvasSize } from "@/lib/clipFrame";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
@@ -34,7 +34,15 @@ const FILTER_ORDER: CameraFilter[] = ["normal", "bw", "warm", "cool", "vintage",
 // not a display bug. Settled back to a more modest bump — still clearly
 // better than the original 1600ms/480px/720p, but far less likely to choke a
 // weak CPU right when it matters. See [[gif-video-quality-and-blank-preview-fix]].
-const SLOT_CLIP_DURATION_MS = 2000;
+// Clips now record the pose, not the button tap: manual mode waits CLIP_MANUAL_START_DELAY_MS after the customer
+// presses the shutter (so the reach-for-the-button motion is skipped), auto mode starts the moment the countdown
+// does. Either way the clip runs up to the shot plus CLIP_TAIL_MS, and never starts earlier than
+// CLIP_MAX_PRE_MS before it so a long countdown doesn't make a long clip.
+const CLIP_MANUAL_START_DELAY_MS = 1500;
+const CLIP_MIN_PRE_MS = 800;
+const CLIP_MAX_PRE_MS = 2500;
+const CLIP_TAIL_MS = 600;
+const SLOT_CLIP_FALLBACK_MS = 2000;
 const SLOT_CLIP_GIF_FRAME_INTERVAL_MS = 120; // ~8fps — smooth enough for a loop, keeps file size/encode time small
 const GIF_MAX_WIDTH = 560;
 // MediaRecorder has no sane default bitrate — leaving it unset produced the
@@ -42,6 +50,8 @@ const GIF_MAX_WIDTH = 560;
 // a near-free quality win (barely affects encode cost) unlike raising
 // resolution/fps, so it stays even after the rest got dialed back.
 const SLOT_VIDEO_BITRATE = 6_000_000;
+
+const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function IconRefreshSmall({ className }: { className?: string }) {
   return (
@@ -137,6 +147,10 @@ export default function SesiFoto() {
   const slotGifFramesRef = useRef<(GifFrame[] | null)[]>([]);
   const slotVideoBlobsRef = useRef<(Blob | null)[]>([]);
   const captureLockRef = useRef(false);
+  // Clips are recorded while the countdown runs, so the last one is still going when the session completes —
+  // combine waits on these before it builds the GIF/video, and slotClipMsRef remembers each clip's length.
+  const pendingClipsRef = useRef<Promise<void>[]>([]);
+  const slotClipMsRef = useRef<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -145,6 +159,7 @@ export default function SesiFoto() {
   // purely an informational badge on the thumbnail, never blocks the shutter.
   const [syncingSlots, setSyncingSlots] = useState<Set<number>>(new Set());
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [savingStage, setSavingStage] = useState<string | null>(null);
   const [finishingEarly, setFinishingEarly] = useState(false);
   // Persistent: camera/bridge genuinely unreachable — blocks the shutter and
   // shows the full "kamera belum tersedia" overlay.
@@ -464,11 +479,6 @@ export default function SesiFoto() {
     setCapturedSlot(slotJustCaptured);
     setTimeout(() => setCapturedSlot(null), 1600);
     setSyncingSlots((slots) => new Set(slots).add(slotJustCaptured));
-    // Fire-and-forget — doesn't block the shutter/next-slot flow. Safe to
-    // overlap with the next shot's own clip capture (each call uses its own
-    // local canvas/MediaRecorder, no shared mutable recording state).
-    void captureSlotClip(slotJustCaptured);
-
     void (async () => {
       try {
         if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
@@ -524,7 +534,7 @@ export default function SesiFoto() {
   // No frame baked in here on purpose — these are raw per-shot clips (like a
   // Live Photo), downloaded individually; the shared template frame only
   // gets composited once, in combineSlotClips, onto the merged output.
-  const recordSlotGif = async (slotIndex: number, isTether: boolean, sourceWidth: number, sourceHeight: number) => {
+  const recordSlotGif = async (slotIndex: number, isTether: boolean, sourceWidth: number, sourceHeight: number, durationMs: number) => {
     const scale = Math.min(1, GIF_MAX_WIDTH / sourceWidth);
     const width = Math.max(1, Math.round(sourceWidth * scale));
     const height = Math.max(1, Math.round(sourceHeight * scale));
@@ -556,11 +566,11 @@ export default function SesiFoto() {
       window.setTimeout(() => {
         window.clearInterval(timer);
         resolve();
-      }, SLOT_CLIP_DURATION_MS);
+      }, durationMs);
     });
     slotGifFramesRef.current[slotIndex] = frames;
     if (frames.length > 0) {
-      await uploadSlotMediaResult(slotIndex, "gif", encodeGif(frames, SLOT_CLIP_GIF_FRAME_INTERVAL_MS));
+      await uploadSlotMediaResult(slotIndex, "gif", await encodeGifAsync(frames, SLOT_CLIP_GIF_FRAME_INTERVAL_MS));
     }
   };
 
@@ -570,7 +580,7 @@ export default function SesiFoto() {
   // drawing it onto a canvas without the <img> opting into CORS mode taints
   // the canvas, so captureStream() silently produces no real frame data even
   // though the bridge already sends Access-Control-Allow-Origin).
-  const recordSlotVideo = async (slotIndex: number, isTether: boolean, sourceWidth: number, sourceHeight: number) => {
+  const recordSlotVideo = async (slotIndex: number, isTether: boolean, sourceWidth: number, sourceHeight: number, durationMs: number) => {
     if (typeof MediaRecorder === "undefined") return;
     let recordingStream: MediaStream | undefined = streamRef.current ?? undefined;
     let stopDrawing: (() => void) | undefined;
@@ -607,7 +617,7 @@ export default function SesiFoto() {
         resolve();
       };
       recorder.start();
-      window.setTimeout(() => recorder.stop(), SLOT_CLIP_DURATION_MS);
+      window.setTimeout(() => recorder.stop(), durationMs);
     });
   };
 
@@ -618,21 +628,22 @@ export default function SesiFoto() {
   // even attempted. Running both concurrently (not one-after-another) over
   // the same ~1.6s window means turning both on doesn't cost any extra
   // per-shot time — capture stays exactly as smooth as a single format.
-  const captureSlotClip = async (slotIndex: number) => {
+  const captureSlotClip = async (slotIndex: number, durationMs: number) => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
     const isTether = config.cameraMode === "tether";
     if (isTether && !liveViewUrl) return;
     if (!isTether && !videoRef.current) return;
 
+    slotClipMsRef.current[slotIndex] = durationMs;
     const sourceWidth = isTether ? 960 : (videoRef.current!.videoWidth || 960);
     const sourceHeight = isTether ? 640 : (videoRef.current!.videoHeight || 640);
 
     const tasks: Promise<void>[] = [];
     if (selectedPackage.hasGif) {
-      tasks.push(recordSlotGif(slotIndex, isTether, sourceWidth, sourceHeight).catch((error) => console.error(`Gagal rekam GIF slot ${slotIndex}`, error)));
+      tasks.push(recordSlotGif(slotIndex, isTether, sourceWidth, sourceHeight, durationMs).catch((error) => console.error(`Gagal rekam GIF slot ${slotIndex}`, error)));
     }
     if (selectedPackage.hasVideo) {
-      tasks.push(recordSlotVideo(slotIndex, isTether, sourceWidth, sourceHeight).catch((error) => console.error(`Gagal rekam video slot ${slotIndex}`, error)));
+      tasks.push(recordSlotVideo(slotIndex, isTether, sourceWidth, sourceHeight, durationMs).catch((error) => console.error(`Gagal rekam video slot ${slotIndex}`, error)));
     }
     await Promise.all(tasks);
   };
@@ -647,6 +658,11 @@ export default function SesiFoto() {
     if (!sessionId || !template?.slots?.length) return;
     setMediaUploading(true);
     try {
+      setSavingStage("Menyelesaikan rekaman…");
+      // The last clip is still recording (it runs through the shot + a short tail) — let every clip finish first.
+      await Promise.all(pendingClipsRef.current);
+      await yieldToUi();
+      setSavingStage("Menyiapkan frame…");
       const style = await prepareClipFrameStyle({ template, accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate });
       if (!style.frameImage) return;
       // templatePhotoMap already answers "which captured photo goes in
@@ -667,6 +683,7 @@ export default function SesiFoto() {
           const slotFrames = template.slots.map((_, i) => slotGifFramesRef.current[sourceSlotFor(i)] ?? null);
           const maxLen = Math.max(0, ...slotFrames.map((frames) => frames?.length ?? 0));
           if (maxLen > 0) {
+            setSavingStage("Membuat GIF…");
             const canvas = document.createElement("canvas");
             canvas.width = width;
             canvas.height = height;
@@ -691,8 +708,9 @@ export default function SesiFoto() {
               ctx.drawImage(style.frameImage!, 0, 0, width, height);
               const { data } = ctx.getImageData(0, 0, width, height);
               combined.push({ data, width, height });
+              await yieldToUi();
             }
-            gifBlob = encodeGif(combined, SLOT_CLIP_GIF_FRAME_INTERVAL_MS);
+            gifBlob = await encodeGifAsync(combined, SLOT_CLIP_GIF_FRAME_INTERVAL_MS);
           }
         } catch (error) {
           console.error("Gagal membuat GIF gabungan", error);
@@ -703,6 +721,7 @@ export default function SesiFoto() {
       if (selectedPackage.hasVideo && typeof MediaRecorder !== "undefined") {
         try {
           const { width, height } = pickClipCanvasSize(1, 1, style, 720);
+          setSavingStage("Membuat video…");
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
@@ -752,7 +771,7 @@ export default function SesiFoto() {
               videoBlob = await new Promise<Blob>((resolve) => {
                 recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
                 recorder.start();
-                window.setTimeout(() => recorder.stop(), SLOT_CLIP_DURATION_MS + 300);
+                window.setTimeout(() => recorder.stop(), Math.max(SLOT_CLIP_FALLBACK_MS, ...slotClipMsRef.current.filter(Boolean)) + 300);
               });
               window.clearInterval(drawTimer);
             }
@@ -768,21 +787,35 @@ export default function SesiFoto() {
       }
 
       if (!gifBlob && !videoBlob) return;
+      setSavingStage("Menyimpan hasil…");
+      // Keep a local copy as the preview source if the upload can't happen or fails, so the result screen is never
+      // blank. The "#clip.gif" / "#clip.webm" fragment tells Hasil.tsx which kind it is (blob: URLs have no extension).
+      const localGifUrl = gifBlob ? `${URL.createObjectURL(gifBlob)}#clip.gif` : null;
+      const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.webm` : null;
+      const online = isBrowserOnline() && !isOfflineSessionId(sessionId);
+      if (!online) {
+        if (localGifUrl) setMediaUrl(localGifUrl);
+        if (localVideoUrl) setMediaUrl(localVideoUrl);
+      }
       if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
         if (gifBlob) {
           try {
             const result = await api.uploadMedia(sessionId, "gif", gifBlob);
-            if (result?.gifUrl) setMediaUrl(result.gifUrl);
+            const finalGif = result?.gifUrl ?? localGifUrl;
+            if (finalGif) setMediaUrl(finalGif);
           } catch (error) {
             console.error("Gagal upload GIF gabungan", error);
+            if (localGifUrl) setMediaUrl(localGifUrl);
           }
         }
         if (videoBlob) {
           try {
             const result = await api.uploadMedia(sessionId, "video", videoBlob);
-            if (result?.videoUrl) setMediaUrl(result.videoUrl);
+            const finalVideo = result?.videoUrl ?? localVideoUrl;
+            if (finalVideo) setMediaUrl(finalVideo);
           } catch (error) {
             console.error("Gagal upload video gabungan", error);
+            if (localVideoUrl) setMediaUrl(localVideoUrl);
           }
         }
       }
@@ -791,6 +824,7 @@ export default function SesiFoto() {
       showCaptureNotice("Gagal membuat video/GIF gabungan, tapi foto & klip per-foto tetap tersimpan.");
     } finally {
       setMediaUploading(false);
+      setSavingStage(null);
     }
   };
 
@@ -813,6 +847,19 @@ export default function SesiFoto() {
         .catch((error) => showCaptureNotice(error instanceof Error ? error.message : "Autofocus kamera gagal."))
         .finally(() => setFocusing(false));
     }
+    // Record the pose, not the tap (see the CLIP_* constants): auto mode starts with the countdown, manual mode skips
+    // the first CLIP_MANUAL_START_DELAY_MS so the customer reaching for the shutter button isn't in the clip.
+    const countdownMs = config.countdownSeconds * 1000;
+    const clipSlot = currentSlot;
+    const startDelay = Math.max(
+      config.autoCaptureEnabled ? 0 : Math.min(CLIP_MANUAL_START_DELAY_MS, Math.max(0, countdownMs - CLIP_MIN_PRE_MS)),
+      countdownMs - CLIP_MAX_PRE_MS,
+    );
+    const clipDuration = countdownMs - startDelay + CLIP_TAIL_MS;
+    window.setTimeout(() => {
+      pendingClipsRef.current.push(captureSlotClip(clipSlot, clipDuration).catch((error) => console.error(`Gagal merekam klip slot ${clipSlot}`, error)));
+    }, startDelay);
+
     let n = config.countdownSeconds;
     setCountdown(n);
     playBeep();
@@ -1114,6 +1161,18 @@ export default function SesiFoto() {
           </div>
         ) : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Frame belum dipilih</div>}</section>
       </div>
+      {/* Building the GIF/video is heavy and used to leave a frozen-looking screen — say what is happening instead */}
+      <AnimatePresence>
+        {savingStage && !(eventTimerEnabled && remainingSeconds <= 0) && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-canvas/85 backdrop-blur-md" role="status" aria-live="polite">
+            <div className="h-16 w-16 animate-spin rounded-full border-4 border-fg/15 border-t-accent" />
+            <div className="text-center">
+              <p className="font-display text-2xl font-semibold">Menyimpan hasil sesimu…</p>
+              <p className="mt-1 text-fg/55">{savingStage} Mohon tunggu sebentar, jangan tutup layar.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {eventTimerEnabled && remainingSeconds <= 0 && (
         <TimerExpiredOverlay onSkip={() => navigate(getNextRoute("capture", config.kioskFlow))} waitingForMedia={mediaUploading} />
       )}

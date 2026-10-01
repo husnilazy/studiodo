@@ -8,24 +8,12 @@ import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
 import { Icon } from "@/components/kiosk/Icons";
-import { useFlowSteps } from "@/components/kiosk/StepProgress";
-
-const HOW_IT_WORKS: Record<string, { icon: string; title: string; body: string }> = {
-  packages: { icon: "sparkles", title: "Pilih paket", body: "Tentukan jumlah foto" },
-  orientation: { icon: "mirror", title: "Atur kamera", body: "Cermin atau normal" },
-  payment: { icon: "qr", title: "Bayar", body: "QRIS atau voucher" },
-  frame: { icon: "frame", title: "Pilih frame", body: "Bingkai favoritmu" },
-  capture: { icon: "camera", title: "Berfoto", body: "Pose & senyum!" },
-  preview: { icon: "smile", title: "Percantik", body: "Filter & stiker" },
-  result: { icon: "download", title: "Ambil hasil", body: "Scan QR atau cetak" },
-};
 
 export default function Idle() {
   const [, navigate] = useLocation();
   const config = useBoothConfig((s) => s.config);
   const resetSession = useKioskSession((s) => s.resetSession);
   const [showPromo, setShowPromo] = useState(false);
-  const steps = useFlowSteps();
   // Mounted inside the WYSIWYG editor (ScreenBuilder.tsx), the "tap anywhere to start" behavior on this outer div
   // would otherwise fire real navigation on any canvas click that a Positionable doesn't swallow.
   const positionable = usePositionableContext();
@@ -89,24 +77,6 @@ export default function Idle() {
               </div>
             </motion.div>
           </Positionable>
-
-          {/* "How it works" — answers "what happens next?" before the customer even touches the screen */}
-          {steps.length > 1 && (
-            <motion.ul className="mt-14 hidden max-w-5xl flex-wrap justify-center gap-3 [@media(min-height:900px)]:flex" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
-              {steps.filter((k) => HOW_IT_WORKS[k]).map((key, i) => (
-                <li key={key} className="glass-panel flex items-center gap-3 rounded-2xl px-4 py-3 text-left">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">
-                    <Icon name={HOW_IT_WORKS[key].icon} className="h-5 w-5" />
-                  </span>
-                  <span>
-                    <span className="block text-[0.7rem] font-bold uppercase tracking-wider text-accent">Langkah {i + 1}</span>
-                    <span className="block text-sm font-semibold">{HOW_IT_WORKS[key].title}</span>
-                    <span className="block text-xs text-muted">{HOW_IT_WORKS[key].body}</span>
-                  </span>
-                </li>
-              ))}
-            </motion.ul>
-          )}
         </div>
 
         <AnimatePresence>

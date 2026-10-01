@@ -22,3 +22,17 @@ export function encodeGif(frames: GifFrame[], delayMs: number): Blob {
   gif.finish();
   return new Blob([gif.bytes().slice().buffer], { type: "image/gif" });
 }
+
+/** Same output as encodeGif, but hands control back to the browser between frames so the UI (spinners, taps) keeps
+ *  animating while a long GIF is built — quantizing many large frames in one synchronous loop froze the whole kiosk. */
+export async function encodeGifAsync(frames: GifFrame[], delayMs: number): Promise<Blob> {
+  const gif = GIFEncoder();
+  for (const frame of frames) {
+    const palette = quantize(frame.data, 256);
+    const index = applyPalette(frame.data, palette);
+    gif.writeFrame(index, frame.width, frame.height, { palette, delay: delayMs });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  gif.finish();
+  return new Blob([gif.bytes().slice().buffer], { type: "image/gif" });
+}
