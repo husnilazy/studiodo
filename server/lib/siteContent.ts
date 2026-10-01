@@ -50,7 +50,9 @@ export const SECTION_DEFS: SectionDef[] = [
       { key: "caption", label: "Keterangan", type: "text", max: 120 },
       { key: "logos", label: "Klien", type: "list", itemLabel: "Klien", maxItems: 10, itemFields: [{ key: "name", label: "Nama", type: "text", max: 50 }] },
     ],
-    defaults: { caption: "Dipercaya pemilik booth di [JUMLAH] kota", logos: [{ name: "[Logo 1]" }, { name: "[Logo 2]" }, { name: "[Logo 3]" }, { name: "[Logo 4]" }, { name: "[Logo 5]" }] },
+    // Empty until real clients are added — the website hides this row when there are no logos, so a
+    // fresh install never shows made-up customers.
+    defaults: { caption: "Dipakai oleh bisnis photobooth seperti", logos: [] },
   },
   {
     key: "features",
@@ -132,11 +134,11 @@ export const SECTION_DEFS: SectionDef[] = [
     defaults: {
       eyebrow: "Komunitas",
       title: "Tumbuh bareng sesama pemilik booth.",
-      body: "Bagikan tips, tanya jawab, dan temukan pelanggan lewat peta booth publik. Kreator terbaik tampil di papan peringkat.",
+      body: "Temukan dan ditemukan: tampilkan booth Anda di direktori publik, pasang frame dari para desainer, atau kirim desain sendiri untuk ikut mengisi katalog.",
       perks: [
-        { title: "Forum dan grup diskusi", body: "Tanya jawab teknis dan bisnis booth" },
-        { title: "Peta booth STUDIODO", body: "Pelanggan menemukan booth di kotanya" },
-        { title: "Pusat bantuan dan changelog", body: "Panduan, video, dan catatan rilis" },
+        { title: "Direktori booth", body: "Calon pelanggan mencari booth di kotanya" },
+        { title: "Marketplace template", body: "Frame siap pakai dari desainer, dipasang satu klik" },
+        { title: "Blog dan panduan", body: "Tips bisnis photobooth dan cara memakai STUDIODO" },
       ],
     },
   },
@@ -148,14 +150,8 @@ export const SECTION_DEFS: SectionDef[] = [
       { key: "title", label: "Judul", type: "text", max: 80 },
       { key: "items", label: "Testimoni", type: "list", itemLabel: "Testimoni", maxItems: 9, itemFields: [{ key: "quote", label: "Kutipan", type: "textarea", max: 400 }, { key: "name", label: "Nama", type: "text", max: 60 }, { key: "business", label: "Nama booth", type: "text", max: 60 }, { key: "city", label: "Kota", type: "text", max: 40 }] },
     ],
-    defaults: {
-      title: "Kata pemilik booth.",
-      items: [
-        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
-        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
-        { quote: "[Testimoni pelanggan nyata akan ditempatkan di sini.]", name: "[Nama]", business: "[Nama Booth]", city: "[Kota]" },
-      ],
-    },
+    // Empty on purpose: testimonials must be real. The website hides the section until some are added here.
+    defaults: { title: "Kata pemilik booth.", items: [] },
   },
   {
     key: "faq",
@@ -170,11 +166,11 @@ export const SECTION_DEFS: SectionDef[] = [
       eyebrow: "FAQ",
       title: "Pertanyaan yang sering muncul.",
       items: [
-        { q: "Perangkat apa yang dibutuhkan?", a: "[Spesifikasi PC minimum, kamera dan printer yang didukung.]" },
-        { q: "Apakah bisa dipakai tanpa internet?", a: "[Jawaban.]" },
-        { q: "Bagaimana pembayaran QRIS masuk ke rekening saya?", a: "[Jawaban.]" },
-        { q: "Bisa berhenti berlangganan kapan saja?", a: "[Jawaban.]" },
-        { q: "Bagaimana cara menjadi kreator template?", a: "[Jawaban.]" },
+        { q: "Perangkat apa yang dibutuhkan?", a: "Aplikasi kiosk berjalan di PC atau laptop Windows 10/11 (64-bit). Untuk kamera, Anda bisa memakai webcam atau kamera DSLR/mirrorless lewat digiCamControl. Untuk cetak, cukup printer yang punya driver Windows. Layar sentuh disarankan untuk pengalaman kiosk yang nyaman." },
+        { q: "Apakah bisa dipakai tanpa internet?", a: "Sesi foto yang sedang berjalan tetap tersimpan di perangkat dan dikirim otomatis begitu koneksi kembali. Fitur yang butuh internet, seperti pembayaran QRIS dan galeri cloud, akan menunggu sampai koneksi tersedia." },
+        { q: "Bagaimana pembayaran QRIS masuk ke rekening saya?", a: "Pembayaran QRIS di kiosk diproses lewat akun Xendit milik Anda sendiri, yang Anda hubungkan di menu pengaturan pembayaran. Dana mengikuti ketentuan dan jadwal pencairan Xendit ke rekening Anda; STUDIODO tidak menahan uang pelanggan Anda." },
+        { q: "Bisa berhenti berlangganan kapan saja?", a: "Bisa. Langganan tidak diperpanjang otomatis, jadi Anda berhenti dengan tidak memperpanjang. Setelah masa aktif dan masa tenggang berakhir, kiosk terkunci sampai langganan diperpanjang." },
+        { q: "Bagaimana cara menjadi kreator template?", a: "Buka halaman Jadi Kreator, kirim tautan portofolio Anda, dan tim kami akan menghubungi bila cocok. Template yang diterbitkan tampil di marketplace dengan kredit nama Anda." },
       ],
     },
   },
