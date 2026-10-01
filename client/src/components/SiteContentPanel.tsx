@@ -23,7 +23,7 @@ function assetPreviewUrl(path: string): string {
   try { return new URL(path, new URL(getApiBaseUrl(), window.location.href).origin).toString(); } catch { return path; }
 }
 
-function ImageField({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (next: string) => void }) {
+export function ImageField({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (next: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 

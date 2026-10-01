@@ -487,6 +487,9 @@ export const blogPosts = pgTable("blog_posts", {
   excerpt: text("excerpt").notNull().default(""),
   body: text("body").notNull().default(""),
   author: text("author"),
+  category: text("category").notNull().default("Informasi"), // one of BLOG_CATEGORIES (routes/blog.ts)
+  coverUrl: text("cover_url"), // "/api/public/assets/<id>" or null
+  position: integer("position"), // optional manual order (used for step-by-step guides); null = by date
   status: text("status").notNull().default("draft"), // 'draft' | 'published'
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

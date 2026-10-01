@@ -46,9 +46,10 @@ export type SiteContentSection = {
 };
 
 // --- Blog ---
-export type BlogPostSummary = { id: string; slug: string; title: string; status: "draft" | "published"; publishedAt: string | null; updatedAt: string };
-export type BlogPost = BlogPostSummary & { excerpt: string; body: string; author: string | null; createdAt: string };
-export type BlogPostInput = { slug: string; title: string; excerpt: string; body: string; author: string | null; status: "draft" | "published" };
+export type BlogPostSummary = { id: string; slug: string; title: string; status: "draft" | "published"; category: string; position: number | null; publishedAt: string | null; updatedAt: string };
+export type BlogPost = BlogPostSummary & { excerpt: string; body: string; author: string | null; coverUrl: string | null; createdAt: string };
+export type BlogPostInput = { slug: string; title: string; excerpt: string; body: string; author: string | null; category: string; coverUrl: string | null; position: number | null; status: "draft" | "published" };
+export const BLOG_CATEGORIES = ["Panduan", "Tips Bisnis", "Informasi", "Rilis"] as const;
 
 // --- Marketplace catalog ---
 export type MarketplaceCategory = { key: string; label: string };

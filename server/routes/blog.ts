@@ -1,34 +1,50 @@
 import { Router } from "express";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { blogPosts, superadmins } from "../db/schema.js";
 import { logEvent } from "../lib/platformEvents.js";
 
 // --- Public: what the marketing website's /blog renders ---------------------------
 
+export const BLOG_CATEGORIES = ["Panduan", "Tips Bisnis", "Informasi", "Rilis"] as const;
+const ASSET_PATH_RE = /^\/api\/public\/assets\/[0-9a-f-]{36}$/i;
+
+// ~200 words/minute at ~5.5 characters per word (spaces included) — close enough for a "x menit baca" label.
+const readMinutes = (chars: number) => Math.max(1, Math.ceil(chars / 1100));
+
 export const publicBlogRouter = Router();
 
-// GET /api/public/blog — published posts, newest first (no body; the list only needs the teaser).
-publicBlogRouter.get("/blog", async (_req, res) => {
+// GET /api/public/blog?category=&sort=urutan — published posts (no body; the list only needs the teaser).
+// Default order is newest first; sort=urutan puts manually positioned posts first, in order (step-by-step guides).
+publicBlogRouter.get("/blog", async (req, res) => {
+  const category = typeof req.query.category === "string" ? req.query.category : "";
+  const filters = [eq(blogPosts.status, "published"), isNotNull(blogPosts.publishedAt)];
+  if ((BLOG_CATEGORIES as readonly string[]).includes(category)) filters.push(eq(blogPosts.category, category));
+
+  const byPosition = req.query.sort === "urutan";
   const rows = await db
-    .select({ slug: blogPosts.slug, title: blogPosts.title, excerpt: blogPosts.excerpt, author: blogPosts.author, publishedAt: blogPosts.publishedAt })
+    .select({
+      slug: blogPosts.slug, title: blogPosts.title, excerpt: blogPosts.excerpt, author: blogPosts.author, publishedAt: blogPosts.publishedAt,
+      category: blogPosts.category, coverUrl: blogPosts.coverUrl, position: blogPosts.position,
+      bodyLength: sql<number>`length(${blogPosts.body})`,
+    })
     .from(blogPosts)
-    .where(and(eq(blogPosts.status, "published"), isNotNull(blogPosts.publishedAt)))
-    .orderBy(desc(blogPosts.publishedAt))
-    .limit(100);
+    .where(and(...filters))
+    .orderBy(...(byPosition ? [sql`${blogPosts.position} asc nulls last`, desc(blogPosts.publishedAt)] : [desc(blogPosts.publishedAt)]))
+    .limit(200);
   res.set("Cache-Control", "public, max-age=30");
-  res.json(rows);
+  res.json(rows.map(({ bodyLength, ...r }) => ({ ...r, readMinutes: readMinutes(Number(bodyLength)) })));
 });
 
 // GET /api/public/blog/:slug — one published post with its Markdown body.
 publicBlogRouter.get("/blog/:slug", async (req, res) => {
   const [row] = await db
-    .select({ slug: blogPosts.slug, title: blogPosts.title, excerpt: blogPosts.excerpt, body: blogPosts.body, author: blogPosts.author, publishedAt: blogPosts.publishedAt })
+    .select({ slug: blogPosts.slug, title: blogPosts.title, excerpt: blogPosts.excerpt, body: blogPosts.body, author: blogPosts.author, publishedAt: blogPosts.publishedAt, category: blogPosts.category, coverUrl: blogPosts.coverUrl })
     .from(blogPosts)
     .where(and(eq(blogPosts.slug, req.params.slug), eq(blogPosts.status, "published")));
   if (!row) return res.status(404).json({ error: "Artikel tidak ditemukan" });
   res.set("Cache-Control", "public, max-age=30");
-  res.json(row);
+  res.json({ ...row, readMinutes: readMinutes(row.body.length) });
 });
 
 // --- Superadmin: mounted under /api/superadmin/blog (auth applied by the parent router) ---
@@ -43,7 +59,7 @@ async function actor(superadminId?: string) {
   return row?.email ?? null;
 }
 
-type Input = { slug: string; title: string; excerpt: string; body: string; author: string | null; status: "draft" | "published" };
+type Input = { slug: string; title: string; excerpt: string; body: string; author: string | null; category: string; coverUrl: string | null; position: number | null; status: "draft" | "published" };
 
 function parseInput(body: unknown): { ok: true; value: Input } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -54,6 +70,12 @@ function parseInput(body: unknown): { ok: true; value: Input } | { ok: false; er
   const text = typeof b.body === "string" ? b.body : "";
   const author = str(b.author) || null;
   const status = b.status === "published" ? "published" : "draft";
+  const category = str(b.category) || "Informasi";
+  const coverRaw = str(b.coverUrl);
+  const positionRaw = b.position === null || b.position === undefined || b.position === "" ? null : Number(b.position);
+  if (!(BLOG_CATEGORIES as readonly string[]).includes(category)) return { ok: false, error: "Kategori tidak valid" };
+  if (coverRaw && !ASSET_PATH_RE.test(coverRaw)) return { ok: false, error: "Cover tidak valid (unggah lewat tombol Unggah)" };
+  if (positionRaw !== null && (!Number.isInteger(positionRaw) || positionRaw < 0 || positionRaw > 999)) return { ok: false, error: "Urutan harus angka bulat 0–999" };
   if (!title) return { ok: false, error: "Judul wajib diisi" };
   if (title.length > 150) return { ok: false, error: "Judul maksimal 150 karakter" };
   if (!slug || slug.length > 80 || !SLUG_RE.test(slug)) return { ok: false, error: "Slug hanya boleh huruf kecil, angka, dan tanda hubung (maks. 80 karakter)" };
@@ -61,13 +83,13 @@ function parseInput(body: unknown): { ok: true; value: Input } | { ok: false; er
   if (text.length > 50_000) return { ok: false, error: "Isi artikel maksimal 50.000 karakter" };
   if (author && author.length > 80) return { ok: false, error: "Nama penulis maksimal 80 karakter" };
   if (status === "published" && !text.trim()) return { ok: false, error: "Artikel yang dipublikasikan tidak boleh kosong" };
-  return { ok: true, value: { slug, title, excerpt, body: text, author, status } };
+  return { ok: true, value: { slug, title, excerpt, body: text, author, category, coverUrl: coverRaw || null, position: positionRaw, status } };
 }
 
 // GET /api/superadmin/blog — every post (drafts included), newest edit first; body omitted from the list.
 blogAdminRouter.get("/", async (_req, res) => {
   const rows = await db
-    .select({ id: blogPosts.id, slug: blogPosts.slug, title: blogPosts.title, status: blogPosts.status, publishedAt: blogPosts.publishedAt, updatedAt: blogPosts.updatedAt })
+    .select({ id: blogPosts.id, slug: blogPosts.slug, title: blogPosts.title, status: blogPosts.status, category: blogPosts.category, position: blogPosts.position, publishedAt: blogPosts.publishedAt, updatedAt: blogPosts.updatedAt })
     .from(blogPosts)
     .orderBy(desc(blogPosts.updatedAt));
   res.json(rows);

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { superadminApi, type BlogPost, type BlogPostSummary } from "@/lib/superadminApi";
+import { superadminApi, BLOG_CATEGORIES, type BlogPost, type BlogPostSummary } from "@/lib/superadminApi";
+import { ImageField } from "@/components/SiteContentPanel";
 
 // Superadmin blog manager: a list of posts and a Markdown editor. The public site renders
 // the body with its own restricted Markdown renderer, so only basic formatting is supported.
 
 const inputClass = "mt-1 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-accent";
-const EMPTY: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "publishedAt"> = { slug: "", title: "", excerpt: "", body: "", author: "", status: "draft" };
+const EMPTY: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "publishedAt"> = { slug: "", title: "", excerpt: "", body: "", author: "", category: "Informasi", coverUrl: null, position: null, status: "draft" };
 
 const slugify = (value: string) =>
   value.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -21,7 +22,7 @@ function Editor({ postId, onClose }: { postId: string | "new"; onClose: (changed
   useEffect(() => {
     if (postId === "new") return;
     superadminApi.getBlogPost(postId)
-      .then((p) => { if (p) setDraft({ slug: p.slug, title: p.title, excerpt: p.excerpt, body: p.body, author: p.author ?? "", status: p.status }); })
+      .then((p) => { if (p) setDraft({ slug: p.slug, title: p.title, excerpt: p.excerpt, body: p.body, author: p.author ?? "", category: p.category, coverUrl: p.coverUrl, position: p.position, status: p.status }); })
       .catch((e) => setMessage(e instanceof Error ? e.message : "Gagal memuat artikel"));
   }, [postId]);
 
@@ -59,6 +60,20 @@ function Editor({ postId, onClose }: { postId: string | "new"; onClose: (changed
           <input maxLength={80} className={inputClass} value={draft.author ?? ""} onChange={(e) => set({ author: e.target.value })} />
         </label>
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm text-white/60">
+          Kategori
+          <select className={inputClass} value={draft.category} onChange={(e) => set({ category: e.target.value })}>
+            {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label className="text-sm text-white/60">
+          Urutan panduan (opsional)
+          <input type="number" min={0} max={999} className={inputClass} value={draft.position ?? ""} onChange={(e) => set({ position: e.target.value === "" ? null : Number(e.target.value) })} placeholder="mis. 1, 2, 3…" />
+          <span className="mt-1 block text-xs text-white/35">Dipakai di halaman Bantuan; angka kecil tampil lebih dulu.</span>
+        </label>
+      </div>
+      <ImageField label="Gambar cover (opsional)" hint="Tanpa cover, website memakai tampilan gradien sesuai kategori. PNG/JPG/WebP, maks. 600 KB." value={draft.coverUrl ?? ""} onChange={(next) => set({ coverUrl: next || null })} />
       <label className="text-sm text-white/60">
         Ringkasan (tampil di daftar dan hasil pencarian)
         <textarea rows={2} maxLength={300} className={inputClass} value={draft.excerpt} onChange={(e) => set({ excerpt: e.target.value })} />
@@ -121,7 +136,7 @@ export function BlogPanel() {
               <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold">{p.title}</div>
-                  <div className="text-xs text-white/40">/blog/{p.slug} · {p.status === "published" ? `terbit ${formatDate(p.publishedAt)}` : `diubah ${formatDate(p.updatedAt)}`}</div>
+                  <div className="text-xs text-white/40">{p.category}{p.position !== null ? ` #${p.position}` : ""} · /blog/{p.slug} · {p.status === "published" ? `terbit ${formatDate(p.publishedAt)}` : `diubah ${formatDate(p.updatedAt)}`}</div>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${p.status === "published" ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-white/50"}`}>{p.status === "published" ? "Terbit" : "Draf"}</span>
                 <button type="button" onClick={() => setEditing(p.id)} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/15">Edit</button>
