@@ -36,6 +36,12 @@ export const tenants = pgTable("tenants", {
   instagramHandle: text("instagram_handle"),
   referralSource: text("referral_source"), // "how did you hear about us"
   internalNotes: text("internal_notes"), // superadmin-only, never shown to the tenant
+  // Public booth directory (website /booth). Strictly opt-in: nothing about a tenant is public until
+  // the tenant itself turns `directoryListed` on from the web portal. Contact WhatsApp is a separate
+  // opt-in because it exposes a phone number.
+  directoryListed: boolean("directory_listed").notNull().default(false),
+  directoryDescription: text("directory_description"),
+  directoryShowWhatsapp: boolean("directory_show_whatsapp").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

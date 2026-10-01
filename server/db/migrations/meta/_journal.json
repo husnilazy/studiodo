@@ -141,6 +141,13 @@
       "when": 1790819101621,
       "tag": "0019_creator_submissions",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790819481265,
+      "tag": "0020_tenant_directory",
+      "breakpoints": true
     }
   ]
 }
