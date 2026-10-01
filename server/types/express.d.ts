@@ -7,5 +7,6 @@ declare namespace Express {
     adminId?: string;
     kioskKeyId?: string;
     superadminId?: string;
+    creatorId?: string;
   }
 }

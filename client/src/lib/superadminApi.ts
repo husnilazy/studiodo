@@ -190,6 +190,18 @@ export interface BillingOrderRow {
   status: "pending" | "paid" | "failed" | "expired"; paymentType: string | null; createdAt: string; paidAt: string | null;
 }
 
+export interface CreatorAccount {
+  id: string; name: string; email: string; whatsapp: string | null; status: "active" | "suspended";
+  lastLoginAt: string | null; createdAt: string; templateCount: number;
+}
+
+export interface CreatorTemplateReview {
+  id: string; name: string; description: string; category: string; orientation: string; outputPreset: string;
+  canvasWidth: number; canvasHeight: number; slots: { x: number; y: number; w: number; h: number; rotation?: number }[];
+  frameUrl: string | null; status: "draft" | "pending" | "approved" | "rejected"; reviewNote: string | null;
+  submittedAt: string | null; reviewedAt: string | null; creatorName: string; creatorEmail: string;
+}
+
 export interface OverviewTimeseriesPoint {
   date: string;
   sessions: number;
@@ -335,6 +347,17 @@ export const superadminApi = {
   getCreatorSubmissions: () => request<CreatorSubmission[]>("/creators"),
   updateCreatorSubmission: (id: string, body: { status?: CreatorSubmission["status"]; note?: string }) =>
     request<CreatorSubmission>(`/creators/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  getCreatorAccounts: () => request<CreatorAccount[]>("/creators/accounts"),
+  createCreatorAccount: (body: { submissionId?: string; name?: string; email?: string; whatsapp?: string }) =>
+    request<{ creator: { id: string; name: string; email: string }; password: string }>("/creators/accounts", { method: "POST", body: JSON.stringify(body) }),
+  setCreatorAccountStatus: (id: string, status: "active" | "suspended") =>
+    request<{ ok: boolean }>(`/creators/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  resetCreatorPassword: (id: string) => request<{ password: string }>(`/creators/accounts/${id}/reset-password`, { method: "POST" }),
+  getCreatorTemplates: (status = "") => request<CreatorTemplateReview[]>(`/creators/templates${status ? `?status=${status}` : ""}`),
+  approveCreatorTemplate: (id: string, featured = false) =>
+    request<{ ok: boolean }>(`/creators/templates/${id}/approve`, { method: "POST", body: JSON.stringify({ featured }) }),
+  rejectCreatorTemplate: (id: string, note: string) =>
+    request<{ ok: boolean }>(`/creators/templates/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   deleteCreatorSubmission: (id: string) => request<{ ok: boolean }>(`/creators/${id}`, { method: "DELETE" }),
 
   getBlogPosts: () => request<BlogPostSummary[]>("/blog"),

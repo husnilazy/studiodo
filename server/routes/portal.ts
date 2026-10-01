@@ -1,8 +1,8 @@
 import { Router } from "express";
 import crypto from "node:crypto";
-import { and, count, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { admins, billingOrders, kioskKeys, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
+import { admins, billingOrders, kioskKeys, packages, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { getSubscriptionStatus } from "../lib/subscription.js";
@@ -77,6 +77,50 @@ portalRouter.get("/summary", async (req, res) => {
     daily: [...dailyMap.entries()].map(([date, v]) => ({ date, ...v })),
     recentPayments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     onlinePaymentEnabled: (await usableGateways()).length > 0,
+  });
+});
+
+// GET /api/portal/sessions?page=1&status=success|pending|expired|failed&from=YYYY-MM-DD&to=YYYY-MM-DD
+// Photo-session history for this tenant: newest first, 25 per page, with totals for the filtered range.
+// Customer contact details are deliberately NOT returned — this is a transaction ledger, not a lead export.
+portalRouter.get("/sessions", async (req, res) => {
+  const tenantId = req.tenantId!;
+  const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+  const PAGE_SIZE = 25;
+  const status = typeof req.query.status === "string" ? req.query.status : "";
+  const parseDay = (v: unknown, endOfDay: boolean) => {
+    if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const d = new Date(`${v}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+07:00`); // Indonesia (WIB) day boundaries
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const from = parseDay(req.query.from, false);
+  const to = parseDay(req.query.to, true);
+
+  const filters = [eq(sessions.tenantId, tenantId)];
+  if (["success", "pending", "expired", "failed"].includes(status)) filters.push(eq(sessions.paymentStatus, status));
+  if (from) filters.push(gte(sessions.createdAt, from));
+  if (to) filters.push(lte(sessions.createdAt, to));
+  const where = and(...filters);
+
+  const [[totals], rows] = await Promise.all([
+    db.select({
+      count: count(),
+      paidCount: sql<string>`count(*) filter (where ${sessions.paymentStatus} = 'success')`,
+      revenue: sql<string>`coalesce(sum(${sessions.totalAmount}) filter (where ${sessions.paymentStatus} = 'success'), 0)`,
+    }).from(sessions).where(where),
+    db.select({
+      id: sessions.id, createdAt: sessions.createdAt, packageName: packages.name, paymentMethod: sessions.paymentMethod,
+      paymentStatus: sessions.paymentStatus, paymentPurpose: sessions.paymentPurpose, totalAmount: sessions.totalAmount,
+      voucherCode: sessions.voucherCode, orientation: sessions.orientation, photoCount: sql<number>`coalesce(jsonb_array_length(${sessions.photoUrls}), 0)`,
+    }).from(sessions).leftJoin(packages, eq(packages.id, sessions.packageId)).where(where)
+      .orderBy(desc(sessions.createdAt)).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE),
+  ]);
+
+  const total = Number(totals?.count ?? 0);
+  res.json({
+    page, pageSize: PAGE_SIZE, total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    paidCount: Number(totals?.paidCount ?? 0), revenue: Number(totals?.revenue ?? 0),
+    items: rows.map((r) => ({ ...r, totalAmount: Number(r.totalAmount ?? 0), photoCount: Number(r.photoCount) })),
   });
 });
 

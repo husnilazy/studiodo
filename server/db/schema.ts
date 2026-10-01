@@ -572,3 +572,42 @@ export const paymentGateways = pgTable("payment_gateways", {
   updatedBy: text("updated_by"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Template-designer accounts for the marketplace creator portal (web /kreator/portal). Accounts are
+// created by a superadmin after accepting a creator_submissions application — never self-service —
+// so the catalog stays curated. Separate identity realm from tenant admins and superadmins.
+export const creators = pgTable("creators", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(), // credit shown on published templates
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  whatsapp: text("whatsapp"),
+  status: text("status").notNull().default("active"), // 'active' | 'suspended'
+  submissionId: uuid("submission_id"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// A designer's work-in-progress / submitted template. Approving one copies it into
+// marketplace_templates (the curated catalog) — the copy is what tenants install, so a creator
+// editing or deleting their draft later never changes what's already live or installed.
+export const creatorTemplates = pgTable("creator_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id").notNull().references(() => creators.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  category: text("category").notNull().default("custom"),
+  orientation: text("orientation").notNull().default("portrait"),
+  outputPreset: text("output_preset").notNull().default("4r"),
+  canvasWidth: integer("canvas_width").notNull().default(0),
+  canvasHeight: integer("canvas_height").notNull().default(0),
+  slots: jsonb("slots").$type<{ x: number; y: number; w: number; h: number; rotation?: number }[]>().notNull().default([]),
+  frameAssetId: uuid("frame_asset_id").references(() => siteAssets.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("draft"), // 'draft' | 'pending' | 'approved' | 'rejected'
+  reviewNote: text("review_note"), // shown to the creator on rejection
+  marketplaceTemplateId: uuid("marketplace_template_id"), // set once approved
+  submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("creator_templates_creator_idx").on(table.creatorId, table.updatedAt), index("creator_templates_status_idx").on(table.status)]);

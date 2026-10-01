@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { superadminApi, type CreatorSubmission } from "@/lib/superadminApi";
+import { CreatorAccountsPanel, CreatorReviewPanel, CredentialsNotice } from "@/components/CreatorPortalAdmin";
 
 // Review queue for template designers who applied through the website's /kreator form.
 
@@ -23,6 +24,7 @@ function Row({ item, onChanged }: { item: CreatorSubmission; onChanged: () => vo
     setBusy(true); setError("");
     try { await fn(); onChanged(); } catch (e) { setError(e instanceof Error ? e.message : "Gagal"); } finally { setBusy(false); }
   };
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const safeUrl = /^https?:\/\//i.test(item.portfolioUrl) ? item.portfolioUrl : undefined;
 
   return (
@@ -48,10 +50,15 @@ function Row({ item, onChanged }: { item: CreatorSubmission; onChanged: () => vo
                 {s === "reviewing" ? "Tandai ditinjau" : s === "accepted" ? "Terima" : "Tolak"}
               </button>
             ))}
+            <button type="button" disabled={busy} onClick={() => run(async () => {
+              const r = await superadminApi.createCreatorAccount({ submissionId: item.id });
+              if (r) setCreated({ email: r.creator.email, password: r.password });
+            })} className="rounded-xl bg-emerald-500/80 px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">Buat akun kreator</button>
             <button type="button" disabled={busy || note === (item.note ?? "")} onClick={() => run(() => superadminApi.updateCreatorSubmission(item.id, { note }))} className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-40">Simpan catatan</button>
             <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Hapus pendaftaran ${item.name}?`)) run(() => superadminApi.deleteCreatorSubmission(item.id)); }} className="rounded-xl px-3 py-2 text-sm text-red-300 hover:bg-red-500/15">Hapus</button>
             {error && <span role="alert" className="text-sm text-red-300">{error}</span>}
           </div>
+          {created && <CredentialsNotice email={created.email} password={created.password} />}
           {item.reviewedBy && item.reviewedAt && <p className="text-xs text-white/35">Terakhir ditinjau oleh {item.reviewedBy} · {fmt(item.reviewedAt)}</p>}
         </div>
       )}
@@ -59,7 +66,7 @@ function Row({ item, onChanged }: { item: CreatorSubmission; onChanged: () => vo
   );
 }
 
-export function CreatorsPanel() {
+function SubmissionsPanel() {
   const [items, setItems] = useState<CreatorSubmission[] | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | CreatorSubmission["status"]>("all");
@@ -69,10 +76,8 @@ export function CreatorsPanel() {
 
   const shown = (items ?? []).filter((i) => filter === "all" || i.status === filter);
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
-      <p className="text-xs uppercase tracking-[.16em] text-accent">KREATOR</p>
-      <h2 className="mt-2 font-display text-xl font-semibold">Pendaftaran kreator template</h2>
-      <p className="mt-1 text-sm text-white/45">Masuk dari form di halaman /kreator. Jika diterima, hubungi kreatornya, lalu terbitkan template lewat tab Marketplace.</p>
+    <>
+      <p className="mt-1 text-sm text-white/45">Masuk dari form di halaman /kreator. Klik "Buat akun kreator" pada pendaftar yang layak — mereka lalu bisa masuk ke portal kreator dan mengunggah template sendiri.</p>
       {error && <p role="alert" className="mt-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
       <div className="mt-4 flex flex-wrap gap-2 text-sm">
         {(["all", "new", "reviewing", "accepted", "rejected"] as const).map((f) => (
@@ -84,6 +89,25 @@ export function CreatorsPanel() {
       <div className="mt-5 grid gap-3">
         {items === null ? (error ? null : <p role="status" className="text-sm text-white/50">Memuat pendaftaran…</p>) : shown.length === 0 ? <p className="text-sm text-white/45">Tidak ada pendaftaran.</p> : shown.map((i) => <Row key={i.id} item={i} onChanged={load} />)}
       </div>
+    </>
+  );
+}
+
+export function CreatorsPanel() {
+  const [tab, setTab] = useState<"review" | "accounts" | "submissions">("review");
+  const tabs = [{ id: "review", label: "Template masuk" }, { id: "accounts", label: "Akun kreator" }, { id: "submissions", label: "Pendaftaran" }] as const;
+  return (
+    <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6">
+      <p className="text-xs uppercase tracking-[.16em] text-accent">KREATOR</p>
+      <h2 className="mt-2 font-display text-xl font-semibold">Portal kreator template</h2>
+      <div className="mt-4 flex flex-wrap gap-2 text-sm">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`rounded-full px-4 py-1.5 font-semibold ${tab === t.id ? "bg-white text-black" : "bg-white/10 text-white/60 hover:bg-white/15"}`}>{t.label}</button>
+        ))}
+      </div>
+      {tab === "review" && <CreatorReviewPanel />}
+      {tab === "accounts" && <CreatorAccountsPanel />}
+      {tab === "submissions" && <SubmissionsPanel />}
     </section>
   );
 }

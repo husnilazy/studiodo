@@ -46,3 +46,21 @@ export function verifySuperadminToken(token: string): SuperadminTokenPayload {
   }
   return { superadminId: decoded.superadminId };
 }
+
+export interface CreatorTokenPayload {
+  creatorId: string;
+}
+
+// Marketplace creators are a third identity realm; `type: "creator"` keeps their tokens from ever
+// passing as tenant-admin or superadmin tokens (all three share JWT_SECRET).
+export function signCreatorToken(payload: CreatorTokenPayload): string {
+  return jwt.sign({ type: "creator", creatorId: payload.creatorId }, getSecret(), { expiresIn: TOKEN_TTL });
+}
+
+export function verifyCreatorToken(token: string): CreatorTokenPayload {
+  const decoded = jwt.verify(token, getSecret());
+  if (typeof decoded !== "object" || !decoded || decoded.type !== "creator" || typeof decoded.creatorId !== "string") {
+    throw new Error("Token tidak valid");
+  }
+  return { creatorId: decoded.creatorId };
+}
