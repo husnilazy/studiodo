@@ -323,8 +323,8 @@ export default function PreviewFoto() {
             </div>
 
             {/* Photo strip: pick the photo that Filter / Susunan / Ulangi act on */}
-            <div className="mt-2 flex shrink-0 items-center gap-3">
-              <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-0.5">
+            <div className="mt-2 flex shrink-0 flex-col gap-2">
+              <div className="flex min-w-0 gap-2 overflow-x-auto py-0.5">
                 {photoUrls.map((url, index) => (
                   <button key={`${url}-${index}`} type="button" onClick={() => setSelectedPhoto(index)} aria-pressed={selectedPhoto === index} className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border-2 transition md:h-14 md:w-14 ${selectedPhoto === index ? "border-accent shadow-md" : "border-transparent opacity-80 hover:opacity-100"}`}>
                     <img src={url} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" style={{ filter: filterCss, transform: outputMirrored ? "scaleX(-1)" : undefined }} />
@@ -332,20 +332,22 @@ export default function PreviewFoto() {
                   </button>
                 ))}
               </div>
-              <div className="flex shrink-0 items-center gap-2" title="Cermin = sama seperti yang kamu lihat di layar saat berfoto">
-                <span className="hidden text-xs font-semibold text-muted sm:inline">Hasil:</span>
-                <div className="inline-flex rounded-full border border-fg/10 bg-canvas/60 p-1 text-xs font-semibold">
-                  <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
-                  <button type="button" onClick={() => setOutputMirrored(false)} aria-pressed={!outputMirrored} className={`rounded-full px-3.5 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex shrink-0 items-center gap-2" title="Cermin = sama seperti yang kamu lihat di layar saat berfoto">
+                  <span className="hidden text-xs font-semibold text-muted sm:inline">Hasil:</span>
+                  <div className="inline-flex rounded-full border border-fg/10 bg-canvas/60 p-1 text-xs font-semibold">
+                    <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                    <button type="button" onClick={() => setOutputMirrored(false)} aria-pressed={!outputMirrored} className={`rounded-full px-3.5 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
+                  </div>
                 </div>
+                {features.retake && (
+                  <button type="button" onClick={() => redo(selectedPhoto)} disabled={retakesLeft <= 0} className="k-btn shrink-0 !min-h-0 !px-4 !py-2.5 !text-sm">
+                    <Icon name="refresh" className="h-4 w-4" />
+                    Ulangi foto {selectedPhoto + 1}
+                    <span className="text-xs text-muted">({Math.max(0, retakesLeft)}x lagi)</span>
+                  </button>
+                )}
               </div>
-              {features.retake && (
-                <button type="button" onClick={() => redo(selectedPhoto)} disabled={retakesLeft <= 0} className="k-btn shrink-0 !min-h-0 !px-4 !py-2.5 !text-sm">
-                  <Icon name="refresh" className="h-4 w-4" />
-                  Ulangi foto {selectedPhoto + 1}
-                  <span className="text-xs text-muted">({Math.max(0, retakesLeft)}x lagi)</span>
-                </button>
-              )}
             </div>
           </section>
 
