@@ -13,6 +13,7 @@ import Positionable from "@/components/Positionable";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { BackButton, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { useWideLandscape } from "@/lib/useWideLandscape";
 
 interface FrameOption {
   id: string;
@@ -26,6 +27,7 @@ interface FrameOption {
 }
 
 export default function PilihFrame() {
+  const wide = useWideLandscape();
   const [, navigate] = useLocation();
   const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
@@ -149,10 +151,16 @@ export default function PilihFrame() {
 
   // Frames are chosen BEFORE the photos are taken, so there is nothing to show inside the photo windows yet.
   // Draw numbered placeholder tiles exactly where the real slots are, so the customer sees where each photo will land.
-  const renderPreview = (frame: FrameOption) => {
+  const renderPreview = (frame: FrameOption, big = false) => {
     const ratio = frame.canvasWidth && frame.canvasHeight ? `${frame.canvasWidth} / ${frame.canvasHeight}` : "2 / 3";
+    const ratioNumber = frame.canvasWidth && frame.canvasHeight ? frame.canvasWidth / frame.canvasHeight : 2 / 3;
+    // Big mode: as tall as the screen comfortably allows (height from vh, width follows the frame's real shape and is
+    // capped by the panel) — a percentage height here would be circular inside a flex column.
+    const style = big
+      ? { aspectRatio: ratio, width: `min(100%, calc(clamp(300px, 54vh, 720px) * ${ratioNumber}))` }
+      : { aspectRatio: ratio };
     return (
-      <div className="relative w-full overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-black/5" style={{ aspectRatio: ratio }}>
+      <div className={`relative overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-black/5 ${big ? "mx-auto shrink-0 shadow-2xl" : "w-full"}`} style={style}>
         {frame.slots && frame.slots.length > 0 ? (
           frame.slots.map((slot, i) => (
             <div key={i} className="absolute flex items-center justify-center overflow-hidden bg-gradient-to-br from-accent/20 to-[#ffc8de]/60 text-accent/60" style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` }}>
@@ -173,8 +181,8 @@ export default function PilihFrame() {
     <ScreenLayoutBoundary screenKey="frame">
       <div className="kinetic-page relative flex h-full min-h-0 w-full flex-col">
         <StepProgress current="frame" />
-        <div className="shrink-0 px-6 pb-3 pt-20 md:px-10">
-          <ScreenTitle title="Pilih Frame" subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
+        <div className={`shrink-0 px-6 md:px-10 ${wide ? "pb-2 pt-[112px]" : "pb-3 pt-20"}`}>
+          <ScreenTitle compact={wide} title="Pilih Frame" subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
         </div>
 
         {loading && (
@@ -210,7 +218,8 @@ export default function PilihFrame() {
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 md:px-10">
+            <div className={`flex min-h-0 flex-1 gap-6 px-6 md:px-10 ${wide ? "pb-6" : "pb-0"}`}>
+            <div className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${wide ? "" : "pb-6"}`}>
               {options.length === 0 && (
                 <div className="glass-panel mx-auto mt-6 flex max-w-md flex-col items-center gap-3 rounded-3xl p-8 text-center">
                   <Icon name="frame" className="h-8 w-8 text-accent" />
@@ -218,7 +227,7 @@ export default function PilihFrame() {
                   <p className="text-sm text-muted">Kamu tetap bisa berfoto tanpa frame.</p>
                 </div>
               )}
-              <div className="mx-auto grid max-w-[1400px] justify-center gap-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 17rem))" }}>
+              <div className={`mx-auto grid justify-center ${wide ? "max-w-none gap-4 pr-1" : "max-w-[1400px] gap-5"}`} style={{ gridTemplateColumns: wide ? "repeat(auto-fill, minmax(min(100%, 7rem), 8.25rem))" : "repeat(auto-fit, minmax(min(100%, 12rem), 17rem))" }}>
                 {visibleFrames.map((frame, i) => {
                   const active = selectedId === frame.id;
                   return (
@@ -230,23 +239,59 @@ export default function PilihFrame() {
                       initial={{ opacity: 0, y: 16 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(i, 8) * 0.04 }}
-                      className={`glass-panel relative flex flex-col gap-3 rounded-3xl p-3 text-left transition ${active ? "!border-accent shadow-[0_0_0_3px_var(--accent)]" : "hover:border-accent/50"}`}
+                      className={`glass-panel relative flex flex-col text-left transition ${wide ? "gap-2 rounded-2xl p-2" : "gap-3 rounded-3xl p-3"} ${active ? "!border-accent shadow-[0_0_0_3px_var(--accent)]" : "hover:border-accent/50"}`}
                     >
                       {renderPreview(frame)}
-                      <span className="truncate px-1 text-center text-sm font-semibold">{frame.name}</span>
+                      <span className={`truncate px-1 text-center font-semibold ${wide ? "text-xs" : "text-sm"}`}>{frame.name}</span>
                       {active && (
-                        <span className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-on-accent shadow-lg animate-pop-in"><Icon name="check" className="h-4 w-4" strokeWidth={3} /></span>
+                        <span className={`absolute flex items-center justify-center rounded-full bg-accent text-on-accent shadow-lg animate-pop-in ${wide ? "right-3 top-3 h-7 w-7" : "right-4 top-4 h-8 w-8"}`}><Icon name="check" className="h-4 w-4" strokeWidth={3} /></span>
                       )}
                     </motion.button>
                   );
                 })}
               </div>
             </div>
+
+            {/* Wide screens: one big preview of the chosen frame, with the actions right under it (compact buttons —
+                the old full-width bar stretched across the whole 1920px screen). */}
+            {wide && (
+              <aside className="glass-panel flex w-[clamp(420px,36vw,700px)] shrink-0 flex-col gap-4 rounded-[2rem] p-5">
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+                  {selected && !noFrameSelected ? (
+                    <>
+                      {renderPreview(selected, true)}
+                      <p className="mt-4 max-w-full shrink-0 truncate text-center font-display text-xl font-semibold">{selected.name}</p>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 px-6 text-center">
+                      <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent/10 text-accent"><Icon name="frame" className="h-8 w-8" /></span>
+                      <p className="font-display text-xl font-semibold">{noFrameSelected ? "Tanpa frame" : "Pilih frame di sebelah kiri"}</p>
+                      <p className="text-sm text-muted">{noFrameSelected ? "Fotomu akan dicetak polos tanpa bingkai." : "Ketuk satu frame untuk melihat pratinjau besarnya di sini."}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-fg/10 pt-4">
+                  <div className="[&_button]:!min-h-0 [&_button]:!gap-2 [&_button]:!px-[16px] [&_button]:!py-[10px] [&_button]:!text-[17px] [&_button]:whitespace-nowrap [&_svg]:!h-[18px] [&_svg]:!w-[18px]"><BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} /></div>
+                  <div className="flex items-center gap-2">
+                    <Positionable id="no-frame-button" type="system-button" label="Lanjut tanpa frame">
+                      <button type="button" onClick={() => choose(true)} className="k-btn k-btn-ghost !min-h-0 !px-[14px] !py-[10px] !text-[17px] whitespace-nowrap">Tanpa frame</button>
+                    </Positionable>
+                    <Positionable id="next-button" type="system-button" label="Tombol Lanjut">
+                      <button type="button" onClick={() => choose()} disabled={!selected && !noFrameSelected} className="k-btn k-btn-accent !min-h-0 !gap-2 !px-[20px] !py-[11px] !text-[17px] whitespace-nowrap">
+                        Pilih frame ini
+                        <Icon name="arrow-right" className="h-[18px] w-[18px]" />
+                      </button>
+                    </Positionable>
+                  </div>
+                </div>
+              </aside>
+            )}
+            </div>
           </>
         )}
 
         {/* Action bar: always visible, so "what do I press now?" is never a question */}
-        <div className="glass-panel shrink-0 rounded-none border-x-0 border-b-0 px-6 py-4 md:px-10">
+        {!wide && <div className="glass-panel shrink-0 rounded-none border-x-0 border-b-0 px-6 py-4 md:px-10">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3">
             <BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} />
             <p className="hidden min-w-0 flex-1 truncate text-center text-sm text-muted xl:block">
@@ -264,7 +309,7 @@ export default function PilihFrame() {
               </Positionable>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </ScreenLayoutBoundary>
   );

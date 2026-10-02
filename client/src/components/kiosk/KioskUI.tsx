@@ -10,14 +10,14 @@ import type { KioskStepKey } from "@/lib/kioskFlow";
  * `hint` is a plain-language instruction for the customer ("Ketuk salah satu paket…") — the single biggest
  * thing missing before, when customers weren't sure what to do on a screen.
  */
-export function ScreenTitle({ title, subtitle, hint, eyebrow }: { title: string; subtitle?: string; hint?: string; eyebrow?: string }) {
+export function ScreenTitle({ title, subtitle, hint, eyebrow, compact = false }: { title: string; subtitle?: string; hint?: string; eyebrow?: string; compact?: boolean }) {
   return (
     <Positionable id="heading" type="text" label="Judul">
       <motion.div className="kinetic-heading text-center" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
         {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h1 className="font-display text-4xl font-semibold tracking-tight md:text-6xl">{title}</h1>
-        {subtitle && <p className="mx-auto mt-3 max-w-xl text-base text-muted md:text-lg">{subtitle}</p>}
-        {hint && (
+        <h1 className={`font-display font-semibold tracking-tight ${compact ? "text-3xl md:text-4xl" : "text-4xl md:text-6xl"}`}>{title}</h1>
+        {subtitle && <p className={`mx-auto max-w-xl text-muted ${compact ? "mt-1 text-sm md:text-base" : "mt-3 text-base md:text-lg"}`}>{subtitle}</p>}
+        {hint && !compact && (
           <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full bg-accent/10 px-4 py-2 text-sm font-semibold text-accent">
             <Icon name="info" className="h-4 w-4" />
             {hint}

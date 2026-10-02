@@ -20,6 +20,7 @@ import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext"
 import Positionable from "@/components/Positionable";
 import Spinner from "@/components/Spinner";
 import StepProgress from "@/components/kiosk/StepProgress";
+import { useWideLandscape } from "@/lib/useWideLandscape";
 
 // Small stroke icons used across the redesigned result screen — kept local
 // (not a dependency) since each one is only ever this one size/weight here.
@@ -30,15 +31,6 @@ const IconPreview = ({ className }: IconProps) => (
 );
 const IconScan = ({ className }: IconProps) => (
   <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path strokeLinecap="round" d="M4 12h16" /></svg>
-);
-const IconDownload = ({ className }: IconProps) => (
-  <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4" /><path strokeLinecap="round" d="M4 17v1.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V17" /></svg>
-);
-const IconGallery = ({ className }: IconProps) => (
-  <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="8.5" cy="9.5" r="1.5" /><path strokeLinecap="round" strokeLinejoin="round" d="m4 17 4.5-4.5a1.8 1.8 0 0 1 2.5 0L15 16.5M14 13.5l1.6-1.6a1.8 1.8 0 0 1 2.5 0L21 14.5" /></svg>
-);
-const IconShare = ({ className }: IconProps) => (
-  <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path strokeLinecap="round" d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6" /></svg>
 );
 const IconUser = ({ className }: IconProps) => (
   <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="8" r="3.5" /><path strokeLinecap="round" d="M4.5 20c1-3.8 4-6 7.5-6s6.5 2.2 7.5 6" /></svg>
@@ -64,25 +56,6 @@ const IconPlus = ({ className }: IconProps) => (
 const IconMinus = ({ className }: IconProps) => (
   <svg className={className ?? iconBase} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M5 12h14" /></svg>
 );
-
-function ActionRow({ icon, label, sub, onClick, loading, disabled }: { icon: React.ReactNode; label: string; sub: string; onClick: () => void; loading?: boolean; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || loading}
-      className="flex w-full items-center gap-3 rounded-xl border border-fg/10 bg-fg/[0.03] px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-fg/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fg/[0.06] text-fg/70">
-        {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-fg/30 border-t-white" /> : <span className="h-[18px] w-[18px]">{icon}</span>}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold">{label}</span>
-        <span className="block truncate text-xs text-fg/45">{sub}</span>
-      </span>
-    </button>
-  );
-}
 
 // The URL's extension decides GIF vs video. Local fallbacks are blob: URLs, so SesiFoto tags those with a
 // "#clip.gif" / "#clip.webm" fragment — strip query/fragment before looking at the extension.
@@ -136,13 +109,14 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, slotClipUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
   const stickerList = useStickerLibrary((state) => state.stickers);
   const stickerAssets = useMemo(() => buildStickerAssets(photoStickers, stickerList), [photoStickers, stickerList]);
   const config = useBoothConfig((s) => s.config);
+  const wide = useWideLandscape();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const additionalQrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -178,8 +152,6 @@ export default function Hasil() {
   const AUTO_RESET_SECONDS = 120;
   const [autoResetSeconds, setAutoResetSeconds] = useState(AUTO_RESET_SECONDS);
   const [previewIndex, setPreviewIndex] = useState(0);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [downloadingAll, setDownloadingAll] = useState(false);
   // Combined GIF/video normally arrives via the live SesiFoto session's own
   // store (setMediaUrl, called from combineSlotClips). But that upload is a
   // fire-and-forget background task there — a session that hit the event
@@ -341,76 +313,6 @@ export default function Hasil() {
       }
     })();
   }, [sessionId, template, outputPreset, filter, colorCorrection, photoStickers, stickerAssets, templatePhotoMap, config.stripLayout, config.stripTemplate, config.accentColor, outputMirrored]);
-
-  const slug = config.brandName.toLowerCase().replace(/\s+/g, "-");
-
-  const downloadViaAnchor = (url: string, filename: string) => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-  };
-
-  // Saves straight to disk (Electron's Downloads/STUDIODO folder) instead of
-  // the browser's own download flow when running as the real kiosk app —
-  // only for remote (http) URLs, since the main process downloads by
-  // fetching the URL itself and can't do that for a local data: URL.
-  const downloadFile = async (url: string, filename: string) => {
-    if (window.studiodo?.downloadAsset && !url.startsWith("data:")) {
-      const result = await window.studiodo.downloadAsset({ url, filename }).catch(() => ({ ok: false }));
-      if (result.ok) return;
-    }
-    downloadViaAnchor(url, filename);
-  };
-
-  const download = () => {
-    if (!stripDataUrl) return;
-    downloadViaAnchor(stripDataUrl, `${slug}-strip.jpg`);
-  };
-
-  // "Download semua foto" — the hero strip plus every clip (combined + per-
-  // slot), not just the one photo `download()` grabs.
-  const downloadAll = async () => {
-    if (!stripDataUrl || downloadingAll) return;
-    setDownloadingAll(true);
-    try {
-      await downloadFile(stripDataUrl, `${slug}-strip.jpg`);
-      for (let i = 0; i < mediaUrls.length; i++) {
-        const url = mediaUrls[i];
-        await downloadFile(url, `${slug}-clip-${i + 1}.${isGifUrl(url) ? "gif" : "webm"}`);
-      }
-      for (let i = 0; i < slotClipUrls.length; i++) {
-        const url = slotClipUrls[i];
-        if (!url) continue;
-        await downloadFile(url, `${slug}-foto-${i + 1}.${isGifUrl(url) ? "gif" : "webm"}`);
-      }
-    } finally {
-      setDownloadingAll(false);
-    }
-  };
-
-  // Native share sheet where available (mobile browsers, some desktop
-  // Chromium builds); an Electron kiosk almost never has one, so this
-  // falls back to copying the link — still lets the customer text/AirDrop
-  // it themselves instead of the button doing nothing.
-  const shareResult = async () => {
-    if (!shareUrl) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: config.brandName, text: "Lihat hasil foto photobooth aku!", url: shareUrl });
-        return;
-      } catch {
-        // Cancelled or unsupported mid-call — fall through to clipboard copy.
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareCopied(true);
-      window.setTimeout(() => setShareCopied(false), 2500);
-    } catch {
-      // Clipboard blocked (rare, permissions) — the QR/"Buka di browser" link is still right there.
-    }
-  };
 
   const finish = () => {
     resetSession();
@@ -581,83 +483,75 @@ export default function Hasil() {
     ? `${currentMediaUrl}${currentMediaUrl.includes("?") ? "&" : "?"}r=${mediaLoadRetry}`
     : currentMediaUrl;
 
+  const mediaMaxH = wide ? "max-h-[calc(100vh-390px)]" : "max-h-[clamp(280px,46vh,520px)]";
+  const hasMedia = Boolean(selectedPackage?.hasGif || selectedPackage?.hasVideo);
+
   return (
     <ScreenLayoutBoundary screenKey="result">
     <div className="kinetic-page relative h-full">
     <StepProgress current="result" />
-    <div className="h-full overflow-y-auto px-5 pb-8 pt-[4.75rem] sm:px-10">
-      <header className="mx-auto max-w-6xl">
+    <div className={`flex h-full flex-col px-5 sm:px-10 ${wide ? "overflow-hidden pb-5 pt-[112px]" : "overflow-y-auto pb-8 pt-[4.75rem]"}`}>
+      {/* The "new session" button lives at the TOP, next to the title — at the bottom of a scrolling page customers never found it. */}
+      <header className="mx-auto flex w-full max-w-[1500px] shrink-0 flex-wrap items-center justify-between gap-4 pb-4">
         <Positionable id="heading" type="text" label="Judul">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-5xl">{config.resultHeadline || "Hasil fotomu sudah siap."}</h1>
-            <p className="mt-2 text-lg text-muted">Scan QR untuk mengunduh, atau cetak langsung. Terima kasih sudah berfoto!</p>
+            <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Hasil fotomu sudah siap."}</h1>
+            <p className="mt-1 text-base text-muted">Terima kasih sudah berfoto! Scan QR untuk membawa hasilnya pulang.</p>
           </div>
         </Positionable>
+        <div className="flex items-center gap-4">
+          <span className="hidden text-right text-xs leading-snug text-fg/45 sm:block">Kembali ke awal otomatis<br />dalam {autoResetSeconds} detik</span>
+          <button type="button" onClick={finish} className="k-btn k-btn-accent !min-h-0 !gap-2 !px-[22px] !py-[12px] !text-[17px] shrink-0 whitespace-nowrap">
+            <IconRefresh className="h-[18px] w-[18px]" /> Mulai Sesi Baru
+          </button>
+        </div>
       </header>
 
-      {/* The photo column used to be `minmax(0,1fr)` — on a wide kiosk
-          screen that stretched this whole column to fill most of the page,
-          but the actual strip/template canvas inside it is always a narrow
-          portrait shape, so it just centered in a sea of empty card
-          background. Capping the photo column to a sane portrait-card width
-          and giving the REST of the width to the sidebar (1fr) means the QR/
-          biodata/cetak-lagi panel actually grows to use that freed space
-          instead of leaving it empty. */}
-      <main className="mx-auto mt-8 grid min-h-0 max-w-6xl gap-6 lg:grid-cols-[minmax(280px,440px)_1fr] lg:items-start">
-        {/* Strip + every clip live in one carousel card now (dots/arrows),
-            instead of one card per clip stacked below each other — that used
-            to push this whole column's height well past the sidebar's, and
-            was the main reason the page needed scrolling. */}
-        <section className="glass-panel flex flex-col rounded-[2rem] p-5 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-2">
+      <main className={`mx-auto grid w-full max-w-[1500px] gap-5 ${wide ? "min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(430px,36%)]" : "grid-cols-1"}`}>
+        {/* Result card: only the finished frame, plus the GIF/video when the package has one (tabs). */}
+        <section className="glass-panel flex min-h-0 min-w-0 flex-col rounded-[2rem] p-5">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
               <h3 className="font-display text-lg font-semibold">Hasil Fotomu</h3>
             </div>
+            {previewCount > 1 && (
+              <div role="tablist" className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
+                {Array.from({ length: previewCount }).map((_, index) => {
+                  const url = index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
+                  const label = index === 0 ? "Foto" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
+                  return (
+                    <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
+                      {!url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Only the finished frame, plus the GIF/video when the package has one — switch with these tabs. */}
-          {previewCount > 1 && (
-            <div role="tablist" className="mb-3 flex shrink-0 gap-1.5 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
-              {Array.from({ length: previewCount }).map((_, index) => {
-                const url = index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
-                const label = index === 0 ? "Foto" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
-                return (
-                  <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
-                    {!url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="relative flex min-h-[clamp(280px,46vh,520px)] items-center justify-center">
-            {/* Canvas sized off vh (viewport height), not a percentage of its
-                flex parent — a percentage height here would be circular (the
-                parent's own height comes FROM its content, i.e. this canvas),
-                which is exactly what silently collapsed it to 0px when this
-                was briefly tried as `max-h-full` inside an `h-full` wrapper. */}
+          {/* Sized off the viewport height, not a percentage of its flex parent — a percentage height here would be circular. */}
+          <div className={`relative flex flex-1 items-center justify-center ${wide ? "min-h-0" : "min-h-[clamp(280px,46vh,520px)]"}`}>
             <div className="relative flex items-center justify-center" style={{ display: previewIndex === 0 ? "flex" : "none" }}>
               <motion.canvas
                 ref={canvasRef}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: stripRendering ? 0 : 1, scale: stripRendering ? 0.97 : 1 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl"
+                className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`}
               />
               {stripRendering && (
                 <div className="absolute flex flex-col items-center gap-3">
                   <div className="h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
                   <p className="text-center text-sm font-semibold text-fg/70">Menyiapkan hasil foto...</p>
-                  <p className="text-xs text-fg/40">Sedang merender strip</p>
                 </div>
               )}
             </div>
             {currentMediaUrl && (
               currentMediaIsGif
-                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
-                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} controls loop playsInline className="max-h-[clamp(280px,46vh,520px)] max-w-full rounded-2xl border border-fg/10 shadow-2xl" />
+                ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`} />
+                : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} autoPlay muted loop playsInline className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`} />
             )}
             {showExtraMediaSlide && previewIndex === previewCount - 1 && (
               awaitingMedia ? (
@@ -669,83 +563,44 @@ export default function Hasil() {
               ) : (
                 <div className="flex flex-col items-center gap-2 px-6 text-center">
                   <p className="text-sm font-semibold text-fg/70">GIF/video sesi gagal dibuat</p>
-                  <p className="text-xs text-fg/40">Foto & strip tetap tersimpan dengan baik.</p>
+                  <p className="text-xs text-fg/40">Foto tetap tersimpan dengan baik.</p>
                 </div>
               )
             )}
-
           </div>
-
-          {currentMediaUrl && (
-            <a
-              href={currentMediaUrl}
-              download={`${slug}-clip-${previewIndex}.${currentMediaIsGif ? "gif" : "webm"}`}
-              className="mt-3 text-center text-sm text-accent hover:underline"
-            >
-              Download {currentMediaIsGif ? "GIF" : "video"} ini
-            </a>
-          )}
         </section>
-        {/* No inner max-height/overflow here on purpose — a nested scroll
-            region inside the aside used to hide the "cetak lagi" card below
-            the fold with no visible scrollbar cue, so on a kiosk touchscreen
-            it looked like the option didn't exist. Letting it flow lets the
-            page's own scroll (already enabled on the outer wrapper) reach it
-            the same obvious way as everything else on this screen.
-            "Kirim hasil" and "Cetak lagi" sit side by side once there's
-            width for it (this column is now 1fr, see the grid comment
-            above) instead of stacking into one long, mostly-empty column —
-            that stacking was the other half of the "not solid" complaint:
-            three short cards each full-width, tons of dead space beside
-            every one of them. */}
-        <aside className="grid min-w-0 gap-4 sm:grid-cols-2">
-          {/* Scan & Download card */}
-          <div className="glass-panel rounded-[2rem] p-5 sm:col-span-2">
-            <div className="mb-4 flex items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconScan className="h-[18px] w-[18px]" /></span>
-              <div className="min-w-0">
-                <h3 className="font-display text-lg font-semibold">Scan & Download</h3>
-                <p className="truncate text-xs text-fg/50">Scan QR code untuk mengunduh foto kamu.</p>
-              </div>
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
-              <div className="relative mx-auto shrink-0">
-                {stripRendering && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="h-16 w-16 animate-ping rounded-full border-2 border-accent/30" />
-                    <div className="absolute h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
-                  </div>
-                )}
-                <div className={`rounded-2xl bg-white p-3 shadow-xl transition-opacity duration-500 ${stripRendering ? "opacity-0" : "opacity-100"}`}>
-                  <canvas ref={qrCanvasRef} className="block rounded-lg" />
+        <aside className={`flex min-w-0 flex-col gap-4 ${wide ? "min-h-0 overflow-y-auto pr-1" : ""}`}>
+          {/* QR only — no clickable extras next to it (those got tapped by accident and distracted from scanning). */}
+          <div className="glass-panel flex items-center gap-5 rounded-[2rem] p-5">
+            <div className="relative shrink-0">
+              {stripRendering && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="absolute h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <ActionRow icon={<IconDownload className={iconBase} />} label="Download semua foto" sub="Termasuk semua frame & versi edit" onClick={downloadAll} loading={downloadingAll} disabled={!stripDataUrl} />
-                <ActionRow icon={<IconGallery className={iconBase} />} label="Simpan ke galeri" sub="Hasil foto akan tersimpan di perangkatmu" onClick={download} disabled={!stripDataUrl} />
-                <ActionRow icon={shareCopied ? <IconCheck className={iconBase} /> : <IconShare className={iconBase} />} label={shareCopied ? "Link disalin!" : "Bagikan ke media sosial"} sub="Langsung dari halaman ini" onClick={shareResult} disabled={!shareUrl} />
+              )}
+              <div className={`rounded-2xl bg-white p-3 shadow-xl transition-opacity duration-500 ${stripRendering ? "opacity-0" : "opacity-100"}`}>
+                <canvas ref={qrCanvasRef} className="block !h-[184px] !w-[184px] rounded-lg" />
               </div>
             </div>
-
-            {driveShareUrl && (
-              <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-blue-300">
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
-                Tersimpan di Google Drive
+            <div className="min-w-0">
+              <h3 className="font-display text-[22px] font-semibold leading-tight">Scan untuk unduh</h3>
+              <p className="mt-1.5 text-[15px] leading-relaxed text-fg/60">Arahkan kamera HP ke kode ini untuk mengunduh foto{hasMedia ? ", GIF, dan video" : ""} kamu.</p>
+              <div className="mt-3">
+                {uploadStatus === "pending" && <span className="inline-flex items-center gap-2 rounded-full bg-fg/[0.06] px-3 py-1 text-xs font-semibold text-fg/60"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan hasil…</span>}
+                {uploadStatus === "ok" && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1 text-xs font-semibold text-emerald-600"><IconCheck className="h-3.5 w-3.5" />Hasil tersimpan</span>}
+                {uploadStatus === "error" && <span className="inline-flex rounded-full bg-red-400/12 px-3 py-1 text-xs font-semibold text-red-500">Belum tersimpan — hubungi crew</span>}
               </div>
-            )}
-            {shareUrl && (
-              <a
-                href={driveShareUrl ?? shareUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-accent/15 py-3 text-sm font-semibold text-accent transition hover:bg-accent/25"
-              >
-                <IconScan className="h-4 w-4" /> Scan QR Code dengan HP kamu
-              </a>
-            )}
+            </div>
           </div>
+
+          {/* Shown only when auto-print is off; with auto-print the strip already prints itself (a second button just invites mashing). */}
+          {!config.autoPrintEnabled && (
+            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-0 !gap-2 !px-[22px] !py-[12px] !text-[17px] self-start whitespace-nowrap">
+              <IconPrinter className="h-[18px] w-[18px]" />
+              {printing ? "Mencetak…" : "Cetak foto"}
+            </button>
+          )}
 
           {/* Informasi Pelanggan */}
           <div className="glass-panel rounded-[2rem] p-5">
@@ -837,35 +692,6 @@ export default function Hasil() {
           )}
         </aside>
       </main>
-
-      <div className="sticky bottom-0 z-30 -mx-5 mt-6 border-t border-fg/10 bg-canvas/90 px-5 py-3 backdrop-blur-md sm:-mx-10 sm:px-10"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-3">
-        {/* Hidden when auto-print is on — the strip already prints itself the
-            moment it's ready (see the autoPrintEnabled effect above). Leaving
-            this button up on top of that just invites a customer to mash it
-            "to be sure", which is exactly what printed the same strip 3x for
-            one session — auto-print already covers the case this button was
-            for, so there's nothing left for it to safely do here. */}
-        {!config.autoPrintEnabled && (
-          <button onClick={() => printNow()} disabled={printing} className="flex items-center gap-2 rounded-xl bg-accent px-7 py-3 font-semibold shadow-lg shadow-accent/20 disabled:opacity-60">
-            {printing ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-fg/30 border-t-white" /> : <IconPrinter className="h-4 w-4" />}
-            {printing ? "Sedang mencetak..." : "Print Sekarang"}
-          </button>
-        )}
-        <button onClick={download} className="flex items-center gap-2 rounded-xl border border-fg/20 px-7 py-3 hover:border-accent">
-          <IconDownload className="h-4 w-4" /> Download
-        </button>
-        {/* Satu tombol "selesai" saja — sebelumnya ada "Selesai" + "Mulai sesi
-            baru" yang keduanya cuma memanggil finish(), jadi customer/staff
-            berikutnya harus mikir dua tombol identik padahal cuma perlu satu
-            supaya bisa langsung mulai tanpa menunggu auto-reset. */}
-        <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-7 py-3 font-semibold shadow-lg shadow-accent/20 sm:w-auto">
-          <IconRefresh className="h-4 w-4" /> Mulai Sesi Baru
-        </button>
-        <span className="w-full text-center text-xs text-fg/45">Kembali ke awal otomatis dalam {autoResetSeconds} detik</span>
-        {uploadStatus === "pending" && <span className="flex items-center gap-2 rounded-full bg-fg/[0.06] px-3 py-1 text-xs font-semibold text-fg/60"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan hasil ke server…</span>}
-        {uploadStatus === "error" && <span className="text-xs text-red-300">● Gagal menyimpan hasil — coba scan QR lagi nanti atau hubungi admin.</span>}
-      </div></div>
-
       <AnimatePresence>
         {printStage !== "idle" && (
           <motion.div key="print-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-canvas/80 p-6 backdrop-blur-md" role="status" aria-live="polite">
