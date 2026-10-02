@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { and, count, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { priceForInterval } from "../lib/planPricing.js";
 import { admins, billingOrders, kioskKeys, packages, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
@@ -181,9 +182,13 @@ portalRouter.post("/billing/checkout", async (req, res) => {
   const [plan] = await db.select().from(plans).where(and(eq(plans.slug, planSlug), eq(plans.active, true)));
   if (!plan) return res.status(404).json({ error: "Paket tidak ditemukan atau sudah tidak aktif" });
 
-  const amount = Math.round(Number(plan.price));
+  // The interval the tenant picked (monthly/yearly). Charged with the same numbers the website shows, promo included.
+  const interval = req.body?.interval === "yearly" ? "yearly" : plan.billingInterval === "yearly" ? "yearly" : "monthly";
+  const charge = priceForInterval(plan, interval);
+  if (!charge) return res.status(400).json({ error: "Paket ini tidak tersedia untuk periode tersebut" });
+  const amount = Math.round(charge.amount);
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Paket ini gratis dan tidak perlu dibayar" });
-  const periodDays = plan.billingInterval === "yearly" ? 365 : 30;
+  const periodDays = charge.periodDays;
 
   const tenantId = req.tenantId!;
   const [admin] = await db.select({ email: admins.email }).from(admins).where(eq(admins.id, req.adminId!));

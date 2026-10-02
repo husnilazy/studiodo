@@ -169,8 +169,26 @@ export const SECTION_DEFS: SectionDef[] = [
     fields: [
       { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
       { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "subtitle", label: "Sub-judul", type: "textarea", max: 240 },
+      { key: "volumeTitle", label: "Penawaran banyak booth: judul", type: "text", max: 80 },
+      { key: "volumeBody", label: "Penawaran banyak booth: penjelasan", type: "textarea", max: 300 },
+      { key: "volumePerks", label: "Penawaran banyak booth: keuntungan", type: "list", itemLabel: "Keuntungan", maxItems: 6, itemFields: [{ key: "text", label: "Teks", type: "text", max: 80 }] },
+      { key: "volumeCta", label: "Penawaran banyak booth: teks tombol", type: "text", max: 40 },
     ],
-    defaults: { eyebrow: "Harga", title: "Bayar per kiosk, batal kapan saja." },
+    defaults: {
+      eyebrow: "Harga",
+      title: "Bayar per kiosk, batal kapan saja.",
+      subtitle: "Pilih paket sesuai jumlah booth Anda. Hemat lebih banyak dengan langganan tahunan.",
+      volumeTitle: "Punya lebih dari 10 booth?",
+      volumeBody: "Kelola puluhan booth dari satu dashboard dengan harga khusus per kiosk. Tim kami bantu dari instalasi sampai operasional.",
+      volumePerks: [
+        { text: "Harga khusus per kiosk untuk 10+ booth" },
+        { text: "Pendampingan instalasi dan pelatihan crew" },
+        { text: "Dukungan prioritas lewat WhatsApp" },
+        { text: "Satu tagihan untuk semua booth" },
+      ],
+      volumeCta: "Minta penawaran",
+    },
   },
   {
     key: "community",

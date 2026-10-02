@@ -220,7 +220,32 @@ export interface Plan {
   description: string | null;
   active: boolean;
   sortOrder: number;
+  discountPercent: number;
+  discountLabel: string | null;
+  discountEndsAt: string | null;
+  yearlyDiscountPercent: number;
+  featured: boolean;
+  features: string[];
   createdAt: string;
+}
+
+export interface PlanInput {
+  name: string;
+  slug: string;
+  price: number;
+  billingInterval: "monthly" | "yearly";
+  kioskLimit: number | null;
+  screenBuilderEnabled: boolean;
+  gifVideoEnabled: boolean;
+  description: string;
+  sortOrder: number;
+  active: boolean;
+  discountPercent: number;
+  discountLabel: string;
+  discountEndsAt: string | null;
+  yearlyDiscountPercent: number;
+  featured: boolean;
+  features: string[];
 }
 
 export interface TenantPayment {
@@ -308,9 +333,9 @@ export const superadminApi = {
   updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   getPlans: () => request<Plan[]>("/plans"),
-  createPlan: (body: { name: string; slug: string; price: number; billingInterval: "monthly" | "yearly"; kioskLimit: number | null; screenBuilderEnabled?: boolean; gifVideoEnabled?: boolean; description?: string; sortOrder?: number }) =>
+  createPlan: (body: Partial<PlanInput> & Pick<PlanInput, "name" | "slug" | "price" | "billingInterval" | "kioskLimit">) =>
     request<Plan>("/plans", { method: "POST", body: JSON.stringify(body) }),
-  updatePlan: (id: string, body: Partial<{ name: string; price: number; billingInterval: "monthly" | "yearly"; kioskLimit: number | null; screenBuilderEnabled: boolean; gifVideoEnabled: boolean; description: string; sortOrder: number; active: boolean }>) =>
+  updatePlan: (id: string, body: Partial<Omit<PlanInput, "slug">>) =>
     request<Plan>(`/plans/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deletePlan: (id: string) => request<{ ok: boolean; deleted?: boolean; deactivated?: boolean }>(`/plans/${id}`, { method: "DELETE" }),
   getTenantPayments: (id: string) => request<TenantPayment[]>(`/tenants/${id}/payments`),

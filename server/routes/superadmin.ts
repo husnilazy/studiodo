@@ -645,6 +645,42 @@ superadminRouter.get("/plans", async (_req, res) => {
   res.json(rows);
 });
 
+// Marketing/pricing fields of a plan (discount, yearly option, highlight, feature bullets). Returns only the fields
+// present in the body so PATCH leaves the others alone.
+function parsePlanMarketing(body: any): { values: Record<string, unknown> } | { error: string } {
+  const values: Record<string, unknown> = {};
+  const percent = (raw: unknown, label: string): number | { error: string } => {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 90) return { error: `${label} harus antara 0 dan 90` };
+    return Math.round(n);
+  };
+  if (body?.discountPercent !== undefined) {
+    const n = percent(body.discountPercent, "Diskon");
+    if (typeof n !== "number") return n;
+    values.discountPercent = n;
+  }
+  if (body?.yearlyDiscountPercent !== undefined) {
+    const n = percent(body.yearlyDiscountPercent, "Diskon tahunan");
+    if (typeof n !== "number") return n;
+    values.yearlyDiscountPercent = n;
+  }
+  if (body?.discountLabel !== undefined) values.discountLabel = body.discountLabel ? String(body.discountLabel).trim().slice(0, 60) : null;
+  if (body?.discountEndsAt !== undefined) {
+    if (!body.discountEndsAt) values.discountEndsAt = null;
+    else {
+      const date = new Date(body.discountEndsAt);
+      if (Number.isNaN(date.getTime())) return { error: "Tanggal berakhir diskon tidak valid" };
+      values.discountEndsAt = date;
+    }
+  }
+  if (body?.featured !== undefined) values.featured = Boolean(body.featured);
+  if (body?.features !== undefined) {
+    const list = Array.isArray(body.features) ? body.features : String(body.features ?? "").split(/\r?\n/);
+    values.features = list.map((line: unknown) => String(line).trim()).filter(Boolean).slice(0, 12).map((line: string) => line.slice(0, 80));
+  }
+  return { values };
+}
+
 superadminRouter.post("/plans", async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const slug = String(req.body?.slug ?? "").trim().toLowerCase();
@@ -655,6 +691,8 @@ superadminRouter.post("/plans", async (req, res) => {
   const gifVideoEnabled = req.body?.gifVideoEnabled === undefined ? true : Boolean(req.body.gifVideoEnabled);
   const description = req.body?.description ? String(req.body.description).trim() : null;
   const sortOrder = Number(req.body?.sortOrder ?? 0);
+  const marketing = parsePlanMarketing(req.body);
+  if ("error" in marketing) return res.status(400).json({ error: marketing.error });
 
   if (!name || !slug) return res.status(400).json({ error: "Nama dan slug wajib diisi" });
   if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: "Slug hanya boleh huruf kecil, angka, dan tanda hubung" });
@@ -668,6 +706,7 @@ superadminRouter.post("/plans", async (req, res) => {
     kioskLimit: kioskLimit === null || Number.isNaN(kioskLimit) ? null : kioskLimit,
     screenBuilderEnabled, gifVideoEnabled,
     description, sortOrder, active: true,
+    ...marketing.values,
   }).returning();
   logEvent({ category: "billing", action: "plan.created", message: `Plan "${row.name}" dibuat`, actorType: "superadmin", actorLabel: await currentSuperadminEmail(req) });
   res.status(201).json(row);
@@ -690,6 +729,9 @@ superadminRouter.patch("/plans/:id", async (req, res) => {
   if (req.body?.description !== undefined) patch.description = req.body.description ? String(req.body.description).trim() : null;
   if (req.body?.sortOrder !== undefined) patch.sortOrder = Number(req.body.sortOrder) || 0;
   if (req.body?.active !== undefined) patch.active = Boolean(req.body.active);
+  const marketing = parsePlanMarketing(req.body);
+  if ("error" in marketing) return res.status(400).json({ error: marketing.error });
+  Object.assign(patch, marketing.values);
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan dikirim" });
 
   const [row] = await db.update(plans).set(patch).where(eq(plans.id, req.params.id)).returning();

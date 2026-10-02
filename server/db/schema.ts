@@ -101,6 +101,13 @@ export const plans = pgTable("plans", {
   description: text("description"),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
+  // Marketing / pricing presentation (see server/lib/planPricing.ts for how these turn into the prices shown and charged).
+  discountPercent: integer("discount_percent").notNull().default(0), // 0-90, off the list price
+  discountLabel: text("discount_label"), // e.g. "Promo peluncuran"
+  discountEndsAt: timestamp("discount_ends_at"), // null = no end date
+  yearlyDiscountPercent: integer("yearly_discount_percent").notNull().default(0), // extra off 12x the monthly price; 0 = no yearly option
+  featured: boolean("featured").notNull().default(false), // "Paling populer" highlight on the website
+  features: jsonb("features").$type<string[]>().notNull().default([]), // extra bullet lines shown on the pricing card
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
