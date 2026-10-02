@@ -131,7 +131,7 @@ function AnimatedRoutes() {
           <Route path="/admin/customers">{() => <AdminAuthGate><CustomerManagement /></AdminAuthGate>}</Route>
           <Route path="/admin/frames">{() => <AdminAuthGate><FrameManagement /></AdminAuthGate>}</Route>
           <Route path="/admin/customizer">{() => { window.location.hash = "#/admin"; return null; }}</Route>
-          <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
+          <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate scopeTheme={false}><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
           <Route path="/superadmin" component={SuperadminDashboard} />
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>

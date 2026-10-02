@@ -2,10 +2,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
 import { getAdminToken, setAdminToken } from "@/lib/api";
 import ToastHost from "@/components/ToastHost";
+import AdminKeyboard from "@/components/AdminKeyboard";
+import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
+import { Icon } from "@/components/kiosk/Icons";
+import { useAdminThemeScope } from "@/lib/adminTheme";
 
 type GateStatus = "checking" | "needsLogin" | "authenticated";
 
-export default function AdminAuthGate({ children }: { children: ReactNode }) {
+/** `scopeTheme={false}` keeps the tenant's customer-facing kiosk theme (the WYSIWYG screen builder needs it). */
+export default function AdminAuthGate({ children, scopeTheme = true }: { children: ReactNode; scopeTheme?: boolean }) {
+  useAdminThemeScope(scopeTheme);
   const [status, setStatus] = useState<GateStatus>("checking");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -70,7 +76,7 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
     }
   };
 
-  if (status === "authenticated") return <>{children}<ToastHost /></>;
+  if (status === "authenticated") return <>{children}<AdminKeyboard /><ToastHost /></>;
 
   if (status === "checking") {
     return (
@@ -81,14 +87,21 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-full items-center justify-center bg-[var(--kiosk-background)] px-4 text-[var(--kiosk-text)]">
+    <div className="relative flex h-full items-center justify-center overflow-hidden bg-[var(--kiosk-background)] px-4 text-[var(--kiosk-text)]">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-[28rem] w-[28rem] rounded-full bg-accent/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 h-[26rem] w-[26rem] rounded-full bg-[#ffc8de]/30 blur-3xl" />
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <AdminKeyboardToggle />
+        <AdminThemeToggle />
+      </div>
       <form
         onSubmit={submitLogin}
-        className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl shadow-black/20 backdrop-blur-xl"
+        className="relative w-full max-w-sm rounded-[2rem] border border-fg/10 bg-surface p-8 shadow-glass"
       >
-        <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-        <h1 className="mt-2 font-display text-2xl font-bold">Login Admin</h1>
-        <p className="mt-2 text-sm text-fg/45">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="camera" className="h-6 w-6" /></span>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
+        <h1 className="mt-1 font-display text-2xl font-bold">Login Admin</h1>
+        <p className="mt-2 text-sm text-fg/50">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
 
         <div className="mt-6 space-y-3">
           <input
@@ -97,27 +110,29 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className="w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
-            className="w-full rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
         </div>
 
-        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+        {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting || !email || !password}
-          className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           {submitting ? "Memproses…" : "Masuk"}
         </button>
+        <a href="#/" className="mt-4 block text-center text-xs font-semibold text-fg/45 hover:text-fg">← Kembali ke kiosk</a>
       </form>
+      <AdminKeyboard />
     </div>
   );
 }

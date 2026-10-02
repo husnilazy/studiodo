@@ -16,23 +16,35 @@ import PaymentSettings from "./PaymentSettings";
 import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
+import { Icon } from "@/components/kiosk/Icons";
+import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
-const sections: { id: Section; label: string; icon: string }[] = [
-  { id: "control", label: "Control Center", icon: "⌘" },
-  { id: "gallery", label: "Profil Gallery", icon: "✦" },
-  { id: "kiosk", label: "Kiosk", icon: "▣" },
-  { id: "flow", label: "Flow Kiosk", icon: "⇄" },
-  { id: "finance", label: "Finance", icon: "↗" },
-  { id: "crm", label: "Database / CRM", icon: "◎" },
-  { id: "traffic", label: "Traffic", icon: "⌁" },
-  { id: "media", label: "Database Foto & Video", icon: "▧" },
+const sections: { id: Section; label: string; icon: string; group: string; hint: string }[] = [
+  { id: "control", label: "Control Center", icon: "sliders", group: "Tampilan", hint: "Atur tampilan dan perilaku kiosk yang dilihat pelanggan." },
+  { id: "gallery", label: "Profil Gallery", icon: "sparkles", group: "Tampilan", hint: "Profil dan tampilan galeri publik hasil foto." },
+  { id: "kiosk", label: "Kiosk", icon: "monitor", group: "Operasional", hint: "Kunci kiosk, kamera, dan printer di PC booth." },
+  { id: "flow", label: "Flow Kiosk", icon: "shuffle", group: "Operasional", hint: "Urutan layar yang dilalui pelanggan." },
+  { id: "finance", label: "Finance", icon: "wallet", group: "Bisnis", hint: "Pendapatan, paket, harga, dan voucher." },
+  { id: "crm", label: "Database / CRM", icon: "users", group: "Bisnis", hint: "Data pelanggan yang ikut sesi foto." },
+  { id: "traffic", label: "Traffic", icon: "activity", group: "Bisnis", hint: "Jumlah sesi dan performa booth per hari." },
+  { id: "media", label: "Database Foto & Video", icon: "folder", group: "Bisnis", hint: "Semua foto, GIF, dan video dari setiap sesi." },
 ];
+const sectionGroups = ["Tampilan", "Operasional", "Bisnis"];
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 
-function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  return <div className={panel}><p className="text-xs uppercase tracking-[.16em] text-fg/45">{label}</p><p className="mt-3 font-display text-3xl font-semibold">{value}</p>{detail && <p className="mt-2 text-xs text-accent">{detail}</p>}</div>;
+function Metric({ label, value, detail, icon = "chart" }: { label: string; value: string; detail?: string; icon?: string }) {
+  return (
+    <div className={panel}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-fg/45">{label}</p>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent"><Icon name={icon} className="h-[18px] w-[18px]" /></span>
+      </div>
+      <p className="mt-3 font-display text-3xl font-semibold tracking-tight">{value}</p>
+      {detail && <p className="mt-1.5 text-xs font-medium text-accent">{detail}</p>}
+    </div>
+  );
 }
 
 // Shown only for the very first overview load — before this, the dashboard
@@ -122,10 +134,10 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
-        <Metric label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
-        <Metric label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
-        <Metric label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
+        <Metric icon="activity" label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
+        <Metric icon="check" label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
+        <Metric icon="clock" label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
+        <Metric icon="chart" label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
@@ -610,36 +622,76 @@ export default function AdminDashboard() {
     await window.studiodo.printImage({ dataUrl, copies: 1 });
   };
 
+  const currentSection = sections.find((item) => item.id === section)!;
+  const navButton = (item: (typeof sections)[number]) => (
+    <button
+      key={item.id}
+      type="button"
+      onClick={() => setSection(item.id)}
+      aria-current={section === item.id ? "page" : undefined}
+      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/60 hover:bg-fg/[0.06] hover:text-fg"}`}
+    >
+      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
+      {item.label}
+    </button>
+  );
+
   return (
     <div className="flex h-full overflow-hidden bg-[var(--kiosk-background)] text-[var(--kiosk-text)]">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-fg/10 bg-fg/5 p-5 md:flex">
-        <div className="mb-10"><p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p><h1 className="mt-2 font-display text-2xl font-bold">Admin OS</h1><p className="mt-1 text-xs text-fg/40">Booth intelligence dashboard</p></div>
-        <nav className="space-y-2">
-          {sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fg/10">{item.icon}</span>{item.label}</button>)}
-          <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm text-fg/55 transition hover:bg-fg/10 hover:text-fg"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fg/10">🖼</span>Kelola Frame</Link>
+      <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-fg/10 bg-surface p-4 md:flex">
+        <div className="mb-4 flex items-center gap-3 px-1 pt-1">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="camera" className="h-5 w-5" /></span>
+          <div className="min-w-0"><p className="font-display text-lg font-bold leading-tight">STUDIODO</p><p className="text-[11px] font-medium text-fg/45">Admin booth</p></div>
+        </div>
+        <nav className="space-y-4">
+          {sectionGroups.map((group) => (
+            <div key={group}>
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">{group}</p>
+              <div className="space-y-0.5">{sections.filter((item) => item.group === group).map(navButton)}</div>
+            </div>
+          ))}
+          <div>
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">Konten</p>
+            <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="frame" className="h-[18px] w-[18px] shrink-0" />Kelola Frame</Link>
+            <Link href="/admin/customers" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="user" className="h-[18px] w-[18px] shrink-0" />CRM detail</Link>
+          </div>
         </nav>
-        <div className="mt-8 space-y-2 border-t border-fg/10 pt-6"><p className="px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-fg/30">Aksi cepat</p><Link href="/" className="block rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">← Kembali ke Kiosk</Link><Link href="/admin/customers" className="block rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">Buka CRM detail</Link><button type="button" onClick={logout} className="block w-full rounded-2xl border border-fg/10 px-4 py-3 text-center text-sm text-fg/55 hover:text-fg">Logout</button></div>
-        <AppVersionFooter />
+        <div className="mt-auto space-y-2 pt-6">
+          <div className="flex items-center justify-between gap-2 px-1"><span className="text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">Tampilan</span><AdminThemeToggle /></div>
+          <AdminKeyboardToggle showLabel />
+          <Link href="/" className="flex items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Kiosk</Link>
+          <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-red-400/50 hover:text-red-500"><Icon name="logout" className="h-4 w-4" />Logout</button>
+          <AppVersionFooter />
+        </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto p-5 md:p-10">
+      <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
           <SubscriptionBanner me={me} />
-          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-            <div><p className="eyebrow">COMMAND CENTER / {section.toUpperCase()}</p><h2 className="font-display text-4xl font-bold md:text-6xl">{sections.find((item) => item.id === section)?.label}</h2><p className="mt-2 text-[var(--kiosk-muted)]">Monitor, kelola, dan pahami performa booth kamu.</p></div>
-            <div className="flex items-center gap-3">
-              {lastUpdated && <span className="hidden text-xs text-fg/35 sm:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow">{currentSection.group}</p>
+              <h2 className="mt-1 font-display text-3xl font-bold tracking-tight md:text-4xl">{currentSection.label}</h2>
+              <p className="mt-1.5 text-sm text-[var(--kiosk-muted)] md:text-base">{currentSection.hint}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {lastUpdated && <span className="hidden text-xs text-fg/40 lg:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
+              <div className="flex items-center gap-2 md:hidden"><AdminKeyboardToggle /><AdminThemeToggle /></div>
               <button
                 type="button"
                 onClick={() => loadOverview()}
                 disabled={refreshing}
-                className="flex items-center gap-2 rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-accent hover:text-fg disabled:opacity-50"
+                className="flex h-10 items-center gap-2 rounded-full border border-fg/10 bg-surface px-4 text-sm font-medium text-fg/70 shadow-sm transition hover:border-accent/50 hover:text-fg disabled:opacity-50"
               >
-                {refreshing && <Spinner size="sm" />}
+                {refreshing ? <Spinner size="sm" /> : <Icon name="refresh" className="h-4 w-4" />}
                 {refreshing ? "Memuat…" : "Refresh"}
               </button>
-              <div className="flex gap-2 md:hidden">{sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`rounded-xl px-3 py-2 text-xs ${section === item.id ? "bg-accent" : "bg-fg/10"}`}>{item.icon}</button>)}</div>
             </div>
           </div>
+          <nav className="-mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 pb-1 md:hidden" aria-label="Menu admin">
+            {sections.map((item) => (
+              <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-xs font-semibold ${section === item.id ? "bg-accent text-white" : "bg-fg/[0.06] text-fg/60"}`}><Icon name={item.icon} className="h-4 w-4" />{item.label}</button>
+            ))}
+          </nav>
           {initialLoading ? <OverviewSkeleton /> : (
           <AnimatePresence mode="wait">
             <motion.div
@@ -653,13 +705,13 @@ export default function AdminDashboard() {
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
             <div className="space-y-6">
-              <nav className="flex gap-2 rounded-2xl border border-fg/10 bg-fg/[0.07] p-1.5" aria-label="Kategori pengaturan kiosk">
+              <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori pengaturan kiosk">
                 {KIOSK_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setKioskSubtab(tab.id)}
-                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${kioskSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/5 hover:text-fg"}`}
+                    className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${kioskSubtab === tab.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/55 hover:text-fg"}`}
                   >
                     {tab.label}
                   </button>
@@ -673,15 +725,15 @@ export default function AdminDashboard() {
           {section === "flow" && <KioskFlowSettings />}
           {section === "finance" && (
             <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} /><Metric label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} /><Metric label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris").length)} /><Metric label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} /></div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric icon="wallet" label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} /><Metric icon="chart" label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} /><Metric icon="qr" label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris").length)} /><Metric icon="ticket" label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} /></div>
               <section className={panel}><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.slice(-12).reverse().map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3 uppercase">{item.paymentMethod}</td><td className="p-3"><span className={item.paymentStatus === "success" ? "text-emerald-300" : "text-amber-300"}>{item.paymentStatus}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>)}</tbody></table></div></section>
-              <nav className="flex gap-2 rounded-2xl border border-fg/10 bg-fg/[0.07] p-1.5" aria-label="Kategori finance">
+              <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori finance">
                 {FINANCE_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setFinanceSubtab(tab.id)}
-                    className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/5 hover:text-fg"}`}
+                    className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/55 hover:text-fg"}`}
                   >
                     {tab.label}
                   </button>
@@ -691,7 +743,7 @@ export default function AdminDashboard() {
               {financeSubtab === "promo" && <VoucherManagement />}
             </div>
           )}
-          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric label="Total clients" value={String(metrics.customers ?? 0)} /><Metric label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
+          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric icon="users" label="Total clients" value={String(metrics.customers ?? 0)} /><Metric icon="phone" label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric icon="shield" label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
           {section === "traffic" && <TrafficMonitor sessions={sessions} traffic={overview.traffic} metrics={metrics} />}
           {section === "media" && <MediaLibrary sessions={sessions} metrics={metrics} downloadAsset={downloadAsset} printAsset={printAsset} downloadingKeys={downloadingKeys} />}
             </motion.div>

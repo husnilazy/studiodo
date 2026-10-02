@@ -42,6 +42,21 @@ const PATHS: Record<string, string> = {
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 11v5 M12 8v.01",
   share: "M8 12l8-5 M8 12l8 5 M6 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
   lock: "M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4 M12 15v2",
+  backspace: "M9 5h11v14H9l-6-7z M12.5 9.5l5 5 M17.5 9.5l-5 5",
+  dashboard: "M4 4h7v7H4z M13 4h7v4h-7z M13 10h7v10h-7z M4 13h7v7H4z",
+  wallet: "M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M3 7l3-3h11 M16 14h2",
+  users: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3 20a6 6 0 0 1 12 0 M17 11a2.5 2.5 0 1 0 0-5 M21 19a5 5 0 0 0-4-4.9",
+  activity: "M3 12h4l3-8 4 16 3-8h4",
+  folder: "M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
+  monitor: "M3 4h18v12H3z M8 20h8 M12 16v4",
+  shuffle: "M16 3h5v5 M4 20L21 3 M21 16v5h-5 M15 15l6 6 M4 4l5 5",
+  sun: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
+  moon: "M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z",
+  keyboard: "M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M18 10h.01 M7 14h10",
+  logout: "M10 4H5v16h5 M16 8l4 4-4 4 M20 12H9",
+  menu: "M4 7h16 M4 12h16 M4 17h16",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M9 12l2 2 4-4",
+  chart: "M4 20V4 M4 20h16 M8 16v-5 M12 16V8 M16 16v-3",
 };
 
 export type IconName = keyof typeof PATHS | (string & {});

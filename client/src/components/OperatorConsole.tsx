@@ -1,3 +1,5 @@
+import AdminKeyboard from "@/components/AdminKeyboard";
+import { openAdminFromKiosk } from "@/lib/adminEntry";
 import { useCallback, useEffect, useState } from "react";
 import { useBoothConfig, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { api } from "@/lib/api";
@@ -50,6 +52,7 @@ export default function OperatorConsole() {
 
   return (
     <div className="force-dark fixed inset-0 z-[100] flex bg-[#0b0b10] text-white">
+      <AdminKeyboard />
       <aside className="flex w-72 shrink-0 flex-col border-r border-white/10 bg-black/40 p-5">
         <p className="eyebrow">OPERATOR</p>
         <h1 className="font-display text-2xl font-bold">Konsol Perangkat</h1>
@@ -394,6 +397,9 @@ function SystemPanel() {
           </>
         )}
       </div>
+      <button type="button" onClick={openAdminFromKiosk} className="mr-3 rounded-lg bg-accent px-4 py-2 text-xs font-semibold">
+        Buka dashboard admin
+      </button>
       {window.studiodo?.relaunchKiosk && (
         <button
           type="button"

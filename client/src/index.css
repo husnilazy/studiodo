@@ -416,3 +416,64 @@ button:disabled {
 [data-theme-mode="light"] [class*="text-red-50/"], [data-theme-mode="light"] [class*="text-red-100/"], [data-theme-mode="light"] [class*="text-red-200/"], [data-theme-mode="light"] [class*="text-red-300/"] { color: rgb(180 35 24 / 0.85); }
 [data-theme-mode="light"] [class*="text-amber-50/"], [data-theme-mode="light"] [class*="text-amber-100/"], [data-theme-mode="light"] [class*="text-amber-200/"], [data-theme-mode="light"] [class*="text-amber-300/"] { color: rgb(138 90 0 / 0.85); }
 [data-theme-mode="light"] [class*="text-emerald-50/"], [data-theme-mode="light"] [class*="text-emerald-100/"], [data-theme-mode="light"] [class*="text-emerald-200/"], [data-theme-mode="light"] [class*="text-emerald-300/"] { color: rgb(15 107 69 / 0.85); }
+
+/* ---------------------------------------------------------------------------------------------
+   Admin chrome (html.admin-themed — see lib/adminTheme.ts). Tames the many hand-written admin forms into one look
+   without touching each page: native controls follow the accent, file pickers become pills, tables get quiet headers.
+   --------------------------------------------------------------------------------------------- */
+html.admin-themed body,
+html.admin-themed #root {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+html.admin-themed input[type="checkbox"],
+html.admin-themed input[type="radio"],
+html.admin-themed input[type="range"] {
+  accent-color: var(--accent);
+}
+html.admin-themed input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  cursor: pointer;
+  border: 0;
+  border-radius: 9999px;
+  padding: 0.4rem 0.95rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  transition: background-color 0.15s ease;
+}
+html.admin-themed input[type="file"]::file-selector-button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+html.admin-themed select {
+  cursor: pointer;
+}
+html.admin-themed table thead th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+html.admin-themed ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html.admin-themed ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--kiosk-text) 18%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+html.admin-themed ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--kiosk-text) 30%, transparent);
+  background-clip: content-box;
+}
+html.admin-themed ::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* The on-screen keyboard (AdminKeyboard) slides in at the bottom: leave room for it so the page can scroll the
+   focused field above the keys instead of hiding it underneath. */
+html.admin-kb-open #root {
+  box-sizing: border-box;
+  padding-bottom: var(--admin-kb-h, 0px);
+}

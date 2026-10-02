@@ -6,6 +6,7 @@ import { useOfflineStore, startNetworkMonitor } from "@/lib/offlineStore";
 import { startKioskHeartbeat } from "@/lib/kioskHeartbeat";
 import NetworkToast from "@/components/NetworkToast";
 import OperatorConsole from "@/components/OperatorConsole";
+import { useHiddenAdminEntry } from "@/lib/adminEntry";
 
 export default function KioskShell({ children }: { children: React.ReactNode }) {
   const config = useBoothConfig((s) => s.config);
@@ -13,6 +14,9 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
   const pendingCount = useOfflineStore((s) => s.pendingSessionCount + s.pendingPhotoCount + s.pendingStripCount);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [showStatus, setShowStatus] = useState(false);
+
+  // Crew shortcut: five quick taps on the bottom-left corner open the admin (see lib/adminEntry.ts).
+  useHiddenAdminEntry();
 
   // Start network monitor + fleet heartbeat once
   useEffect(() => {
@@ -22,6 +26,8 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
   // Apply theme
   useEffect(() => {
+    // The admin pages own the theme while they are open (see lib/adminTheme.ts) and hand it back when they close.
+    if (document.documentElement.classList.contains("admin-themed")) return;
     applyThemeToDocument(config);
   }, [config]);
 

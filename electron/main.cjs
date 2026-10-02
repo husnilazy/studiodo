@@ -377,6 +377,11 @@ ipcMain.on("renderer:log", (_event, level, args) => {
 });
 
 ipcMain.handle("app:getVersion", () => app.getVersion());
+// Lets the kiosk UI (hidden corner tap / Operator Console button) open the admin window without Ctrl+Shift+A.
+ipcMain.handle("admin:open", () => {
+  openAdminWindow();
+  return { ok: true };
+});
 ipcMain.handle("app:relaunchKiosk", () => {
   if (kioskWin) kioskWin.close();
   createKioskWindow();

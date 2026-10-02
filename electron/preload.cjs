@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("studiodo", {
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
   relaunchKiosk: () => ipcRenderer.invoke("app:relaunchKiosk"),
+  openAdmin: () => ipcRenderer.invoke("admin:open"),
   canonBridgeStatus: () => ipcRenderer.invoke("canon:bridgeStatus"),
   digicamBridgeStatus: () => ipcRenderer.invoke("digicam:bridgeStatus"),
   restartDigicamBridge: () => ipcRenderer.invoke("digicam:restartBridge"),

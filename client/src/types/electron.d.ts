@@ -39,6 +39,7 @@ export interface StudiodoUpdaterStatus {
 export interface StudiodoBridgeAPI {
   getVersion: () => Promise<string>;
   relaunchKiosk: () => Promise<void>;
+  openAdmin: () => Promise<{ ok: boolean }>;
   canonBridgeStatus: () => Promise<{ configured: boolean }>;
   digicamBridgeStatus: () => Promise<StudiodoDigicamBridgeStatus>;
   restartDigicamBridge: () => Promise<{ ok: boolean; error?: string }>;

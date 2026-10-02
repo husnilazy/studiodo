@@ -10,9 +10,12 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 // Tailwind 3 can't apply an alpha to a plain `var()` color, so this resolves the alpha with color-mix instead
 // (which also makes modifiers like `bg-accent/10` work — they were silently dropped before).
 const themed = (variable: string) =>
-  ({ opacityValue }: { opacityValue?: string }) => {
-    if (opacityValue === undefined || opacityValue.startsWith("var(")) return `var(${variable})`;
-    const pct = Math.round(parseFloat(opacityValue) * 1000) / 10;
+  ({ opacityValue }: { opacityValue?: string | number }) => {
+    // Gradient stops without an explicit alpha (`from-accent`) pass a plain number (0 / 1), not a string.
+    if (opacityValue === undefined) return `var(${variable})`;
+    const alpha = String(opacityValue);
+    if (alpha.startsWith("var(")) return `var(${variable})`;
+    const pct = Math.round(parseFloat(alpha) * 1000) / 10;
     return pct >= 100 ? `var(${variable})` : `color-mix(in srgb, var(${variable}) ${pct}%, transparent)`;
   };
 
