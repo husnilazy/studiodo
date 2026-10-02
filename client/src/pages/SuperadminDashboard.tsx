@@ -1,4 +1,8 @@
 import PlansPanel from "@/components/PlansPanel";
+import AdminKeyboard from "@/components/AdminKeyboard";
+import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
+import { Icon } from "@/components/kiosk/Icons";
+import { useAdminThemeScope } from "@/lib/adminTheme";
 import { useEffect, useRef, useState } from "react";
 import {
   superadminApi,
@@ -395,19 +399,27 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-canvas px-4 text-fg">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-8 shadow-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-        <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
-        <p className="mt-2 text-sm text-fg/45">Panel superadmin — kelola semua tenant di platform ini.</p>
+    <div className="relative flex h-[calc(100vh-var(--admin-kb-h,0px))] min-h-[420px] items-center justify-center overflow-hidden bg-canvas px-4 text-fg">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-[28rem] w-[28rem] rounded-full bg-accent/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 h-[26rem] w-[26rem] rounded-full bg-[#ffc8de]/30 blur-3xl" />
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <AdminKeyboardToggle />
+        <AdminThemeToggle />
+      </div>
+      <form onSubmit={submit} className="relative w-full max-w-sm rounded-[2rem] border border-fg/10 bg-surface p-8 shadow-glass">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="shield" className="h-6 w-6" /></span>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
+        <h1 className="mt-1 font-display text-2xl font-bold">Admin Pusat</h1>
+        <p className="mt-2 text-sm text-fg/50">Panel superadmin — kelola semua tenant, paket harga, dan pembayaran di platform ini.</p>
         <div className="mt-6 space-y-3">
-          <input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={inputClass} />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className={inputClass} />
+          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
         </div>
-        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-        <button type="submit" disabled={submitting || !email || !password} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+        {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
+        <button type="submit" disabled={submitting || !email || !password} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
           {submitting ? "Memproses…" : "Masuk"}
         </button>
+        <p className="mt-4 text-center text-xs text-fg/40">Halaman ini khusus pengelola platform. Pemilik booth masuk lewat <a href="https://www.studiodo.id/masuk" className="font-semibold text-accent hover:underline">www.studiodo.id/masuk</a>.</p>
       </form>
     </div>
   );
@@ -1192,6 +1204,7 @@ const SECTIONS: { id: Section; label: string; icon: string }[] = [
 ];
 
 export default function SuperadminDashboard() {
+  useAdminThemeScope();
   const [status, setStatus] = useState<"checking" | "needsLogin" | "authenticated">("checking");
   const [email, setEmail] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -1268,7 +1281,7 @@ export default function SuperadminDashboard() {
     return <div className="flex h-screen items-center justify-center bg-canvas text-muted">Memuat…</div>;
   }
   if (status === "needsLogin") {
-    return <LoginForm onLoggedIn={evaluate} />;
+    return <><LoginForm onLoggedIn={evaluate} /><AdminKeyboard /></>;
   }
 
   const selectTenantAndSwitch = (id: string) => {
@@ -1278,6 +1291,7 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="min-h-screen bg-canvas px-6 py-10 text-fg">
+      <AdminKeyboard />
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -1285,9 +1299,14 @@ export default function SuperadminDashboard() {
             <h1 className="mt-1 font-display text-3xl font-bold">Admin Pusat</h1>
             {email && <p className="mt-1 text-sm text-fg/45">Masuk sebagai {email}</p>}
           </div>
-          <button type="button" onClick={logout} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60 hover:border-red-400 hover:text-red-300">
-            Keluar
-          </button>
+          <div className="flex items-center gap-2">
+            <AdminKeyboardToggle />
+            <AdminThemeToggle />
+            <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
+              <Icon name="logout" className="h-4 w-4" />
+              Keluar
+            </button>
+          </div>
         </header>
 
         <nav className="flex flex-wrap gap-2 border-b border-fg/10 pb-4">
