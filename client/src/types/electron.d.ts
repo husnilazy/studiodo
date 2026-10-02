@@ -34,6 +34,7 @@ export interface StudiodoUpdaterStatus {
   progressPercent: number | null;
   error: string | null;
   lastCheckedAt: string | null;
+  autoUpdateEnabled?: boolean;
 }
 
 export interface StudiodoBridgeAPI {
@@ -49,6 +50,7 @@ export interface StudiodoBridgeAPI {
   getSystemDiagnostics: () => Promise<StudiodoSystemDiagnostics>;
   getUpdaterStatus: () => Promise<StudiodoUpdaterStatus>;
   checkForUpdate: () => Promise<StudiodoUpdaterStatus>;
+  installUpdateNow: () => Promise<{ ok: boolean; error?: string }>;
   setAutoUpdateEnabled: (enabled: boolean) => void;
   onOperatorConsoleToggle: (callback: () => void) => () => void;
   logRenderer: (level: "log" | "warn" | "error", args: unknown[]) => void;

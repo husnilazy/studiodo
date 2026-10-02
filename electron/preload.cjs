@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("studiodo", {
   getSystemDiagnostics: () => ipcRenderer.invoke("system:getDiagnostics"),
   getUpdaterStatus: () => ipcRenderer.invoke("updater:getStatus"),
   checkForUpdate: () => ipcRenderer.invoke("updater:checkNow"),
+  installUpdateNow: () => ipcRenderer.invoke("updater:installNow"),
   setAutoUpdateEnabled: (enabled) => ipcRenderer.send("updater:setEnabled", enabled),
   // Renderer console.error/warn used to only exist for the instant they
   // happened — no DevTools console is reachable on an unattended, fullscreen

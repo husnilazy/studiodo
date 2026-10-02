@@ -7,6 +7,7 @@ import { startKioskHeartbeat } from "@/lib/kioskHeartbeat";
 import NetworkToast from "@/components/NetworkToast";
 import OperatorConsole from "@/components/OperatorConsole";
 import { useHiddenAdminEntry } from "@/lib/adminEntry";
+import { useAutoInstallUpdate } from "@/lib/autoInstallUpdate";
 
 export default function KioskShell({ children }: { children: React.ReactNode }) {
   const config = useBoothConfig((s) => s.config);
@@ -17,6 +18,8 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
   // Crew shortcut: five quick taps on the bottom-left corner open the admin (see lib/adminEntry.ts).
   useHiddenAdminEntry();
+  // A downloaded app update restarts the kiosk by itself while it sits idle (see lib/autoInstallUpdate.ts).
+  useAutoInstallUpdate();
 
   // Start network monitor + fleet heartbeat once
   useEffect(() => {

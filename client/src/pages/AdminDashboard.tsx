@@ -447,6 +447,11 @@ function AppVersionFooter() {
 
   if (!window.studiodo?.getUpdaterStatus) return null;
 
+  const installNow = async () => {
+    if (!window.confirm("Aplikasi akan restart untuk memasang update. Lanjutkan?")) return;
+    await window.studiodo?.installUpdateNow?.();
+  };
+
   const checkNow = async () => {
     setChecking(true);
     try {
@@ -460,7 +465,7 @@ function AppVersionFooter() {
     if (checking || status?.state === "checking") return "Mengecek...";
     switch (status?.state) {
       case "downloading": return `Update v${status.version} — ${status.progressPercent ?? 0}%`;
-      case "downloaded": return `Update v${status.version} siap, restart untuk pasang`;
+      case "downloaded": return `Update v${status.version} siap dipasang`;
       case "available": return `Update v${status.version} ditemukan...`;
       case "not-available": return "Versi terbaru";
       case "error": return "Gagal cek update";
@@ -471,9 +476,16 @@ function AppVersionFooter() {
   return (
     <div className="mt-auto border-t border-fg/10 pt-4 text-center">
       <p className="text-[11px] text-fg/35">STUDIODO v{status?.currentVersion ?? "-"} — {statusLabel}</p>
-      <button type="button" onClick={checkNow} disabled={checking} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
-        {checking ? "Mengecek..." : "Cek update"}
-      </button>
+      {status?.state === "downloaded" ? (
+        <button type="button" onClick={installNow} className="mt-2 w-full rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white shadow-md shadow-accent/25">
+          Pasang update v{status.version} &amp; restart
+        </button>
+      ) : (
+        <button type="button" onClick={checkNow} disabled={checking} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
+          {checking ? "Mengecek..." : "Cek update"}
+        </button>
+      )}
+      {status?.state === "error" && status.error && <p className="mt-1 break-words text-[10px] leading-snug text-red-500">{status.error}</p>}
     </div>
   );
 }

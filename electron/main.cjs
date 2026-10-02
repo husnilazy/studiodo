@@ -234,6 +234,8 @@ const updaterStatus = {
   progressPercent: null,
   error: null,
   lastCheckedAt: null,
+  // Mirrors the per-kiosk "auto-update" switch so the screen can decide whether it may restart the app by itself.
+  autoUpdateEnabled: true,
 };
 
 // Defaults to enabled — matches the pre-toggle behavior for every kiosk that
@@ -248,6 +250,7 @@ const updaterStatus = {
 let autoUpdateEnabled = true;
 ipcMain.on("updater:setEnabled", (_event, enabled) => {
   autoUpdateEnabled = Boolean(enabled);
+  updaterStatus.autoUpdateEnabled = autoUpdateEnabled;
 });
 
 function setupAutoUpdater() {
@@ -300,6 +303,25 @@ function setupAutoUpdater() {
 }
 
 ipcMain.handle("updater:getStatus", () => updaterStatus);
+
+// Installing only on app quit (autoInstallOnAppQuit) never happens on a kiosk: the app is locked fullscreen and nobody
+// quits it, so a downloaded update would wait forever. This restarts into the new version on demand — from the admin
+// button, or from the idle screen once nobody has touched the kiosk for a while (see client/src/lib/autoInstallUpdate.ts).
+// Silent install, then the app relaunches itself.
+ipcMain.handle("updater:installNow", () => {
+  if (isDev || updaterStatus.state !== "downloaded") return { ok: false, error: "Belum ada update yang siap dipasang" };
+  console.log("[updater] installing update now (quitAndInstall)");
+  // Let the IPC reply go out first; quitAndInstall closes every window.
+  setTimeout(() => {
+    try {
+      stopDigicamBridge();
+      autoUpdater.quitAndInstall(true, true);
+    } catch (error) {
+      console.error("[updater] quitAndInstall gagal", error);
+    }
+  }, 300);
+  return { ok: true };
+});
 ipcMain.handle("updater:checkNow", async () => {
   if (isDev) return { ...updaterStatus, error: "Update check dimatikan di mode development" };
   try {
