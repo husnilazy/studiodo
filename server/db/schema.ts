@@ -46,6 +46,11 @@ export const tenants = pgTable("tenants", {
   directoryListed: boolean("directory_listed").notNull().default(false),
   directoryDescription: text("directory_description"),
   directoryShowWhatsapp: boolean("directory_show_whatsapp").notNull().default(false),
+  // Where kiosk QRIS money lands. 'direct' = the tenant's own Xendit account (keys in tenant_settings, the original
+  // model — nothing to withdraw). 'platform' = STUDIODO's Xendit account collects it and the tenant withdraws the
+  // balance (see `withdrawals`). `qrisPlatformSince` marks when that began: only QRIS payments after it count.
+  qrisSettlement: text("qris_settlement").notNull().default("direct"), // 'direct' | 'platform'
+  qrisPlatformSince: timestamp("qris_platform_since"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -163,8 +168,35 @@ export const platformSettings = pgTable("platform_settings", {
   // the kiosk actually locks (see server/lib/subscription.ts). Platform-wide, not
   // per-tenant, same as defaultTrialDays above.
   gracePeriodDays: integer("grace_period_days").notNull().default(3),
+  // QRIS withdrawals (platform-settled tenants only): the % STUDIODO keeps from each QRIS payment, the smallest
+  // amount a tenant may withdraw, and a flat fee deducted from every payout.
+  qrisFeePercent: numeric("qris_fee_percent", { precision: 5, scale: 2 }).notNull().default("0.70"),
+  withdrawalMinAmount: integer("withdrawal_min_amount").notNull().default(50000),
+  withdrawalFlatFee: integer("withdrawal_flat_fee").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// A tenant's request to pay out their QRIS balance to a bank account / e-wallet. The tenant asks (pending); a
+// superadmin transfers the money by hand and follows it up (processing → paid, or rejected with a reason). The
+// balance is derived, never stored: qris income − platform fee − every withdrawal that is not rejected.
+export const withdrawals = pgTable("withdrawals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // taken from the balance
+  feeAmount: numeric("fee_amount", { precision: 12, scale: 2 }).notNull().default("0"), // flat payout fee (snapshot)
+  netAmount: numeric("net_amount", { precision: 12, scale: 2 }).notNull(), // what the tenant actually receives
+  status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'paid' | 'rejected'
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  accountName: text("account_name").notNull(),
+  requestNote: text("request_note"),
+  adminNote: text("admin_note"), // reason when rejected / remark when paid — visible to the tenant
+  transferReference: text("transfer_reference"), // bank transfer reference entered by the superadmin
+  requestedBy: text("requested_by"),
+  processedBy: text("processed_by"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+}, (table) => [index("withdrawals_tenant_id_idx").on(table.tenantId), index("withdrawals_status_idx").on(table.status)]);
 
 // Append-only platform activity/error log — didn't exist before. tenantId
 // null means a platform-wide event (e.g. a plan created/deleted, or an
@@ -240,6 +272,8 @@ export const packages = pgTable("packages", {
   photoCount: integer("photo_count").notNull(),
   hasGif: boolean("has_gif").notNull().default(false),
   hasVideo: boolean("has_video").notNull().default(false),
+  // A slow stop-motion video built from every photo of the session (separate from the live GIF/video clips above).
+  hasStopMotion: boolean("has_stop_motion").notNull().default(false),
   extraPrints: jsonb("extra_prints").$type<{ id: string; name: string; price: number }[]>().notNull().default([]),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -317,6 +351,7 @@ export const sessions = pgTable("sessions", {
   // photoUrls, so each one can also be offered as its own small download.
   gifUrl: text("gif_url"),
   videoUrl: text("video_url"),
+  stopMotionUrl: text("stop_motion_url"),
   slotClipUrls: jsonb("slot_clip_urls").$type<(string | null)[]>().default([]),
   mediaUrls: jsonb("media_urls").$type<string[]>().notNull().default([]),
   stripUrl: text("strip_url"),
@@ -438,16 +473,8 @@ export const screenLayouts = pgTable("screen_layouts", {
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   screenKey: text("screen_key").notNull(), // KioskStepKey | "idle"
   orientation: text("orientation").notNull(), // 'portrait' | 'landscape'
-  elements: jsonb("elements").$type<{
-    id: string;
-    type: "system-button" | "text" | "system-steplist" | "image";
-    xPct: number;
-    yPct: number;
-    widthPct: number;
-    heightPct: number;
-    zIndex: number;
-    fontSizeVw?: number;
-  }[]>().notNull().default([]),
+  // Shape is validated and documented in routes/screenLayouts.ts (LayoutElement).
+  elements: jsonb("elements").$type<Record<string, unknown>[]>().notNull().default([]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
   index("screen_layouts_tenant_id_idx").on(table.tenantId),

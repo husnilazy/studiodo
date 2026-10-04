@@ -1,10 +1,12 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { tenantSettings, sessions, vouchers, voucherRedemptions } from "../db/schema.js";
+import { tenantSettings, tenants, sessions, vouchers, voucherRedemptions } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
+import { loadGateway } from "../lib/gateways.js";
+import { expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 
 export const paymentRouter = Router();
 
@@ -20,7 +22,21 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
 // key/token implicitly shares one Xendit account and one webhook secret,
 // letting any of them forge "payment succeeded" webhooks for the others.
 // Each tenant must configure its own via Admin → Pembayaran QRIS Xendit.
+//
+// The one deliberate exception is a tenant a superadmin switched to platform settlement
+// (tenants.qrisSettlement = 'platform'): their QRIS is collected on STUDIODO's own Xendit account — the platform
+// gateway saved in Superadmin — and the tenant withdraws the balance (see routes/withdrawals.ts). The callback URL
+// still carries the tenant id, and the token checked is the platform's, so one tenant still can't forge another's payment.
 async function getXenditConfig(tenantId: string) {
+  const [tenant] = await db.select({ qrisSettlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId));
+  if (tenant?.qrisSettlement === "platform") {
+    const gateway = await loadGateway("xendit");
+    return {
+      secretKey: gateway.enabled ? gateway.secretKey ?? undefined : undefined,
+      webhookToken: gateway.webhookToken ?? undefined,
+      demoMode: false,
+    };
+  }
   const [config] = await db
     .select({ secretKey: tenantSettings.xenditSecretKey, webhookToken: tenantSettings.xenditWebhookToken })
     .from(tenantSettings)
@@ -277,6 +293,7 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
     if (cashAmount < sessionAmount) return res.status(400).json({ error: `Nominal invoice cash kurang. Total sesi Rp ${sessionAmount.toLocaleString("id-ID")}.` });
     await db.update(vouchers).set({ usedCount: voucher.usedCount + 1, active: false }).where(eq(vouchers.id, voucher.id));
     await db.update(sessions).set({ paymentStatus: "success", paymentMethod: "cash", voucherCode: voucher.code }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+    expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     await db.insert(voucherRedemptions).values({
       tenantId, voucherId: voucher.id, sessionId, redemptionPurpose: "session",
       originalAmount: sessionAmount.toFixed(2), discountAmount: "0.00", finalAmount: sessionAmount.toFixed(2),
@@ -303,6 +320,7 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
     tenantId, voucherId: voucher.id, sessionId, redemptionPurpose: "session",
     originalAmount: originalAmount.toFixed(2), discountAmount: discount.toFixed(2), finalAmount: amount.toFixed(2),
   });
+  if (amount === 0) expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
   res.json({ valid: true, amount, discount, voucherCode: voucher.code });
 });
 
@@ -349,7 +367,8 @@ paymentRouter.post("/webhook/xendit/:tenantId", async (req, res) => {
         if (Number.isFinite(paidAmount) && paidAmount < expected) {
           console.warn(`[xendit-webhook] Jumlah dibayar (${paidAmount}) kurang dari total sesi (${expected}) untuk sesi ${sessionId}, diabaikan.`);
         } else {
-          await db.update(sessions).set({ paymentStatus: "success" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+          await db.update(sessions).set({ paymentStatus: "success", paymentMethod: "qris" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+          expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
         }
       }
     }

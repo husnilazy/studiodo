@@ -60,6 +60,7 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
           <Feature icon="camera" label={`${pkg.photoCount} foto`} />
           {pkg.hasGif && <Feature icon="gif" label="GIF animasi" />}
           {pkg.hasVideo && <Feature icon="video" label="Video singkat" />}
+          {pkg.hasStopMotion && <Feature icon="video" label="Video stop motion" />}
           <Feature icon="smile" label="Filter & stiker seru" />
           <Feature icon="download" label="Unduh lewat QR code" />
         </ul>

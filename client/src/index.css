@@ -11,7 +11,8 @@
    kiosk orientation. Admin/superadmin/public-gallery are normal desktop/phone
    web pages, not a walk-up touchscreen, so they opt back out below. */
 html {
-  font-size: clamp(16px, 1vw + 1vh, 26px);
+  /* --ui-scale is the tenant's "Skala tampilan" setting (Kustomisasi Kiosk); 1 = the automatic screen-based size. */
+  font-size: calc(clamp(16px, 1vw + 1vh, 26px) * var(--ui-scale, 1));
 }
 html.admin-mode,
 html.superadmin-mode,
@@ -115,9 +116,18 @@ body.superadmin-mode #root {
 [data-button-style="rounded"] {
   --button-radius: 0.875rem;
 }
-[data-button-style] button {
+/* Shape applies to every real <button> AND to anything styled .k-btn (the main call-to-action on Idle is a <div>, which
+   the old `button`-only rule never reached — that is why the setting seemed to work on some screens and not others).
+   Round icon buttons / tabs that are deliberately circular (rounded-full) keep their own shape. */
+[data-button-style] button:not([class*="rounded-full"]),
+[data-button-style] .k-btn {
   border-radius: var(--button-radius);
 }
+
+/* Button size: one multiplier drives the height, padding and text of every .k-btn. */
+:root { --btn-scale: 1; }
+[data-button-size="small"] { --btn-scale: 0.82; }
+[data-button-size="large"] { --btn-scale: 1.25; }
 
 .bg-ink-800,
 .bg-ink-900 {
@@ -134,9 +144,9 @@ body.superadmin-mode #root {
   gap: 2rem;
 }
 
-[data-animations="false"] *,
-[data-animations="false"] *::before,
-[data-animations="false"] *::after {
+[data-animations="false"] *:not(.studiodo-marquee),
+[data-animations="false"] *:not(.studiodo-marquee)::before,
+[data-animations="false"] *:not(.studiodo-marquee)::after {
   animation-duration: 0s !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0s !important;
@@ -242,11 +252,11 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  min-height: 3.25rem;
-  padding: 0.75rem 1.75rem;
-  border-radius: 9999px;
+  min-height: calc(3.25rem * var(--btn-scale, 1));
+  padding: calc(0.75rem * var(--btn-scale, 1)) calc(1.75rem * var(--btn-scale, 1));
+  border-radius: var(--button-radius, 9999px);
   font-weight: 600;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--btn-scale, 1));
   line-height: 1.2;
   border: 1px solid var(--hairline);
   background: var(--glass-bg-1);
@@ -287,9 +297,9 @@ button:disabled {
   background: color-mix(in srgb, var(--kiosk-text) 6%, transparent);
 }
 .k-btn-lg {
-  min-height: 4rem;
-  padding: 1rem 2.5rem;
-  font-size: 1.15rem;
+  min-height: calc(4rem * var(--btn-scale, 1));
+  padding: calc(1rem * var(--btn-scale, 1)) calc(2.5rem * var(--btn-scale, 1));
+  font-size: calc(1.15rem * var(--btn-scale, 1));
 }
 
 .k-chip {
@@ -477,3 +487,20 @@ html.admin-kb-open #root {
   box-sizing: border-box;
   padding-bottom: var(--admin-kb-h, 0px);
 }
+
+/* Running logo / running text added in the screen builder: slides left forever, second half is an exact copy of the first. */
+@keyframes studiodo-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.studiodo-marquee {
+  animation-name: studiodo-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+/* Screen builder canvas: the real screen is drawn for editing only — nothing on it may react to clicks except the
+   elements being arranged (and their resize handle), so a stray tap can never navigate or start a payment. */
+.builder-canvas * { pointer-events: none !important; }
+.builder-canvas [data-builder-id], .builder-canvas [data-builder-handle] { pointer-events: auto !important; }

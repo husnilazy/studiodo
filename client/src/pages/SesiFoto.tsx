@@ -14,6 +14,8 @@ import { prepareClipFrameStyle, drawClipFrame, pickClipCanvasSize } from "@/lib/
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
+import ZoomableImageModal from "@/components/ZoomableImageModal";
+import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 import Spinner from "@/components/Spinner";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
@@ -57,6 +59,14 @@ function IconRefreshSmall({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 13.66-5.66L20 8.5M20 12a8 8 0 0 1-13.66 5.66L4 15.5M20 4v4.5h-4.5M4 20v-4.5h4.5" />
+    </svg>
+  );
+}
+function IconZoomSmall({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path strokeLinecap="round" d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5" />
     </svg>
   );
 }
@@ -115,6 +125,8 @@ function TimerExpiredOverlay({ onSkip, waitingForMedia }: { onSkip: () => void; 
 export default function SesiFoto() {
   const [, navigate] = useLocation();
   const config = useBoothConfig((s) => s.config);
+  // The admin's live-preview frame must never drive the booth's real DSLR/live view, so it always uses the webcam.
+  const cameraMode = IS_KIOSK_PREVIEW ? "webcam" : config.cameraMode;
   const eventActive = isEventActive(config);
   const eventTimerEnabled = !eventActive || config.eventTimerEnabled;
   const sessionTimerMinutes = eventActive ? config.eventSessionTimerMinutes : config.sessionTimerMinutes;
@@ -174,6 +186,9 @@ export default function SesiFoto() {
   };
   const [focusing, setFocusing] = useState(false);
   const [capturedSlot, setCapturedSlot] = useState<number | null>(null);
+  // Tapping a finished shot opens it full-screen (pinch/scroll to zoom) so the customer can really look at it — and
+  // decide whether to retake — instead of the tap instantly throwing the photo away to reshoot.
+  const [zoomSlot, setZoomSlot] = useState<number | null>(null);
   const [liveViewUrl, setLiveViewUrl] = useState<string | null>(null);
   const [liveViewLost, setLiveViewLost] = useState(false);
   const [liveViewStarting, setLiveViewStarting] = useState(false);
@@ -299,7 +314,7 @@ export default function SesiFoto() {
       navigate("/paket");
       return;
     }
-    if (config.cameraMode === "tether") return;
+    if (cameraMode === "tether") return;
     let stream: MediaStream | undefined;
     (async () => {
       try {
@@ -317,13 +332,13 @@ export default function SesiFoto() {
       }
     })();
     return () => stream?.getTracks().forEach((t) => t.stop());
-  }, [config.cameraMode, selectedPackage, sessionId]);
+  }, [cameraMode, selectedPackage, sessionId]);
 
   // Tether mode: don't just assume the Canon bridge/camera is reachable —
   // actually check, and keep checking, so a customer never pays and steps up
   // to a dead camera without anyone knowing until the shutter is pressed.
   useEffect(() => {
-    if (isEditMode || !selectedPackage || !sessionId || config.cameraMode !== "tether") return;
+    if (isEditMode || !selectedPackage || !sessionId || cameraMode !== "tether") return;
     let cancelled = false;
 
     const check = async () => {
@@ -346,10 +361,10 @@ export default function SesiFoto() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [config.cameraMode, config.tetherBridgeUrl, selectedPackage, sessionId]);
+  }, [cameraMode, config.tetherBridgeUrl, selectedPackage, sessionId]);
 
   useEffect(() => {
-    if (isEditMode || config.cameraMode !== "tether") return;
+    if (isEditMode || cameraMode !== "tether") return;
     const controller = new AbortController();
     const bridgeUrl = config.tetherBridgeUrl.replace(/\/$/, "");
 
@@ -378,7 +393,7 @@ export default function SesiFoto() {
       setLiveViewStarting(false);
       stopTetherLiveView(bridgeUrl);
     };
-  }, [config.cameraMode, config.tetherBridgeUrl]);
+  }, [cameraMode, config.tetherBridgeUrl]);
 
   useEffect(() => {
     if (!template || !templateCanvasRef.current) return;
@@ -438,7 +453,7 @@ export default function SesiFoto() {
     setTimeout(() => setFlash(false), 500);
 
     let blob: Blob;
-    if (config.cameraMode === "tether") {
+    if (cameraMode === "tether") {
       setCapturing(true);
       try {
         // One bounded retry for the whole capture round-trip — the bridge
@@ -630,7 +645,7 @@ export default function SesiFoto() {
   // per-shot time — capture stays exactly as smooth as a single format.
   const captureSlotClip = async (slotIndex: number, durationMs: number) => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
-    const isTether = config.cameraMode === "tether";
+    const isTether = cameraMode === "tether";
     if (isTether && !liveViewUrl) return;
     if (!isTether && !videoRef.current) return;
 
@@ -841,7 +856,7 @@ export default function SesiFoto() {
     if (!previewReady || countdown !== null || (eventTimerEnabled && remainingSeconds <= 0) || sessionComplete || captureLockRef.current) return;
     captureLockRef.current = true;
     setCaptureNotice(null);
-    if (config.cameraMode === "tether") {
+    if (cameraMode === "tether") {
       setFocusing(true);
       focusTetherCamera(config.tetherBridgeUrl)
         .catch((error) => showCaptureNotice(error instanceof Error ? error.message : "Autofocus kamera gagal."))
@@ -951,7 +966,7 @@ export default function SesiFoto() {
             <span className="k-chip k-chip-accent">{photoUrls.filter(Boolean).length}/{totalPhotos}</span>
           </div>
           <p className="mt-2 hidden items-center gap-1.5 text-xs leading-5 text-fg/50 landscape:flex">
-            <IconRefreshSmall className="h-3.5 w-3.5 shrink-0 text-fg/40" /> Ketuk foto yang sudah jadi untuk ambil ulang.
+            <IconZoomSmall className="h-3.5 w-3.5 shrink-0 text-fg/40" /> Ketuk foto untuk memperbesar{config.features.retake ? " atau ambil ulang" : ""}.
           </p>
           {/* `auto-rows-fr` (not `content-start`) is what actually stretches
               every row to share out whatever height this column has — with
@@ -965,17 +980,17 @@ export default function SesiFoto() {
             return (
             <button
               key={index}
-              onClick={() => photoUrl && config.features.retake && retake(index)}
+              onClick={() => photoUrl && setZoomSlot(index)}
               disabled={!photoUrl}
               className={`group relative flex h-24 w-20 shrink-0 min-h-0 flex-col overflow-hidden rounded-2xl border-2 landscape:h-full landscape:w-auto bg-fg/[0.04] transition ${isCurrent ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? "border-fg/15 hover:border-fg/35" : "border-dashed border-fg/15"}`}
             >
               {photoUrl ? (
                 <>
-                  <img src={photoUrl} alt={`Hasil foto ${index + 1}`} className="block h-full w-full flex-1 object-cover transition group-hover:scale-105" />
+                  <img src={photoUrl} alt={`Hasil foto ${index + 1}`} className="block h-full w-full flex-1 object-cover transition group-hover:scale-105" style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }} />
                   {/* Always-visible retake bar — a hover-only affordance is
                       invisible on a touchscreen, so this can't be hover-only. */}
-                  <span className={`${config.features.retake ? "flex" : "hidden"} shrink-0 items-center justify-center gap-1 bg-black/70 py-1.5 text-[0.625rem] font-semibold text-white/85 backdrop-blur-sm`}>
-                    <IconRefreshSmall className="h-3 w-3" /> Ambil ulang
+                  <span className="flex shrink-0 items-center justify-center gap-1 bg-black/70 py-1.5 text-[0.625rem] font-semibold text-white/85 backdrop-blur-sm">
+                    <IconZoomSmall className="h-3 w-3" /> Perbesar
                   </span>
                 </>
               ) : (
@@ -1034,13 +1049,13 @@ export default function SesiFoto() {
                   <p className="mt-4 font-display text-xl font-semibold">Kamera belum tersedia</p>
                   <p className="mt-2 max-w-sm text-sm leading-6 text-fg/50">{cameraError}</p>
                   <p className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-2 text-xs text-fg/40">
-                    {config.cameraMode === "tether"
+                    {cameraMode === "tether"
                       ? "Pastikan digiCamControl berjalan dan kamera Canon terhubung lewat USB — layar ini akan tertutup otomatis begitu terdeteksi lagi."
                       : "Izinkan akses kamera pada browser, lalu muat ulang halaman."}
                   </p>
                 </div>
               )}
-              {config.cameraMode === "tether" ? (
+              {cameraMode === "tether" ? (
                 <div className="relative h-full w-full bg-black">
                   <img
                     src={liveViewUrl ?? undefined}
@@ -1205,6 +1220,31 @@ export default function SesiFoto() {
       </AnimatePresence>
 
       <canvas ref={canvasRef} className="hidden" />
+
+      {zoomSlot !== null && photoUrls[zoomSlot] && (
+        <ZoomableImageModal
+          src={photoUrls[zoomSlot]}
+          alt={`Foto ${zoomSlot + 1}`}
+          mirror={mirrorLiveView}
+          title={`Foto ${zoomSlot + 1} dari ${totalPhotos}`}
+          onClose={() => setZoomSlot(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setZoomSlot(null)} className="k-btn !border-white/25 !bg-white/10 !text-white">Tutup</button>
+              {config.features.retake ? (
+                <button
+                  type="button"
+                  onClick={() => { retake(zoomSlot); setZoomSlot(null); }}
+                  disabled={countdown !== null || capturing}
+                  className="k-btn k-btn-accent disabled:opacity-50"
+                >
+                  <IconRefreshSmall className="h-5 w-5" /> Ambil ulang foto ini
+                </button>
+              ) : null}
+            </>
+          }
+        />
+      )}
 
     </div>
     </ScreenLayoutBoundary>

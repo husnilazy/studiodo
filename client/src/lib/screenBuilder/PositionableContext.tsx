@@ -14,6 +14,8 @@ interface PositionableContextValue {
    * Positionable keep its resize handle a constant, grabbable screen size
    * instead of shrinking along with a zoomed-out canvas. */
   scale: number;
+  /** Editor only: alignment guides to draw while an element is dragged (null = hide). */
+  setGuides: (guides: { x: boolean; y: boolean } | null) => void;
 }
 
 const PositionableContext = createContext<PositionableContextValue | null>(null);
@@ -34,6 +36,7 @@ interface ProviderProps {
   onRegisteredElementsChange?: (elements: RegisteredElement[]) => void;
   canvasRef?: RefObject<HTMLDivElement>;
   scale?: number;
+  onGuides?: (guides: { x: boolean; y: boolean } | null) => void;
 }
 
 export function PositionableProvider({
@@ -46,6 +49,7 @@ export function PositionableProvider({
   onRegisteredElementsChange,
   canvasRef,
   scale = 1,
+  onGuides,
 }: ProviderProps) {
   // Registration is driven by whatever Positionable components actually mount —
   // this is what keeps the editor's Layers panel truthful to the real page
@@ -76,7 +80,8 @@ export function PositionableProvider({
     unregister,
     canvasRef: canvasRef ?? null,
     scale,
-  }), [editMode, overrides, selectedId, onSelect, onUpdateOverride, register, unregister, canvasRef, scale]);
+    setGuides: onGuides ?? (() => undefined),
+  }), [editMode, overrides, selectedId, onSelect, onUpdateOverride, register, unregister, canvasRef, scale, onGuides]);
 
   return <PositionableContext.Provider value={value}>{children}</PositionableContext.Provider>;
 }

@@ -13,6 +13,7 @@ import { renderPhotoStrip, STRIP_LAYOUT_LABELS, STRIP_TEMPLATE_LABELS } from "@/
 import { panel, panelAccent, inputClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
+import StopMotionFramePanel from "@/components/StopMotionFramePanel";
 
 // Reused by the batch-draft editor and the single-template editor. Used to be
 // a bare native <select> (the exact "old-fashioned app" look the admin called
@@ -495,6 +496,8 @@ export default function FrameManagement() {
           )}
         </div>
       </section>
+
+      <StopMotionFramePanel />
 
       <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
         <div className="flex flex-wrap items-center justify-between gap-3">

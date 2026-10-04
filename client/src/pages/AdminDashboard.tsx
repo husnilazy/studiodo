@@ -8,6 +8,8 @@ import { useBoothConfig } from "@/lib/boothConfigStore";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
+import TrendChart from "@/components/TrendChart";
+import WithdrawalPanel from "@/components/WithdrawalPanel";
 import AdminPlaceholder from "./AdminPlaceholder";
 import GalleryProfile from "./GalleryProfile";
 import KioskKeys from "./KioskKeys";
@@ -22,7 +24,7 @@ import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
 const sections: { id: Section; label: string; icon: string; group: string; hint: string }[] = [
-  { id: "control", label: "Control Center", icon: "sliders", group: "Tampilan", hint: "Atur tampilan dan perilaku kiosk yang dilihat pelanggan." },
+  { id: "control", label: "Kustomisasi Kiosk", icon: "sliders", group: "Tampilan", hint: "Logo, warna, tombol, dan teks kiosk — lihat hasilnya langsung di pratinjau kiosk asli." },
   { id: "gallery", label: "Profil Gallery", icon: "sparkles", group: "Tampilan", hint: "Profil dan tampilan galeri publik hasil foto." },
   { id: "kiosk", label: "Kiosk", icon: "monitor", group: "Operasional", hint: "Kunci kiosk, kamera, dan printer di PC booth." },
   { id: "flow", label: "Flow Kiosk", icon: "shuffle", group: "Operasional", hint: "Urutan layar yang dilalui pelanggan." },
@@ -119,16 +121,28 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
   );
 }
 
+// "expired" = a session row that was opened but never paid (customer walked away, screen re-opened…). It used to be
+// lumped in with "pending", so the log kept showing PENDING next to the session that actually succeeded.
+function paymentStatusBadge(status: string) {
+  switch (status) {
+    case "success": return { label: "Berhasil", className: "bg-emerald-400/15 text-emerald-600" };
+    case "failed": return { label: "Gagal", className: "bg-red-400/15 text-red-500" };
+    case "expired": return { label: "Tidak dibayar", className: "bg-fg/10 text-fg/50" };
+    default: return { label: "Menunggu bayar", className: "bg-amber-300/20 text-amber-600" };
+  }
+}
+const paymentMethodLabel = (method?: string | null) => ({ qris: "QRIS", voucher: "Voucher", cash: "Cash", event: "Event gratis" } as Record<string, string>)[method ?? ""] ?? "belum dipilih";
+
 function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traffic: any[]; metrics: any }) {
   const sortedTraffic = [...traffic].sort((left, right) => left.date.localeCompare(right.date));
   const peak = sortedTraffic.reduce((current, item) => item.visits > current.visits ? item : current, { date: "-", visits: 0, revenue: 0 });
   const latest = sortedTraffic.at(-1);
   const previous = sortedTraffic.at(-2);
   const trend = previous?.visits ? Math.round(((latest.visits - previous.visits) / previous.visits) * 100) : 0;
-  const maxVisits = Math.max(...sortedTraffic.map((item) => item.visits), 1);
   const successCount = sessions.filter((item) => item.paymentStatus === "success").length;
   const pendingCount = sessions.filter((item) => item.paymentStatus === "pending").length;
-  const failedCount = sessions.filter((item) => item.paymentStatus === "failed" || item.paymentStatus === "expired").length;
+  const failedCount = sessions.filter((item) => item.paymentStatus === "failed").length;
+  const unpaidCount = sessions.filter((item) => item.paymentStatus === "expired").length;
   const formatDate = (date: string) => date === "-" ? "-" : new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
 
   return (
@@ -142,25 +156,14 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <section className={`${panel} overflow-hidden`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><p className="text-xs uppercase tracking-[.16em] text-accent">ACTIVITY PULSE</p><h3 className="mt-2 font-display text-2xl font-semibold">Traffic harian</h3><p className="mt-1 text-sm text-fg/45">Jumlah sesi yang dimulai per hari.</p></div>
-            <div className="rounded-xl border border-fg/10 bg-fg/5 px-3 py-2 text-right"><p className="text-[10px] uppercase tracking-wider text-fg/40">Peak</p><p className="text-lg font-semibold text-accent">{peak.visits}</p></div>
-          </div>
-          {sortedTraffic.length > 0 ? (
-            <div className="mt-8 flex h-72 items-end gap-2 overflow-x-auto border-b border-fg/10 pb-0 sm:gap-3">
-              {sortedTraffic.map((item) => {
-                const height = Math.max(10, Math.round((item.visits / maxVisits) * 205));
-                return <div key={item.date} className="group flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-2 sm:min-w-16" title={`${formatDate(item.date)} · ${item.visits} sesi · ${money(item.revenue ?? 0)}`}><span className="text-xs font-semibold text-fg/70">{item.visits}</span><div className="relative flex w-full max-w-16 items-end justify-center" style={{ height: `${height}px` }}><div className="h-full w-full rounded-t-xl bg-accent opacity-85 shadow-lg shadow-accent/10 transition duration-300 group-hover:opacity-100 group-hover:brightness-125" /><span className="absolute -top-6 text-[10px] text-fg/0 transition group-hover:text-fg/70">{money(item.revenue ?? 0)}</span></div><span className="text-[10px] text-fg/40">{formatDate(item.date)}</span></div>;
-              })}
-            </div>
-          ) : <div className="mt-8 flex h-72 items-center justify-center rounded-xl border border-dashed border-fg/10 text-sm text-fg/35">Belum ada aktivitas traffic.</div>}
+          {sortedTraffic.length > 0 ? <TrendChart data={sortedTraffic} /> : <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-fg/10 text-sm text-fg/35">Belum ada aktivitas traffic.</div>}
         </section>
 
         <section className={panel}>
           <p className="text-xs uppercase tracking-[.16em] text-accent">SESSION FUNNEL</p>
           <h3 className="mt-2 font-display text-2xl font-semibold">Status sesi</h3>
           <div className="mt-6 space-y-5">
-            {[{ label: "Berhasil bayar", value: successCount, color: "bg-emerald-400", text: "text-emerald-300" }, { label: "Menunggu", value: pendingCount, color: "bg-amber-300", text: "text-amber-200" }, { label: "Gagal / expired", value: failedCount, color: "bg-red-400", text: "text-red-300" }].map((item) => <div key={item.label}><div className="flex items-center justify-between text-sm"><span className="text-fg/55">{item.label}</span><span className={`font-semibold ${item.text}`}>{item.value}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-fg/10"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${metrics.totalSessions ? Math.max(item.value ? 4 : 0, (item.value / metrics.totalSessions) * 100) : 0}%` }} /></div></div>)}
+            {[{ label: "Berhasil bayar", value: successCount, color: "bg-emerald-400", text: "text-emerald-300" }, { label: "Menunggu", value: pendingCount, color: "bg-amber-300", text: "text-amber-200" }, { label: "Gagal", value: failedCount, color: "bg-red-400", text: "text-red-300" }, { label: "Tidak dibayar", value: unpaidCount, color: "bg-fg/30", text: "text-fg/60" }].map((item) => <div key={item.label}><div className="flex items-center justify-between text-sm"><span className="text-fg/55">{item.label}</span><span className={`font-semibold ${item.text}`}>{item.value}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-fg/10"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${metrics.totalSessions ? Math.max(item.value ? 4 : 0, (item.value / metrics.totalSessions) * 100) : 0}%` }} /></div></div>)}
           </div>
           <div className="mt-8 grid grid-cols-2 gap-3 border-t border-fg/10 pt-5"><div><p className="text-[10px] uppercase tracking-wider text-fg/40">Foto dibuat</p><p className="mt-1 text-xl font-semibold">{metrics.photos ?? 0}</p></div><div><p className="text-[10px] uppercase tracking-wider text-fg/40">Revenue</p><p className="mt-1 text-xl font-semibold text-accent">{money(metrics.revenue ?? 0)}</p></div></div>
         </section>
@@ -169,7 +172,21 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
       <section className={panel}>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[.16em] text-accent">LIVE LOG</p><h3 className="mt-2 font-display text-2xl font-semibold">Aktivitas sesi terbaru</h3></div><span className="text-xs text-fg/40">{sessions.length} sesi total</span></div>
         <div className="mt-5 divide-y divide-fg/10">
-          {sessions.slice(-6).reverse().map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="text-sm font-semibold">Sesi {String(item.id).slice(0, 8)}</p><p className="mt-1 text-xs text-fg/40">{new Date(item.createdAt).toLocaleString("id-ID")} · {item.paymentMethod ?? "belum dipilih"}</p></div><div className="flex items-center gap-4"><span className="text-sm text-fg/60">{money(Number(item.totalAmount ?? 0))}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${item.paymentStatus === "success" ? "bg-emerald-400/15 text-emerald-200" : item.paymentStatus === "failed" || item.paymentStatus === "expired" ? "bg-red-400/15 text-red-200" : "bg-amber-300/15 text-amber-200"}`}>{item.paymentStatus}</span></div></div>)}
+          {sessions.filter((item) => item.paymentStatus !== "expired").slice(-6).reverse().map((item) => {
+            const status = paymentStatusBadge(item.paymentStatus);
+            return (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="text-sm font-semibold">Sesi {String(item.id).slice(0, 8)}</p>
+                  <p className="mt-1 text-xs text-fg/40">{new Date(item.createdAt).toLocaleString("id-ID")} · {paymentMethodLabel(item.paymentMethod)}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-fg/60">{money(Number(item.totalAmount ?? 0))}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${status.className}`}>{status.label}</span>
+                </div>
+              </div>
+            );
+          })}
           {sessions.length === 0 && <p className="py-8 text-sm text-fg/40">Belum ada sesi tercatat.</p>}
         </div>
       </section>
@@ -177,7 +194,8 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
   );
 }
 
-type SessionAsset = { url: string; downloadUrl: string; type: "Strip final" | "Foto" | "GIF" | "Video"; index: number };
+type SessionAsset = { url: string; downloadUrl: string; type: "Strip final" | "Foto" | "GIF" | "Video" | "Stop Motion"; index: number };
+const isMotionAsset = (type: string) => type === "Video" || type === "GIF" || type === "Stop Motion";
 
 // For a Google Drive-backed session, session.photoUrls/stripUrl are Drive
 // thumbnail URLs (good for display, but low-res) — the real full-quality
@@ -193,6 +211,7 @@ function sessionAssets(session: any): SessionAsset[] {
     ...((session.photoUrls ?? []) as string[]).map((url, index) => ({ url, downloadUrl: photoDownloads[index] ?? url, type: "Foto" as const, index })),
     ...(session.gifUrl ? [{ url: session.gifUrl, downloadUrl: session.gifUrl, type: "GIF" as const, index: 0 }] : []),
     ...(session.videoUrl ? [{ url: session.videoUrl, downloadUrl: session.videoUrl, type: "Video" as const, index: 0 }] : []),
+    ...(session.stopMotionUrl ? [{ url: session.stopMotionUrl, downloadUrl: session.stopMotionUrl, type: "Stop Motion" as const, index: 0 }] : []),
   ];
 }
 
@@ -363,7 +382,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                   <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
                     <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
                       <div className="flex h-32 items-center justify-center bg-fg/5">
-                        {asset.type === "Video" || asset.type === "GIF"
+                        {isMotionAsset(asset.type)
                           ? <video src={asset.url} muted preload="none" className="h-full w-full object-cover" />
                           : <img src={asset.url} alt={asset.type} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />}
                       </div>
@@ -385,7 +404,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                             </button>
                           );
                         })()}
-                        {asset.type !== "Video" && asset.type !== "GIF" && (
+                        {!isMotionAsset(asset.type) && (
                           <button type="button" onClick={() => printAsset({ ...asset, session })} disabled={!window.studiodo?.printImage} className="flex-1 rounded-lg bg-accent/80 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">Print</button>
                         )}
                       </div>
@@ -425,6 +444,7 @@ type KioskSubtab = (typeof KIOSK_SUBTABS)[number]["id"];
 const FINANCE_SUBTABS = [
   { id: "packages", label: "Paket & QRIS" },
   { id: "promo", label: "Promosi" },
+  { id: "withdraw", label: "Saldo & Penarikan" },
 ] as const;
 type FinanceSubtab = (typeof FINANCE_SUBTABS)[number]["id"];
 
@@ -584,7 +604,7 @@ export default function AdminDashboard() {
     if (downloadingKeys.has(key)) return;
     setDownloadingKeys((prev) => new Set(prev).add(key));
     const suffix = item.type === "Foto" ? `-${(item.index ?? 0) + 1}` : "";
-    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${item.type === "Video" || item.type === "GIF" ? "webm" : "jpg"}`;
+    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${isMotionAsset(item.type) ? "webm" : "jpg"}`;
     try {
       // In the Electron app, save straight to disk from the main process —
       // much faster and skips a save dialog per file (see electron/main.cjs
@@ -622,7 +642,7 @@ export default function AdminDashboard() {
   };
 
   const printAsset = async (item: any) => {
-    if (!window.studiodo?.printImage || item.type === "Video" || item.type === "GIF") return;
+    if (!window.studiodo?.printImage || isMotionAsset(item.type)) return;
     const response = await fetch(item.downloadUrl ?? item.url);
     const blob = await response.blob();
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -738,7 +758,7 @@ export default function AdminDashboard() {
           {section === "finance" && (
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric icon="wallet" label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} /><Metric icon="chart" label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} /><Metric icon="qr" label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris").length)} /><Metric icon="ticket" label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} /></div>
-              <section className={panel}><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.slice(-12).reverse().map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3 uppercase">{item.paymentMethod}</td><td className="p-3"><span className={item.paymentStatus === "success" ? "text-emerald-300" : "text-amber-300"}>{item.paymentStatus}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>)}</tbody></table></div></section>
+              <section className={panel}><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3>{sessions.some((item: any) => item.paymentStatus === "expired") && <span className="text-xs text-fg/40">{sessions.filter((item: any) => item.paymentStatus === "expired").length} sesi yang tidak jadi dibayar disembunyikan</span>}</div><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.filter((item: any) => item.paymentStatus !== "expired").slice(-12).reverse().map((item: any) => { const status = paymentStatusBadge(item.paymentStatus); return <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3">{paymentMethodLabel(item.paymentMethod)}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${status.className}`}>{status.label}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>; })}</tbody></table></div></section>
               <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori finance">
                 {FINANCE_SUBTABS.map((tab) => (
                   <button
@@ -753,6 +773,7 @@ export default function AdminDashboard() {
               </nav>
               {financeSubtab === "packages" && <PaymentSettings />}
               {financeSubtab === "promo" && <VoucherManagement />}
+              {financeSubtab === "withdraw" && <WithdrawalPanel />}
             </div>
           )}
           {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric icon="users" label="Total clients" value={String(metrics.customers ?? 0)} /><Metric icon="phone" label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric icon="shield" label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}

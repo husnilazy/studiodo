@@ -26,6 +26,7 @@ import { MarketplacePanel } from "@/components/MarketplacePanel";
 import { CreatorsPanel } from "@/components/CreatorsPanel";
 import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
 import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
+import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -427,7 +428,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 
 function PlatformSettingsPanel() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
-  const [draft, setDraft] = useState({ defaultTrialDays: "7", renewalWhatsapp: "", renewalCheckoutUrl: "", gracePeriodDays: "3" });
+  const [draft, setDraft] = useState({ defaultTrialDays: "7", renewalWhatsapp: "", renewalCheckoutUrl: "", gracePeriodDays: "3", qrisFeePercent: "0.7", withdrawalMinAmount: "50000", withdrawalFlatFee: "0" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -440,6 +441,9 @@ function PlatformSettingsPanel() {
         renewalWhatsapp: result.renewalWhatsapp ?? "",
         renewalCheckoutUrl: result.renewalCheckoutUrl ?? "",
         gracePeriodDays: String(result.gracePeriodDays),
+        qrisFeePercent: String(Number(result.qrisFeePercent)),
+        withdrawalMinAmount: String(result.withdrawalMinAmount),
+        withdrawalFlatFee: String(result.withdrawalFlatFee),
       });
     });
   };
@@ -454,6 +458,9 @@ function PlatformSettingsPanel() {
         renewalWhatsapp: draft.renewalWhatsapp,
         renewalCheckoutUrl: draft.renewalCheckoutUrl,
         gracePeriodDays: Number(draft.gracePeriodDays) || 0,
+        qrisFeePercent: Number(draft.qrisFeePercent) || 0,
+        withdrawalMinAmount: Number(draft.withdrawalMinAmount) || 0,
+        withdrawalFlatFee: Number(draft.withdrawalFlatFee) || 0,
       });
       if (result) setSettings(result);
       setMessage("Tersimpan.");
@@ -490,6 +497,24 @@ function PlatformSettingsPanel() {
         </label>
       </div>
       <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan lewat sebelum kiosk benar-benar terkunci.</p>
+      <div className="mt-6 border-t border-fg/10 pt-5">
+        <p className="text-sm font-semibold">Penarikan saldo QRIS</p>
+        <p className="mt-0.5 text-xs text-fg/45">Hanya untuk tenant yang QRIS-nya ditampung akun STUDIODO.</p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <label className="text-sm text-fg/60">
+            Fee STUDIODO per transaksi QRIS (%)
+            <input type="number" min={0} max={50} step={0.1} className={inputClass} value={draft.qrisFeePercent} onChange={(e) => setDraft({ ...draft, qrisFeePercent: e.target.value })} />
+          </label>
+          <label className="text-sm text-fg/60">
+            Minimal penarikan (Rp)
+            <input type="number" min={0} className={inputClass} value={draft.withdrawalMinAmount} onChange={(e) => setDraft({ ...draft, withdrawalMinAmount: e.target.value })} />
+          </label>
+          <label className="text-sm text-fg/60">
+            Biaya transfer per penarikan (Rp)
+            <input type="number" min={0} className={inputClass} value={draft.withdrawalFlatFee} onChange={(e) => setDraft({ ...draft, withdrawalFlatFee: e.target.value })} />
+          </label>
+        </div>
+      </div>
       <div className="mt-5 flex items-center gap-3">
         <button type="button" onClick={save} disabled={saving} className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
           {saving ? "Menyimpan…" : "Simpan"}
@@ -1114,6 +1139,8 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
               </div>
             </div>
 
+            <QrisSettlementControl tenantId={tenantId} current={tenant.qrisSettlement === "platform" ? "platform" : "direct"} onChanged={refreshAll} />
+
             <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Profil bisnis</p>
               <div className="mt-3">
@@ -1188,7 +1215,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "settings";
+type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "settings";
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "overview", label: "Ringkasan", icon: "⌘" },
   { id: "tenants", label: "Tenant", icon: "◎" },
@@ -1200,6 +1227,7 @@ const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "marketplace", label: "Marketplace", icon: "❒" },
   { id: "creators", label: "Kreator", icon: "✧" },
   { id: "billing", label: "Pembayaran", icon: "₪" },
+  { id: "withdrawals", label: "Penarikan QRIS", icon: "⇩" },
   { id: "settings", label: "Pengaturan", icon: "⚙" },
 ];
 
@@ -1211,6 +1239,7 @@ export default function SuperadminDashboard() {
   const [tenants, setTenants] = useState<SuperadminTenant[]>([]);
   const [section, setSection] = useState<Section>("overview");
   const [pendingApplicationCount, setPendingApplicationCount] = useState(0);
+  const [openWithdrawalCount, setOpenWithdrawalCount] = useState(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const tenantsReloadRef = useRef<(() => void) | null>(null);
 
@@ -1319,6 +1348,9 @@ export default function SuperadminDashboard() {
             >
               <span className="opacity-70">{item.icon}</span>
               {item.label}
+              {item.id === "withdrawals" && openWithdrawalCount > 0 && (
+                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{openWithdrawalCount}</span>
+              )}
               {item.id === "applications" && pendingApplicationCount > 0 && (
                 <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{pendingApplicationCount}</span>
               )}
@@ -1364,6 +1396,7 @@ export default function SuperadminDashboard() {
 
         {section === "creators" && <CreatorsPanel />}
         {section === "billing" && <BillingOrdersPanel />}
+        {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
 
         {section === "settings" && (
           <div className="grid gap-6">

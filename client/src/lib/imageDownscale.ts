@@ -22,3 +22,26 @@ export async function fileToDataUrl(file: File, maxDimension = MAX_DIMENSION): P
 
   return canvas.toDataURL("image/png");
 }
+
+/**
+ * Reads an uploaded picture for the kiosk design (logo, cover, banner) as a data URL, shrunk so it fits comfortably in
+ * the browser's storage and uploads fast. `keepAlpha` keeps transparency (logos) as PNG; otherwise it becomes a JPEG,
+ * which is ~10× smaller for photos.
+ */
+export async function imageFileToDataUrl(file: File, options: { maxDimension?: number; keepAlpha?: boolean; quality?: number } = {}): Promise<string> {
+  const { maxDimension = 1920, keepAlpha = false, quality = 0.86 } = options;
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context tidak tersedia");
+  if (!keepAlpha) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return keepAlpha ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality);
+}

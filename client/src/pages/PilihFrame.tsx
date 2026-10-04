@@ -31,6 +31,7 @@ export default function PilihFrame() {
   const [, navigate] = useLocation();
   const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
+  const frameHeadline = useBoothConfig((s) => s.config.frameHeadline);
   const localTemplates = useTemplateLibrary((state) => state.templates);
   // The category list an admin builds in Kelola Frame (Admin → Kelola Frame →
   // "+ Kategori baru…") — read from the same shared store so a category
@@ -182,7 +183,7 @@ export default function PilihFrame() {
       <div className="kinetic-page relative flex h-full min-h-0 w-full flex-col">
         <StepProgress current="frame" />
         <div className={`shrink-0 px-6 md:px-10 ${wide ? "pb-2 pt-[112px]" : "pb-3 pt-20"}`}>
-          <ScreenTitle compact={wide} title="Pilih Frame" subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
+          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
         </div>
 
         {loading && (

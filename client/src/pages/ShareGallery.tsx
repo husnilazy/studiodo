@@ -316,7 +316,7 @@ export default function ShareGallery({ id }: { id: string }) {
         )}
 
         {/* Video */}
-        {(session.videoUrl || session.gifUrl) && (
+        {(session.videoUrl || session.gifUrl || session.stopMotionUrl) && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -325,7 +325,8 @@ export default function ShareGallery({ id }: { id: string }) {
           >
             <p className="eyebrow mb-3 text-xs font-bold uppercase tracking-[0.2em] text-fg/40">MEDIA MOMEN — SEMUA FOTO BERGERAK BERSAMAAN</p>
             {session.videoUrl && <div><p className="mb-2 text-sm font-semibold text-fg/70">Video sesi</p><video src={session.videoUrl} controls loop playsInline className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.videoUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download video</a></div>}
-            {session.gifUrl && <div className={session.videoUrl ? "mt-6" : ""}><p className="mb-2 text-sm font-semibold text-fg/70">GIF sesi</p><img src={session.gifUrl} alt="GIF sesi" className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.gifUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download GIF</a></div>}
+            {session.stopMotionUrl && <div className={session.videoUrl ? "mt-6" : ""}><p className="mb-2 text-sm font-semibold text-fg/70">Video stop motion</p><video src={session.stopMotionUrl} controls loop playsInline className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.stopMotionUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download stop motion</a></div>}
+            {session.gifUrl && <div className={session.videoUrl || session.stopMotionUrl ? "mt-6" : ""}><p className="mb-2 text-sm font-semibold text-fg/70">GIF sesi</p><img src={session.gifUrl} alt="GIF sesi" className="w-full rounded-2xl border border-fg/[0.08]" /><a href={session.gifUrl} download className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">↓ Download GIF</a></div>}
           </motion.section>
         )}
 

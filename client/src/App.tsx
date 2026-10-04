@@ -19,6 +19,7 @@ import AdminAuthGate from "@/components/AdminAuthGate";
 import KioskPairing from "@/pages/KioskPairing";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import ScreenBuilder from "@/pages/ScreenBuilder";
+import BuilderFrame from "@/pages/BuilderFrame";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useKioskSession } from "@/lib/sessionStore";
@@ -28,6 +29,7 @@ import { useSubscriptionLock } from "@/lib/subscriptionLockStore";
 import SubscriptionLockedScreen from "@/components/SubscriptionLockedScreen";
 import DeviceMismatchScreen from "@/components/DeviceMismatchScreen";
 import KioskBootScreen from "@/components/KioskBootScreen";
+import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 
 const IDLE_WARNING_SECONDS = 30;
 
@@ -131,7 +133,8 @@ function AnimatedRoutes() {
           <Route path="/admin/customers">{() => <AdminAuthGate><CustomerManagement /></AdminAuthGate>}</Route>
           <Route path="/admin/frames">{() => <AdminAuthGate><FrameManagement /></AdminAuthGate>}</Route>
           <Route path="/admin/customizer">{() => { window.location.hash = "#/admin"; return null; }}</Route>
-          <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate scopeTheme={false}><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
+          <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
+          <Route path="/__builder/:screenKey">{(params) => (IS_KIOSK_PREVIEW ? <BuilderFrame screenKey={params.screenKey} /> : null)}</Route>
           <Route path="/superadmin" component={SuperadminDashboard} />
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>
@@ -144,7 +147,8 @@ function AnimatedRoutes() {
 }
 
 export default function App() {
-  const [paired, setPaired] = useState(isKioskPaired);
+  // The admin's live-preview frame runs the real kiosk screens only: no pairing, no lock screens, no server sync.
+  const [paired, setPaired] = useState(() => IS_KIOSK_PREVIEW || isKioskPaired());
   const [deviceMismatch, setDeviceMismatch] = useState(false);
   // A locally-stored kiosk key can be stale (revoked, or reset to a different
   // device by an admin) without this kiosk knowing yet — Idle itself makes no
@@ -154,7 +158,7 @@ export default function App() {
   // before ever showing Idle, so an invalid/locked kiosk goes straight to the
   // right screen (KioskPairing / DeviceMismatchScreen) instead of glitching
   // mid-session.
-  const [checkingPairing, setCheckingPairing] = useState(isKioskPaired);
+  const [checkingPairing, setCheckingPairing] = useState(() => !IS_KIOSK_PREVIEW && isKioskPaired());
   const [location] = useHashLocation();
   const locked = useSubscriptionLock((s) => s.locked);
   // /admin*, /superadmin, and /share/* don't need a kiosk pairing (and must stay
@@ -162,7 +166,7 @@ export default function App() {
   // see the banner/renew, and existing public share links shouldn't break): admin
   // logs in with its own tenant credentials, superadmin is a separate platform-wide
   // login, and the public share page is opened by customers, not the kiosk.
-  const isExemptRoute = location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share");
+  const isExemptRoute = IS_KIOSK_PREVIEW || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share");
   const needsPairing = !paired && !isExemptRoute;
   const subscriptionLocked = locked && !isExemptRoute;
   const isDeviceMismatched = deviceMismatch && !isExemptRoute;
@@ -187,7 +191,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isKioskPaired()) {
+    if (IS_KIOSK_PREVIEW || !isKioskPaired()) {
       setCheckingPairing(false);
       return;
     }
@@ -214,7 +218,7 @@ export default function App() {
           <SubscriptionLockedScreen />
         ) : (
           <>
-            <GlobalIdleTimer />
+            {!IS_KIOSK_PREVIEW && <GlobalIdleTimer />}
             <AnimatedRoutes />
           </>
         )}

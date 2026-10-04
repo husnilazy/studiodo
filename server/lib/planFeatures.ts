@@ -72,8 +72,8 @@ export async function syncTenantFeaturesToPlan(tenantId: string) {
   if (!features.gifVideoEnabled) {
     const affected = await db
       .update(packages)
-      .set({ hasGif: false, hasVideo: false })
-      .where(and(eq(packages.tenantId, tenantId), or(eq(packages.hasGif, true), eq(packages.hasVideo, true))))
+      .set({ hasGif: false, hasVideo: false, hasStopMotion: false })
+      .where(and(eq(packages.tenantId, tenantId), or(eq(packages.hasGif, true), eq(packages.hasVideo, true), eq(packages.hasStopMotion, true))))
       .returning({ id: packages.id, name: packages.name });
 
     if (affected.length > 0) {

@@ -24,6 +24,39 @@ export function setAdminToken(token: string | null) {
   }
 }
 
+export interface QrisBalance {
+  settlement: "direct" | "platform";
+  since: string | null;
+  grossIncome: number;
+  platformFee: number;
+  netIncome: number;
+  withdrawn: number;
+  pending: number;
+  available: number;
+  paymentCount: number;
+  rules: { feePercent: number; minAmount: number; flatFee: number };
+}
+export interface WithdrawalRow {
+  id: string;
+  amount: string;
+  feeAmount: string;
+  netAmount: string;
+  status: "pending" | "processing" | "paid" | "rejected";
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  requestNote: string | null;
+  adminNote: string | null;
+  transferReference: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+}
+export interface WithdrawalOverview {
+  balance: QrisBalance;
+  items: WithdrawalRow[];
+  lastAccount: { bankName: string; accountNumber: string; accountName: string } | null;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -188,7 +221,7 @@ export const api = {
     }
     return res.json();
   },
-  uploadMedia: async (sessionId: string, kind: "gif" | "video", blob: Blob) => {
+  uploadMedia: async (sessionId: string, kind: "gif" | "video" | "stopmotion", blob: Blob) => {
     const form = new FormData();
     form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : "webm"}`);
     form.append("kind", kind);
@@ -258,7 +291,13 @@ export const api = {
   },
   updateVoucher: (id: string, body: Record<string, unknown>) => request<any>(`/vouchers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteVoucher: (id: string) => request<void>(`/vouchers/${id}`, { method: "DELETE" }),
+  getWithdrawals: () => request<WithdrawalOverview>("/withdrawals"),
+  requestWithdrawal: (body: { amount: number; bankName: string; accountNumber: string; accountName: string; note?: string }) =>
+    request<WithdrawalRow>("/withdrawals", { method: "POST", body: JSON.stringify(body) }),
+  cancelWithdrawal: (id: string) => request<{ ok: boolean }>(`/withdrawals/${id}`, { method: "DELETE" }),
   getFrames: (orientation: string) => request<any[]>(`/frames?orientation=${orientation}`),
+  /** Frames reserved for the stop-motion video (category "__stopmotion"); the normal picker never lists these. */
+  getStopMotionFrames: () => request<any[]>("/frames?purpose=stopmotion"),
   createFrame: (template: { id: string; name: string; frameDataUrl: string; slots: unknown[]; canvasWidth: number; canvasHeight: number; orientation: string; category?: string; style?: string; outputPreset?: string }) =>
     request<any>("/frames", {
       method: "POST",

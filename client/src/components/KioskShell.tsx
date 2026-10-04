@@ -8,6 +8,7 @@ import NetworkToast from "@/components/NetworkToast";
 import OperatorConsole from "@/components/OperatorConsole";
 import { useHiddenAdminEntry } from "@/lib/adminEntry";
 import { useAutoInstallUpdate } from "@/lib/autoInstallUpdate";
+import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 
 export default function KioskShell({ children }: { children: React.ReactNode }) {
   const config = useBoothConfig((s) => s.config);
@@ -23,6 +24,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
   // Start network monitor + fleet heartbeat once
   useEffect(() => {
+    if (IS_KIOSK_PREVIEW) return; // the admin's preview frame must not report heartbeats or sync offline data
     startNetworkMonitor();
     startKioskHeartbeat();
   }, []);
@@ -36,6 +38,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
   // Cross-tab config sync
   useEffect(() => {
+    if (IS_KIOSK_PREVIEW) return; // the admin's preview frame gets its design by postMessage instead
     const refreshConfig = (event: StorageEvent) => {
       if (event.key === "studiodo-booth-config") useBoothConfig.persist.rehydrate();
       if (event.key === "studiodo-sticker-library") useStickerLibrary.persist.rehydrate();
@@ -104,10 +107,10 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
       {children}
 
       {/* Global network change toasts */}
-      <NetworkToast />
+      {!IS_KIOSK_PREVIEW && <NetworkToast />}
 
       {/* Operator console overlay — hidden until Ctrl+Shift+O */}
-      <OperatorConsole />
+      {!IS_KIOSK_PREVIEW && <OperatorConsole />}
     </div>
   );
 }

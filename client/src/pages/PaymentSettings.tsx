@@ -28,7 +28,7 @@ export default function PaymentSettings() {
   const [paymentStatus, setPaymentStatus] = useState({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false });
   const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
   const [packages, setPackages] = useState<any[]>([]);
-  const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, thumbnailUrl: "", description: "" });
+  const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "" });
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [editingPackage, setEditingPackage] = useState<Record<string, any>>({});
   const [packageError, setPackageError] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export default function PaymentSettings() {
         thumbnailUrl: packageDraft.thumbnailUrl || null,
         description: packageDraft.description.trim() || null,
       });
-      setPackageDraft({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, thumbnailUrl: "", description: "" });
+      setPackageDraft({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "" });
       refreshPackages();
     } catch (err) {
       setPackageError(err instanceof Error ? err.message : "Gagal membuat paket");
@@ -126,6 +126,7 @@ export default function PaymentSettings() {
       photoCount: String(pkg.photoCount ?? 1),
       hasGif: Boolean(pkg.hasGif),
       hasVideo: Boolean(pkg.hasVideo),
+      hasStopMotion: Boolean(pkg.hasStopMotion),
       thumbnailUrl: pkg.thumbnailUrl ?? "",
     });
   };
@@ -141,6 +142,7 @@ export default function PaymentSettings() {
         photoCount: Math.max(1, Math.min(10, Number(editingPackage.photoCount) || 1)),
         hasGif: Boolean(editingPackage.hasGif),
         hasVideo: Boolean(editingPackage.hasVideo),
+        hasStopMotion: Boolean(editingPackage.hasStopMotion),
         thumbnailUrl: editingPackage.thumbnailUrl || null,
       });
       setEditingPackageId(null);
@@ -246,6 +248,9 @@ export default function PaymentSettings() {
               <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title={gifVideoEnabled ? undefined : `Tidak termasuk paket${planName ? ` "${planName}"` : ""} kamu saat ini`}>
                 <input type="checkbox" disabled={!gifVideoEnabled} checked={packageDraft.hasVideo} onChange={(e) => setPackageDraft({ ...packageDraft, hasVideo: e.target.checked })} /> Termasuk video{!gifVideoEnabled && " 🔒"}
               </label>
+              <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title="Video lambat dari semua hasil jepretan, pakai frame khusus dari Kelola Frame">
+                <input type="checkbox" disabled={!gifVideoEnabled} checked={packageDraft.hasStopMotion} onChange={(e) => setPackageDraft({ ...packageDraft, hasStopMotion: e.target.checked })} /> Termasuk video stop motion{!gifVideoEnabled && " 🔒"}
+              </label>
             </div>
           </div>
           <button onClick={createPackage} disabled={!packageDraft.name.trim()} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">+ Tambah paket</button>
@@ -286,6 +291,9 @@ export default function PaymentSettings() {
                       <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title={gifVideoEnabled ? undefined : `Tidak termasuk paket${planName ? ` "${planName}"` : ""} kamu saat ini`}>
                         <input type="checkbox" disabled={!gifVideoEnabled} checked={Boolean(editingPackage.hasVideo)} onChange={(e) => setEditingPackage({ ...editingPackage, hasVideo: e.target.checked })} /> Termasuk video{!gifVideoEnabled && " 🔒"}
                       </label>
+                      <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title="Video lambat dari semua hasil jepretan, pakai frame khusus dari Kelola Frame">
+                        <input type="checkbox" disabled={!gifVideoEnabled} checked={Boolean(editingPackage.hasStopMotion)} onChange={(e) => setEditingPackage({ ...editingPackage, hasStopMotion: e.target.checked })} /> Termasuk video stop motion{!gifVideoEnabled && " 🔒"}
+                      </label>
                     </div>
                   </div>
                   <div className="flex gap-2"><button onClick={savePackageEdit} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold">Simpan perubahan</button><button onClick={() => setEditingPackageId(null)} className="rounded-xl border border-fg/15 px-4 py-2 text-xs">Batal</button></div>
@@ -301,7 +309,7 @@ export default function PaymentSettings() {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${pkg.active === false ? "bg-fg/10 text-fg/50" : "bg-emerald-400/15 text-emerald-200"}`}>{pkg.active === false ? "Nonaktif" : "Aktif"}</span>
                     </div>
                     {pkg.description && <p className="mt-0.5 truncate text-xs text-fg/45">{pkg.description}</p>}
-                    <p className="mt-1 text-xs text-fg/50">Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto {pkg.hasGif ? "· GIF" : ""} {pkg.hasVideo ? "· Video" : ""}</p>
+                    <p className="mt-1 text-xs text-fg/50">Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto {pkg.hasGif ? "· GIF" : ""} {pkg.hasVideo ? "· Video" : ""} {pkg.hasStopMotion ? "· Stop motion" : ""}</p>
                   </div>
                 </div>
               )}

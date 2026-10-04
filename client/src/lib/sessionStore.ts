@@ -12,6 +12,7 @@ export interface Package {
   photoCount: number;
   hasGif: boolean;
   hasVideo: boolean;
+  hasStopMotion?: boolean;
   extraPrints?: { id: string; name: string; price: number }[];
   thumbnailUrl?: string | null;
   description?: string | null;
@@ -66,6 +67,8 @@ interface KioskSessionState {
   sessionStartedAt: number | null;
   mediaUrl: string | null;
   mediaUrls: string[];
+  /** The slow stop-motion video of every photo (its own tab on the result screen). */
+  stopMotionUrl: string | null;
   // Short clip captured at each individual photo shot, indexed the same as
   // photoUrls — separate from mediaUrl(s), which is the combined "every slot
   // animating at once" output.
@@ -90,6 +93,7 @@ interface KioskSessionState {
   setTemplatePhotoMap: (map: Record<number, number>) => void;
   setSelectedExtras: (extras: { id: string; name: string; price: number }[]) => void;
   setMediaUrl: (url: string) => void;
+  setStopMotionUrl: (url: string | null) => void;
   setSlotClipUrl: (slot: number, url: string) => void;
   setPhotoEdit: (slot: number, edit: PhotoEdit) => void;
   beginSessionTimer: () => void;
@@ -117,6 +121,7 @@ const initial = {
   sessionStartedAt: null,
   mediaUrl: null,
   mediaUrls: [] as string[],
+  stopMotionUrl: null as string | null,
   slotClipUrls: [] as (string | null)[],
   photoUrls: [] as string[],
   photoEdits: {},
@@ -141,6 +146,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
   setTemplatePhotoMap: (templatePhotoMap) => set({ templatePhotoMap }),
   setSelectedExtras: (selectedExtras) => set({ selectedExtras }),
   setMediaUrl: (mediaUrl) => set((state) => ({ mediaUrl, mediaUrls: [...state.mediaUrls, mediaUrl] })),
+  setStopMotionUrl: (stopMotionUrl) => set({ stopMotionUrl }),
   setSlotClipUrl: (slot, url) =>
     set((state) => {
       const slotClipUrls = [...state.slotClipUrls];

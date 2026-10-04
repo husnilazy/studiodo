@@ -2,7 +2,8 @@ import { Router, type Request } from "express";
 import crypto from "node:crypto";
 import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates } from "../db/schema.js";
+import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates, withdrawals } from "../db/schema.js";
+import { computeQrisBalance } from "../lib/qrisBalance.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signSuperadminToken } from "../lib/jwt.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
@@ -141,6 +142,7 @@ superadminRouter.get("/tenants", async (_req, res) => {
     plan: tenants.plan,
     status: tenants.status,
     subscriptionEndsAt: tenants.subscriptionEndsAt,
+    qrisSettlement: tenants.qrisSettlement,
     createdAt: tenants.createdAt,
   }).from(tenants).orderBy(tenants.createdAt);
 
@@ -279,6 +281,24 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
   }
   if (req.body?.subscriptionEndsAt !== undefined) {
     patch.subscriptionEndsAt = req.body.subscriptionEndsAt ? new Date(req.body.subscriptionEndsAt) : null;
+  }
+  // Where this tenant's kiosk QRIS money lands (see tenants.qrisSettlement). Switching to 'platform' starts the
+  // balance from now; payments made before the switch went to the tenant's own account and never count.
+  if (req.body?.qrisSettlement !== undefined) {
+    const mode = String(req.body.qrisSettlement);
+    if (mode !== "direct" && mode !== "platform") return res.status(400).json({ error: "qrisSettlement harus 'direct' atau 'platform'" });
+    const [current] = await db.select({ qrisSettlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, req.params.id));
+    if (!current) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+    if (mode !== current.qrisSettlement) {
+      if (mode === "direct") {
+        const balance = await computeQrisBalance(req.params.id);
+        if (balance.available > 0 || balance.pending > 0) {
+          return res.status(409).json({ error: `Masih ada saldo QRIS Rp ${(balance.available + balance.pending).toLocaleString("id-ID")} yang belum dibayarkan ke tenant. Selesaikan penarikannya dulu.` });
+        }
+      }
+      patch.qrisSettlement = mode;
+      patch.qrisPlatformSince = mode === "platform" ? new Date() : null;
+    }
   }
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan dikirim" });
 
@@ -797,8 +817,107 @@ superadminRouter.patch("/settings", async (req, res) => {
     if (!Number.isFinite(days) || days < 0) return res.status(400).json({ error: "gracePeriodDays tidak valid" });
     patch.gracePeriodDays = days;
   }
+  if (req.body?.qrisFeePercent !== undefined) {
+    const percent = Number(req.body.qrisFeePercent);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 50) return res.status(400).json({ error: "Fee QRIS harus antara 0 dan 50 persen" });
+    patch.qrisFeePercent = percent.toFixed(2);
+  }
+  if (req.body?.withdrawalMinAmount !== undefined) {
+    const amount = Math.floor(Number(req.body.withdrawalMinAmount));
+    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "Minimal penarikan tidak valid" });
+    patch.withdrawalMinAmount = amount;
+  }
+  if (req.body?.withdrawalFlatFee !== undefined) {
+    const amount = Math.floor(Number(req.body.withdrawalFlatFee));
+    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "Biaya penarikan tidak valid" });
+    patch.withdrawalFlatFee = amount;
+  }
   patch.updatedAt = new Date();
 
   const [row] = await db.update(platformSettings).set(patch).where(eq(platformSettings.id, current.id)).returning();
   res.json(row);
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------
+// QRIS withdrawals. Tenants settled on STUDIODO's Xendit account ask for their balance (routes/withdrawals.ts); the
+// superadmin follows each request up here: pending → processing (being transferred) → paid, or rejected with a reason.
+// ---------------------------------------------------------------------------------------------------------------
+
+// GET /api/superadmin/withdrawals?status=pending|processing|paid|rejected|open
+superadminRouter.get("/withdrawals", async (req, res) => {
+  const status = String(req.query.status ?? "open");
+  const condition = status === "open"
+    ? sql`${withdrawals.status} in ('pending', 'processing')`
+    : ["pending", "processing", "paid", "rejected"].includes(status) ? eq(withdrawals.status, status) : undefined;
+  const items = await db
+    .select({
+      id: withdrawals.id,
+      tenantId: withdrawals.tenantId,
+      tenantName: tenants.name,
+      amount: withdrawals.amount,
+      feeAmount: withdrawals.feeAmount,
+      netAmount: withdrawals.netAmount,
+      status: withdrawals.status,
+      bankName: withdrawals.bankName,
+      accountNumber: withdrawals.accountNumber,
+      accountName: withdrawals.accountName,
+      requestNote: withdrawals.requestNote,
+      adminNote: withdrawals.adminNote,
+      transferReference: withdrawals.transferReference,
+      requestedBy: withdrawals.requestedBy,
+      processedBy: withdrawals.processedBy,
+      requestedAt: withdrawals.requestedAt,
+      processedAt: withdrawals.processedAt,
+    })
+    .from(withdrawals)
+    .innerJoin(tenants, eq(tenants.id, withdrawals.tenantId))
+    .where(condition)
+    .orderBy(desc(withdrawals.requestedAt))
+    .limit(200);
+  const [totals] = await db
+    .select({
+      open: sql<number>`count(*) filter (where ${withdrawals.status} in ('pending', 'processing'))::int`,
+      openAmount: sql<string>`coalesce(sum(${withdrawals.netAmount}) filter (where ${withdrawals.status} in ('pending', 'processing')), 0)`,
+      paidAmount: sql<string>`coalesce(sum(${withdrawals.netAmount}) filter (where ${withdrawals.status} = 'paid'), 0)`,
+    })
+    .from(withdrawals);
+  res.json({ items, summary: { open: totals.open, openAmount: Number(totals.openAmount), paidAmount: Number(totals.paidAmount) } });
+});
+
+// PATCH /api/superadmin/withdrawals/:id — { status, adminNote?, transferReference? }
+superadminRouter.patch("/withdrawals/:id", async (req, res) => {
+  const next = String(req.body?.status ?? "");
+  if (!["processing", "paid", "rejected"].includes(next)) return res.status(400).json({ error: "Status harus processing, paid, atau rejected" });
+  const adminNote = req.body?.adminNote !== undefined ? String(req.body.adminNote).trim().slice(0, 300) || null : undefined;
+  const transferReference = req.body?.transferReference !== undefined ? String(req.body.transferReference).trim().slice(0, 100) || null : undefined;
+  if (next === "rejected" && !adminNote) return res.status(400).json({ error: "Tulis alasan penolakan supaya tenant tahu." });
+
+  const [current] = await db.select().from(withdrawals).where(eq(withdrawals.id, String(req.params.id)));
+  if (!current) return res.status(404).json({ error: "Permintaan tidak ditemukan" });
+  if (current.status === "paid" || current.status === "rejected") return res.status(409).json({ error: "Permintaan ini sudah final dan tidak bisa diubah lagi." });
+  if (next === "processing" && current.status !== "pending") return res.status(409).json({ error: "Permintaan ini sudah diproses." });
+
+  const email = await currentSuperadminEmail(req);
+  const patch: Partial<typeof withdrawals.$inferInsert> = { status: next, processedBy: email, processedAt: next === "processing" ? null : new Date() };
+  if (adminNote !== undefined) patch.adminNote = adminNote;
+  if (transferReference !== undefined) patch.transferReference = transferReference;
+  const [row] = await db.update(withdrawals).set(patch).where(eq(withdrawals.id, current.id)).returning();
+
+  const label = next === "paid" ? "dibayar" : next === "rejected" ? "ditolak" : "diproses";
+  logEvent({
+    tenantId: current.tenantId,
+    category: "billing",
+    action: `withdrawal.${next}`,
+    message: `Penarikan QRIS Rp ${Number(current.amount).toLocaleString("id-ID")} ${label}${adminNote ? ` — ${adminNote}` : ""}.`,
+    actorType: "superadmin",
+    actorLabel: email,
+    metadata: { withdrawalId: current.id, status: next },
+  });
+  res.json(row);
+});
+
+// GET /api/superadmin/tenants/:id/qris-balance — balance of one tenant (for the tenant detail panel)
+superadminRouter.get("/tenants/:id/qris-balance", async (req, res) => {
+  res.json(await computeQrisBalance(String(req.params.id)));
 });

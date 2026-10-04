@@ -24,6 +24,11 @@ export default function Idle() {
     return () => clearTimeout(t);
   }, []);
 
+  const headline = (config.idleHeadline ?? "").trim();
+  const subheadline = (config.idleSubheadline ?? "").trim();
+  const showHeading = config.idleShowHeadline !== false && headline !== "";
+  const showSubheading = config.idleShowSubheadline !== false && subheadline !== "";
+
   const start = () => {
     if (positionable?.editMode) return;
     navigate(getNextRoute("idle", config.kioskFlow));
@@ -54,19 +59,27 @@ export default function Idle() {
 
         <div className="relative z-10 flex flex-col items-center text-center">
           {config.logoUrl && (
-            <img src={config.logoUrl} alt={config.brandName} className="mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
+            <Positionable id="logo" type="image" label="Logo">
+              <img src={config.logoUrl} alt={config.brandName} className="mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
+            </Positionable>
           )}
 
-          <Positionable id="heading" type="text" label="Judul Brand">
-            <motion.h1 className="kinetic-title font-display text-6xl font-semibold md:text-8xl" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-              {config.idleHeadline || config.brandName}
-            </motion.h1>
-          </Positionable>
-          <Positionable id="subheading" type="text" label="Tagline">
-            <motion.p className="mt-5 max-w-xl text-lg text-muted md:text-2xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25, duration: 0.6 }}>
-              {config.idleSubheadline || config.tagline}
-            </motion.p>
-          </Positionable>
+          {/* Empty or switched-off = not rendered at all (it used to fall back to the brand name, so the title
+              kept coming back after the tenant deleted it). */}
+          {showHeading && (
+            <Positionable id="heading" type="text" label="Judul Brand">
+              <motion.h1 className={`kinetic-title font-display text-6xl font-semibold md:text-8xl `} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
+                {headline}
+              </motion.h1>
+            </Positionable>
+          )}
+          {showSubheading && (
+            <Positionable id="subheading" type="text" label="Tagline">
+              <motion.p className={`mt-5 max-w-xl text-lg text-muted md:text-2xl`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25, duration: 0.6 }}>
+                {subheadline}
+              </motion.p>
+            </Positionable>
+          )}
 
           <Positionable id="cta" type="system-button" label="Teks Ajakan">
             <motion.div className="relative mt-14" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>

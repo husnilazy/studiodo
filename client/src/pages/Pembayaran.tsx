@@ -65,6 +65,10 @@ export default function Pembayaran() {
   // above) — separate from qrisTimerRef, which only drives the visual ring.
   const pollGraceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollFailureCountRef = useRef(0);
+  // This effect re-runs whenever selectedExtras/eventFreeEntryActive/etc. change (and twice in dev StrictMode) — each
+  // run used to fire its own createSession before the first one answered, leaving an abandoned duplicate "pending"
+  // session behind in the dashboard for every customer. One request in flight at a time, retried only after a failure.
+  const creatingSessionRef = useRef(false);
   // No-payment-for-too-long -> back to idle. Distinct from the QR's own 5-minute
   // display countdown: this is the grace period AFTER it expires, just long
   // enough to read "kedaluwarsa" before the booth resets itself for the next
@@ -85,7 +89,8 @@ export default function Pembayaran() {
       if (!positionable?.editMode) navigate("/paket");
       return;
     }
-    if (!sessionId) {
+    if (!sessionId && !creatingSessionRef.current) {
+      creatingSessionRef.current = true;
       api
         .createSession({ packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id, orientation, selectedExtras })
         .then((s) => {
@@ -95,6 +100,7 @@ export default function Pembayaran() {
           }
         })
         .catch((err) => {
+          creatingSessionRef.current = false;
           if (offlineModeEnabled && !isBrowserOnline()) {
             const offlineId = createOfflineSessionId();
             void addPendingSession({

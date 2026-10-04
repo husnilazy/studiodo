@@ -65,6 +65,8 @@ function applyAdminPalette(mode: AdminThemeMode) {
   root.dataset.adminTheme = resolved;
   // The tenant's button shape rule (`[data-button-style] button`) would otherwise round/square every admin button.
   delete root.dataset.buttonStyle;
+  delete root.dataset.buttonSize;
+  root.style.removeProperty("--ui-scale");
 }
 
 /**

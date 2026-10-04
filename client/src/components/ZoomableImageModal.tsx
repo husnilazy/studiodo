@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -15,7 +15,7 @@ function clampScale(scale: number) {
  * same hand-rolled pointer-event style already used for sticker drag/resize
  * in PreviewFoto.tsx rather than adding a new dependency for one screen.
  */
-export default function ZoomableImageModal({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+export default function ZoomableImageModal({ src, alt, onClose, mirror = false, title, footer }: { src: string; alt: string; onClose: () => void; /** Flip horizontally (match a mirrored live view). */ mirror?: boolean; title?: string; /** Extra actions shown under the picture (e.g. "Ambil ulang"). */ footer?: ReactNode }) {
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   // Active pointers currently down, keyed by pointerId — one entry means
@@ -130,7 +130,7 @@ export default function ZoomableImageModal({ src, alt, onClose }: { src: string;
         ×
       </button>
       <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full bg-black/50 px-4 py-1.5 text-xs font-medium text-white/60">
-        Cubit atau scroll untuk zoom · geser untuk lihat detail · tap 2x untuk reset
+        {title ? `${title} · ` : ""}Cubit atau scroll untuk zoom · geser untuk lihat detail · tap 2x untuk reset
       </p>
       <div
         ref={containerRef}
@@ -150,15 +150,17 @@ export default function ZoomableImageModal({ src, alt, onClose }: { src: string;
           src={src}
           alt={alt}
           draggable={false}
-          className="max-h-none max-w-none select-none"
+          className="max-w-none select-none object-contain"
           style={{
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})${mirror ? " scaleX(-1)" : ""}`,
             transformOrigin: "center",
-            width: "min(90vw, 640px)",
+            width: "min(92vw, 820px)",
+            maxHeight: "74vh",
             height: "auto",
           }}
         />
       </div>
+      {footer && <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 p-4 pb-6">{footer}</div>}
     </div>
   );
 }

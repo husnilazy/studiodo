@@ -46,7 +46,7 @@ packagesRouter.get("/all", requireAdminAuth, async (req, res) => {
 
 // POST /api/packages — admin: tambah paket
 packagesRouter.post("/", requireAdminAuth, async (req, res) => {
-  const { name, price, photoCount, hasGif, hasVideo, extraPrints = [], sortOrder, thumbnailUrl, description } = req.body;
+  const { name, price, photoCount, hasGif, hasVideo, hasStopMotion, extraPrints = [], sortOrder, thumbnailUrl, description } = req.body;
   const normalizedPrice = Number(price ?? 0);
   const normalizedPhotoCount = Number(photoCount ?? 1);
   const normalizedSortOrder = Number(sortOrder ?? 0);
@@ -54,7 +54,7 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
   if (!String(name ?? "").trim() || !Number.isFinite(normalizedPrice) || normalizedPrice < 0 || !Number.isFinite(normalizedPhotoCount) || normalizedPhotoCount < 1) {
     return res.status(400).json({ error: "Nama, harga, dan jumlah foto tidak valid" });
   }
-  if ((hasGif || hasVideo)) {
+  if ((hasGif || hasVideo || hasStopMotion)) {
     const { gifVideoEnabled } = await getTenantPlanFeatures(req.tenantId!);
     if (!gifVideoEnabled) return res.status(403).json({ error: "Fitur GIF/Video tidak termasuk paket kamu saat ini." });
   }
@@ -68,6 +68,7 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
       photoCount: normalizedPhotoCount,
       hasGif: Boolean(hasGif),
       hasVideo: Boolean(hasVideo),
+      hasStopMotion: Boolean(hasStopMotion),
       extraPrints: Array.isArray(extraPrints) ? extraPrints : [],
       sortOrder: normalizedSortOrder,
       thumbnailUrl: await resolveThumbnailUrl(req.tenantId!, thumbnailUrl),
@@ -96,7 +97,8 @@ packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
   if (patch.sortOrder !== undefined) patch.sortOrder = Number(patch.sortOrder) || 0;
   if (patch.hasGif !== undefined) patch.hasGif = Boolean(patch.hasGif);
   if (patch.hasVideo !== undefined) patch.hasVideo = Boolean(patch.hasVideo);
-  if (patch.hasGif || patch.hasVideo) {
+  if (patch.hasStopMotion !== undefined) patch.hasStopMotion = Boolean(patch.hasStopMotion);
+  if (patch.hasGif || patch.hasVideo || patch.hasStopMotion) {
     const { gifVideoEnabled } = await getTenantPlanFeatures(req.tenantId!);
     if (!gifVideoEnabled) return res.status(403).json({ error: "Fitur GIF/Video tidak termasuk paket kamu saat ini." });
   }

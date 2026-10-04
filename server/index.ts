@@ -15,6 +15,7 @@ import { googleRouter } from "./routes/google.js";
 import { authRouter } from "./routes/auth.js";
 import { kioskKeysRouter } from "./routes/kioskKeys.js";
 import { superadminRouter } from "./routes/superadmin.js";
+import { withdrawalsRouter } from "./routes/withdrawals.js";
 import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
 import { publicContentRouter } from "./routes/siteContent.js";
@@ -50,7 +51,8 @@ const clientDist = path.resolve(dirname(fileURLToPath(import.meta.url)), "../dis
 app.disable("x-powered-by");
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
+  // SAMEORIGIN (not DENY): the admin's "Kustomisasi Kiosk" page embeds the real kiosk in an iframe as its live preview.
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
@@ -71,6 +73,7 @@ app.use("/api/google", googleRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/kiosk-keys", kioskKeysRouter);
 app.use("/api/superadmin", superadminRouter);
+app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);
 app.use("/api/public", publicPlansRouter);
 app.use("/api/public", publicContentRouter);

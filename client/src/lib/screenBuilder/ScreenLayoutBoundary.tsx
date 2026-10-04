@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { usePositionableContext, PositionableProvider } from "./PositionableContext";
 import { useScreenLayoutOverrides } from "./useScreenLayout";
+import CustomElementView from "@/components/CustomElementView";
+import { isCustomId } from "./types";
 
 // A "custom-" id means the admin added this element from scratch in the
 // Screen Builder (an uploaded logo, an extra line of text) — it has no
@@ -8,18 +10,26 @@ import { useScreenLayoutOverrides } from "./useScreenLayout";
 // ever render it. This draws those directly from the saved overrides instead.
 function CustomOverlays({ screenKey }: { screenKey: string }) {
   const overrides = useScreenLayoutOverrides(screenKey);
-  const custom = Object.values(overrides).filter((el) => el.id.startsWith("custom-"));
+  const custom = Object.values(overrides).filter((el) => isCustomId(el.id) && !el.hidden);
   if (custom.length === 0) return null;
   return (
     <>
       {custom.map((el) => (
         <div
           key={el.id}
-          style={{ position: "absolute", left: `${el.xPct}%`, top: `${el.yPct}%`, width: `${el.widthPct}%`, height: `${el.heightPct}%`, zIndex: el.zIndex }}
+          className="pointer-events-none"
+          style={{
+            position: "absolute",
+            left: `${el.xPct}%`,
+            top: `${el.yPct}%`,
+            width: `${el.widthPct}%`,
+            height: `${el.heightPct}%`,
+            zIndex: el.zIndex,
+            opacity: el.opacity !== undefined ? el.opacity / 100 : undefined,
+            transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+          }}
         >
-          {el.type === "image"
-            ? <img src={el.content} alt="" className="h-full w-full object-contain" />
-            : <p className="flex h-full w-full items-center" style={el.fontSizeVw ? { fontSize: `${el.fontSizeVw}vw` } : undefined}>{el.content}</p>}
+          <CustomElementView el={el} />
         </div>
       ))}
     </>

@@ -8,6 +8,7 @@ import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
 export type CaptureVibe = "Electric" | "Cotton Candy" | "Ocean" | "Sunset" | "Mono";
 export type CameraMode = "webcam" | "tether";
 export type ButtonStyle = "rounded" | "pill" | "square";
+export type ButtonSize = "small" | "medium" | "large";
 export type KioskDensity = "comfortable" | "compact";
 export type SessionLayout = "immersive" | "split" | "centered" | "gallery";
 export type KioskPageKey = "idle" | "packages" | "orientation" | "payment" | "capture" | "preview" | "frame" | "result";
@@ -64,6 +65,9 @@ export interface BoothConfig {
   eventHasGif: boolean;
   eventHasVideo: boolean;
   buttonStyle: ButtonStyle;
+  buttonSize: ButtonSize;
+  /** Whole-kiosk text/element scale in percent (90–130); 100 = the automatic screen-based size. */
+  uiScale: number;
   kioskDensity: KioskDensity;
   sessionLayout: SessionLayout;
   backgroundStyle: KioskBackgroundStyle;
@@ -76,6 +80,8 @@ export interface BoothConfig {
   idleStartText: string;
   idleHeadline: string;
   idleSubheadline: string;
+  idleShowHeadline: boolean;
+  idleShowSubheadline: boolean;
   packageHeadline: string;
   orientationHeadline: string;
   paymentHeadline: string;
@@ -119,6 +125,10 @@ export interface BoothConfig {
   stripLayout: StripLayout;
   stripTemplate: StripVisualTemplate;
   outputPresetEnabled: boolean;
+  /** Frame (a template saved in the "stop motion" category) used for the stop-motion video; null = plain photo. */
+  stopMotionTemplateId: string | null;
+  /** How long each photo stays on screen in the stop-motion video. */
+  stopMotionSecondsPerPhoto: number;
   maxPhotosPerSession: number;
   autoPrintEnabled: boolean;
   printCopies: number;
@@ -159,6 +169,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   eventHasGif: false,
   eventHasVideo: true,
   buttonStyle: "rounded",
+  buttonSize: "medium",
+  uiScale: 100,
   kioskDensity: "comfortable",
   sessionLayout: "immersive",
   backgroundStyle: "ambient",
@@ -171,6 +183,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   idleStartText: "Sentuh layar untuk mulai",
   idleHeadline: "STUDIODO",
   idleSubheadline: "Abadikan momen, bagikan senyum.",
+  idleShowHeadline: true,
+  idleShowSubheadline: true,
   packageHeadline: "Pilih Paket",
   orientationHeadline: "Tampilan Kamera",
   paymentHeadline: "Pembayaran",
@@ -220,6 +234,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   stripLayout: "classic-vertical",
   stripTemplate: "solid",
   outputPresetEnabled: true,
+  stopMotionTemplateId: null,
+  stopMotionSecondsPerPhoto: 0.9,
   maxPhotosPerSession: 10,
   autoPrintEnabled: true,
   printCopies: 1,
@@ -417,6 +433,8 @@ export function applyThemeToDocument(config: BoothConfig) {
   root.style.setProperty("--font-body", pairing.body);
   root.dataset.themeMode = config.themeMode ?? "light";
   root.dataset.buttonStyle = config.buttonStyle;
+  root.dataset.buttonSize = config.buttonSize ?? "medium";
+  root.style.setProperty("--ui-scale", String(Math.max(80, Math.min(140, config.uiScale ?? 100)) / 100));
   root.dataset.kioskDensity = config.kioskDensity;
   root.dataset.animations = String(config.animationsEnabled);
   root.dataset.sessionLayout = config.sessionLayout ?? "immersive";

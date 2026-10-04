@@ -10,6 +10,10 @@ import { resolveFrameUrl } from "../lib/frameUrl.js";
 
 export const framesRouter = Router();
 
+// Frames used only by the stop-motion video are ordinary templates saved under this reserved category. They are kept
+// out of the normal frame picker, and only listed when asked for with ?purpose=stopmotion.
+export const STOP_MOTION_CATEGORY = "__stopmotion";
+
 interface FrameCategory {
   key: string;
   label: string;
@@ -85,15 +89,22 @@ framesRouter.post("/categories", requireAdminAuth, async (req, res) => {
 framesRouter.get("/", requireKioskAuth, async (req, res) => {
   const tenantId = req.tenantId!;
   const orientation = (req.query.orientation as string) || "portrait";
+  const stopMotionOnly = req.query.purpose === "stopmotion";
 
   const [customTemplates, overlays] = await Promise.all([
     db.select().from(templates).where(and(eq(templates.tenantId, tenantId), eq(templates.active, true))),
     db.select().from(frameOverlays).where(and(eq(frameOverlays.tenantId, tenantId), eq(frameOverlays.active, true))),
   ]);
 
+  if (stopMotionOnly) {
+    return res.json(customTemplates
+      .filter((t) => t.category === STOP_MOTION_CATEGORY)
+      .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category, style: t.style, outputPreset: t.outputPreset })));
+  }
+
   const merged = [
     ...customTemplates
-      .filter((t) => t.orientation === orientation)
+      .filter((t) => t.orientation === orientation && t.category !== STOP_MOTION_CATEGORY)
       .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category, style: t.style, outputPreset: t.outputPreset })),
     ...overlays
       .filter((o) => o.orientation === orientation)

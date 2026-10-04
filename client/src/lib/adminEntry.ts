@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { IS_KIOSK_PREVIEW } from "./previewMode";
 
 // Crew entry to the admin from the customer kiosk, so nobody has to remember Ctrl+Shift+A (or carry a keyboard).
 // Five quick taps inside the bottom-left corner open the admin; it is invisible to customers and the admin still
@@ -23,6 +24,7 @@ export function openAdminFromKiosk() {
 
 export function useHiddenAdminEntry() {
   useEffect(() => {
+    if (IS_KIOSK_PREVIEW) return;
     let taps: number[] = [];
     const onPointerDown = (event: PointerEvent) => {
       if (PUBLIC_ROUTES.some((route) => window.location.hash.startsWith(route))) return;

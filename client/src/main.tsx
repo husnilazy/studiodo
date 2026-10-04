@@ -5,6 +5,10 @@ import "./index.css";
 import "./lib/fontPairings";
 import { api } from "./lib/api";
 import { isKioskPaired } from "./lib/apiConfig";
+import { installKioskPreview, IS_KIOSK_PREVIEW } from "./lib/previewMode";
+
+// Opened inside the admin's live-preview frame (?kioskPreview=1): sample data in, nothing real out.
+installKioskPreview();
 
 const serialize = (value: unknown) => {
   if (value instanceof Error) return value.stack || value.message;
@@ -33,7 +37,7 @@ let reportCountInWindow = 0;
 const recentlyReported = new Map<string, number>();
 
 function reportErrorToServer(message: string, stack: string | undefined) {
-  if (!isKioskPaired()) return;
+  if (IS_KIOSK_PREVIEW || !isKioskPaired()) return;
   const now = Date.now();
   if (now - reportWindowStart > ERROR_REPORT_WINDOW_MS) {
     reportWindowStart = now;

@@ -15,6 +15,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
+import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 
 export const sessionsRouter = Router();
 
@@ -121,6 +122,7 @@ sessionsRouter.post("/:id/mark-event-free", requireKioskAuth, requireActiveSubsc
     .where(and(eq(sessions.id, String(req.params.id)), eq(sessions.tenantId, req.tenantId!)))
     .returning();
   if (!row) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+  expireSiblingPendingSessions(req.tenantId!, row.id).catch(console.error);
   res.json(row);
 });
 
@@ -213,6 +215,7 @@ sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), asyn
   // "video" packages produce a WebM (MediaRecorder); "gif" packages produce a
   // genuine encoded animated GIF (client-side gifenc) — not the same file
   // dressed up under a different field, so the extension must follow kind.
+  // "stopmotion" is also a WebM, but a separate slow slideshow of every photo (see sessions.stopMotionUrl).
   const fallbackExtension = req.body.kind === "gif" ? ".gif" : ".webm";
 
   const row = await db.transaction(async (tx) => {
@@ -233,7 +236,11 @@ sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), asyn
     }
 
     const mediaUrls = [...(session.mediaUrls ?? []), url];
-    const field = req.body.kind === "gif" ? { gifUrl: url, mediaUrls } : { videoUrl: url, mediaUrls };
+    // Stop motion stays out of mediaUrls: the result screen lists that array as GIF/Video tabs, and the stop-motion
+    // clip has its own tab driven by stopMotionUrl.
+    const field = req.body.kind === "stopmotion"
+      ? { stopMotionUrl: url }
+      : req.body.kind === "gif" ? { gifUrl: url, mediaUrls } : { videoUrl: url, mediaUrls };
     const [updated] = await tx.update(sessions).set(field).where(and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))).returning();
     return updated;
   });
@@ -385,6 +392,9 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
   const days = Math.max(1, Math.min(365, Number(req.query.days) || 90));
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+  // Close out sessions that can never be paid so the payment log doesn't show them as "pending" forever.
+  await expireStalePendingSessions(tenantId).catch((error) => console.error("[sessions] gagal menutup sesi pending lama", error));
+
   const [metricsRow] = await db.select({
     totalSessions: sql<number>`count(*)::int`,
     paidSessions: sql<number>`count(*) filter (where ${sessions.paymentStatus} = 'success')::int`,
@@ -412,6 +422,7 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
     photoUrls: sessions.photoUrls,
     gifUrl: sessions.gifUrl,
     videoUrl: sessions.videoUrl,
+    stopMotionUrl: sessions.stopMotionUrl,
     mediaUrls: sessions.mediaUrls,
     stripUrl: sessions.stripUrl,
     customerWhatsapp: sessions.customerWhatsapp,
@@ -436,6 +447,7 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
       stripUrl: resolveAssetUrl(rest.stripUrl),
       gifUrl: resolveAssetUrl(rest.gifUrl),
       videoUrl: resolveAssetUrl(rest.videoUrl),
+      stopMotionUrl: resolveAssetUrl(rest.stopMotionUrl),
       mediaUrls: resolveAssetUrls(rest.mediaUrls),
       driveLinks: driveFolderId ? {
         folderUrl: getFolderUrl(driveFolderId),
@@ -495,6 +507,7 @@ sessionsRouter.get("/:id/public", async (req, res) => {
     stripUrl: sessions.stripUrl,
     gifUrl: sessions.gifUrl,
     videoUrl: sessions.videoUrl,
+    stopMotionUrl: sessions.stopMotionUrl,
     slotClipUrls: sessions.slotClipUrls,
     shareUrl: sessions.shareUrl,
     driveFolderId: sessions.driveFolderId,

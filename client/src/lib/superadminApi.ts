@@ -163,6 +163,7 @@ export interface SuperadminTenant extends TenantProfileFields {
   adminEmail: string | null;
   kioskCount: number;
   onlineKioskCount: number;
+  qrisSettlement?: "direct" | "platform";
   sessionCount: number;
   revenue: number;
   locked: boolean;
@@ -175,7 +176,45 @@ export interface PlatformSettings {
   renewalWhatsapp: string | null;
   renewalCheckoutUrl: string | null;
   gracePeriodDays: number;
+  qrisFeePercent: string;
+  withdrawalMinAmount: number;
+  withdrawalFlatFee: number;
   updatedAt: string;
+}
+
+export interface WithdrawalAdminRow {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  amount: string;
+  feeAmount: string;
+  netAmount: string;
+  status: "pending" | "processing" | "paid" | "rejected";
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  requestNote: string | null;
+  adminNote: string | null;
+  transferReference: string | null;
+  requestedBy: string | null;
+  processedBy: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+}
+export interface WithdrawalAdminList {
+  items: WithdrawalAdminRow[];
+  summary: { open: number; openAmount: number; paidAmount: number };
+}
+export interface TenantQrisBalance {
+  settlement: "direct" | "platform";
+  since: string | null;
+  grossIncome: number;
+  platformFee: number;
+  netIncome: number;
+  withdrawn: number;
+  pending: number;
+  available: number;
+  paymentCount: number;
 }
 
 export interface PlatformOverview {
@@ -326,12 +365,16 @@ export const superadminApi = {
   getOverviewTimeseries: (days = 30) => request<OverviewTimeseriesPoint[]>(`/overview/timeseries?days=${days}`),
   createTenant: (body: { name: string; slug: string; email: string; password: string; plan?: string } & Partial<TenantProfileFields>) =>
     request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>("/tenants", { method: "POST", body: JSON.stringify(body) }),
-  updateTenant: (id: string, body: { plan?: string; status?: string; subscriptionEndsAt?: string | null } & Partial<TenantProfileFields>) =>
+  updateTenant: (id: string, body: { plan?: string; status?: string; subscriptionEndsAt?: string | null; qrisSettlement?: "direct" | "platform" } & Partial<TenantProfileFields>) =>
     request<SuperadminTenant>(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   extendTenant: (id: string, days: number) => request<SuperadminTenant>(`/tenants/${id}/extend`, { method: "POST", body: JSON.stringify({ days }) }),
   getSettings: () => request<PlatformSettings>("/settings"),
-  updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number }) =>
+  updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  getWithdrawals: (status = "open") => request<WithdrawalAdminList>(`/withdrawals?status=${status}`),
+  updateWithdrawal: (id: string, body: { status: "processing" | "paid" | "rejected"; adminNote?: string; transferReference?: string }) =>
+    request<WithdrawalAdminRow>(`/withdrawals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  getTenantQrisBalance: (id: string) => request<TenantQrisBalance>(`/tenants/${id}/qris-balance`),
   getPlans: () => request<Plan[]>("/plans"),
   createPlan: (body: Partial<PlanInput> & Pick<PlanInput, "name" | "slug" | "price" | "billingInterval" | "kioskLimit">) =>
     request<Plan>("/plans", { method: "POST", body: JSON.stringify(body) }),

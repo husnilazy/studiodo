@@ -9,6 +9,7 @@ import { useBoothConfig } from "@/lib/boothConfigStore";
 import type { BoothConfig } from "@/lib/boothConfigStore";
 import { drawStickers, renderTemplate } from "@/lib/output";
 import { renderPhotoStrip } from "@/lib/stripRenderer";
+import { renderStopMotion } from "@/lib/stopMotion";
 import { OUTPUT_PRESETS, useTemplateLibrary } from "@/lib/templateStore";
 import type { LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
@@ -109,7 +110,7 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
@@ -160,6 +161,10 @@ export default function Hasil() {
   // polls the server (same api.getPublicSession ShareGallery.tsx already
   // relies on) as a fallback so the preview doesn't just stay blank.
   const [awaitingMedia, setAwaitingMedia] = useState(false);
+  // Stop-motion video (packages with hasStopMotion): built here from the finished photos once the strip is ready.
+  const [stopMotionState, setStopMotionState] = useState<"idle" | "making" | "done" | "error">("idle");
+  const stopMotionStartedRef = useRef(false);
+  const hasStopMotion = Boolean(selectedPackage?.hasStopMotion);
   // Set only when the poll below genuinely exhausted its attempts with
   // nothing found — as opposed to "never needed to poll" — so the carousel
   // can say so instead of just quietly having one fewer slide than expected.
@@ -214,6 +219,46 @@ export default function Hasil() {
     // up front to decide whether to start polling at all, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!hasStopMotion || stripRendering || stopMotionStartedRef.current || !sessionId || photoUrls.length === 0 || positionable?.editMode) return;
+    stopMotionStartedRef.current = true;
+    setStopMotionState("making");
+    (async () => {
+      try {
+        // The admin's dedicated stop-motion frame (Kelola Frame → Frame stop motion); none chosen = plain slideshow.
+        let frameTemplate: LocalTemplate | null = null;
+        if (config.stopMotionTemplateId) {
+          const frames = await api.getStopMotionFrames().catch(() => undefined);
+          const frame = frames?.find((item) => item.id === config.stopMotionTemplateId);
+          if (frame) {
+            frameTemplate = {
+              id: frame.id, name: frame.name, category: frame.category ?? "custom", style: frame.style ?? "", orientation: frame.orientation === "landscape" ? "landscape" : "portrait",
+              outputPreset: frame.outputPreset ?? "4r", canvasWidth: frame.canvasWidth, canvasHeight: frame.canvasHeight, frameDataUrl: frame.imageUrl, slots: frame.slots ?? [],
+            };
+          }
+        }
+        const blob = await renderStopMotion({ photoUrls, template: frameTemplate, secondsPerPhoto: config.stopMotionSecondsPerPhoto, mirror: outputMirrored, filter, correction: colorCorrection });
+        if (!blob) throw new Error("Video stop motion kosong");
+        // Show it right away from memory, then swap to the server URL once the upload lands.
+        const localUrl = `${URL.createObjectURL(blob)}#clip.webm`;
+        setStopMotionUrl(localUrl);
+        setStopMotionState("done");
+        if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
+          try {
+            const result = await api.uploadMedia(sessionId, "stopmotion", blob);
+            if (result?.stopMotionUrl) setStopMotionUrl(result.stopMotionUrl);
+          } catch (error) {
+            console.error("Gagal upload video stop motion", error);
+          }
+        }
+      } catch (error) {
+        console.error("Gagal membuat video stop motion", error);
+        setStopMotionState("error");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasStopMotion, stripRendering, sessionId, photoUrls.length]);
 
   useEffect(() => {
     if (additionalQr && additionalQrCanvasRef.current) QRCode.toCanvas(additionalQrCanvasRef.current, additionalQr, { width: 180 });
@@ -328,7 +373,7 @@ export default function Hasil() {
     // paused while still polling the server for a GIF/video that hasn't
     // arrived yet, for the same reason.
     if (additionalPayment === "starting" || additionalPayment === "waiting" || additionalPayment === "printing") return;
-    if (awaitingMedia) return;
+    if (awaitingMedia || stopMotionState === "making") return;
     setAutoResetSeconds(AUTO_RESET_SECONDS);
     const interval = window.setInterval(() => {
       setAutoResetSeconds((value) => Math.max(0, value - 1));
@@ -338,7 +383,7 @@ export default function Hasil() {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [sessionId, additionalPayment, awaitingMedia]);
+  }, [sessionId, additionalPayment, awaitingMedia, stopMotionState]);
 
   const saveCustomer = async () => {
     if (!sessionId || savingCustomer) return;
@@ -465,8 +510,9 @@ export default function Hasil() {
   // loading/failure placeholder instead of just leaving the arrows/dots
   // undersized, or having that slide silently vanish once polling stops.
   const showExtraMediaSlide = (awaitingMedia || mediaFetchFailed) && mediaUrls.length === 0;
-  const previewCount = 1 + mediaUrls.length + (showExtraMediaSlide ? 1 : 0);
-  const currentMediaUrl = previewIndex > 0 && previewIndex <= mediaUrls.length ? mediaUrls[previewIndex - 1] : null;
+  const previewCount = 1 + mediaUrls.length + (showExtraMediaSlide ? 1 : 0) + (hasStopMotion ? 1 : 0);
+  const stopMotionIndex = hasStopMotion ? previewCount - 1 : -1;
+  const currentMediaUrl = previewIndex > 0 && previewIndex !== stopMotionIndex && previewIndex <= mediaUrls.length ? mediaUrls[previewIndex - 1] : null;
   const currentMediaIsGif = currentMediaUrl ? isGifUrl(currentMediaUrl) : false;
 
   // A media src that fails to load (e.g. a transient permission-propagation
@@ -484,7 +530,7 @@ export default function Hasil() {
     : currentMediaUrl;
 
   const mediaMaxH = wide ? "max-h-[calc(100vh-390px)]" : "max-h-[clamp(280px,46vh,520px)]";
-  const hasMedia = Boolean(selectedPackage?.hasGif || selectedPackage?.hasVideo);
+  const hasMedia = Boolean(selectedPackage?.hasGif || selectedPackage?.hasVideo || selectedPackage?.hasStopMotion);
 
   return (
     <ScreenLayoutBoundary screenKey="result">
@@ -518,11 +564,13 @@ export default function Hasil() {
             {previewCount > 1 && (
               <div role="tablist" className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
                 {Array.from({ length: previewCount }).map((_, index) => {
-                  const url = index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
-                  const label = index === 0 ? "Foto" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
+                  const isStopMotionTab = index === stopMotionIndex;
+                  const url = !isStopMotionTab && index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
+                  const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
                   return (
                     <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
-                      {!url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
+                      {isStopMotionTab && stopMotionState === "making" && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
+                      {!isStopMotionTab && !url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
                       {label}
                     </button>
                   );
@@ -553,7 +601,23 @@ export default function Hasil() {
                 ? <img src={currentMediaSrc ?? undefined} onError={handleMediaError} alt="Klip sesi" className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`} />
                 : <video src={currentMediaSrc ?? undefined} onError={handleMediaError} autoPlay muted loop playsInline className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`} />
             )}
-            {showExtraMediaSlide && previewIndex === previewCount - 1 && (
+            {previewIndex === stopMotionIndex && (
+              stopMotionUrl ? (
+                <video key={stopMotionUrl} src={stopMotionUrl} autoPlay muted loop playsInline className={`${mediaMaxH} max-w-full rounded-2xl border border-fg/10 shadow-2xl`} />
+              ) : stopMotionState === "error" ? (
+                <div className="flex flex-col items-center gap-2 px-6 text-center">
+                  <p className="text-sm font-semibold text-fg/70">Video stop motion gagal dibuat</p>
+                  <p className="text-xs text-fg/40">Foto tetap tersimpan dengan baik.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Spinner size="md" />
+                  <p className="text-center text-sm font-semibold text-fg/70">Membuat video stop motion…</p>
+                  <p className="text-xs text-fg/40">Sekitar {Math.ceil((photoUrls.length * (config.stopMotionSecondsPerPhoto || 0.9)) + 1.5)} detik</p>
+                </div>
+              )
+            )}
+            {showExtraMediaSlide && previewIndex === 1 && (
               awaitingMedia ? (
                 <div className="flex flex-col items-center gap-3">
                   <Spinner size="md" />
