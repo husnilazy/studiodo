@@ -45,7 +45,25 @@ async function getGracePeriodDays(): Promise<number> {
   return cachedGracePeriodDays;
 }
 
+// Same reasoning as the platform-settings cache above, for the per-tenant row: this runs on every session-create and
+// payment-start request, and a lock/unlock only has to reach the kiosk within seconds, not instantly.
+const STATUS_CACHE_TTL_MS = 15_000;
+const statusCache = new Map<string, { value: SubscriptionStatus; expires: number }>();
+
+export function clearSubscriptionStatusCache(tenantId?: string) {
+  if (tenantId) statusCache.delete(tenantId);
+  else statusCache.clear();
+}
+
 export async function getSubscriptionStatus(tenantId: string): Promise<SubscriptionStatus> {
+  const hit = statusCache.get(tenantId);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  const value = await fetchSubscriptionStatus(tenantId);
+  statusCache.set(tenantId, { value, expires: Date.now() + STATUS_CACHE_TTL_MS });
+  return value;
+}
+
+async function fetchSubscriptionStatus(tenantId: string): Promise<SubscriptionStatus> {
   // Independent reads — run concurrently instead of paying sequential
   // round-trips. This function sits on every session-create and
   // payment-start request (via requireActiveSubscription), so the latency

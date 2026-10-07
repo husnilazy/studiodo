@@ -4,7 +4,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys, platformSettings } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
-import { requireKioskAuth } from "../middleware/kioskAuth.js";
+import { requireKioskAuth, clearKioskAuthCache } from "../middleware/kioskAuth.js";
 import { getSubscriptionStatus } from "../lib/subscription.js";
 import { getTenantPlanFeatures } from "../lib/planFeatures.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -179,6 +179,7 @@ kioskKeysRouter.post("/:id/reset-device", async (req, res) => {
     .where(and(eq(kioskKeys.id, req.params.id), eq(kioskKeys.tenantId, req.tenantId!)))
     .returning({ id: kioskKeys.id });
   if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
+  clearKioskAuthCache();
   res.json({ ok: true, id: row.id });
 });
 
@@ -190,5 +191,6 @@ kioskKeysRouter.delete("/:id", async (req, res) => {
     .where(and(eq(kioskKeys.id, req.params.id), eq(kioskKeys.tenantId, req.tenantId!), isNull(kioskKeys.revokedAt)))
     .returning({ id: kioskKeys.id });
   if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
+  clearKioskAuthCache();
   res.json({ ok: true, id: row.id });
 });
