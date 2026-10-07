@@ -1,6 +1,6 @@
 {
   "name": "studiodo-kiosk",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "STUDIODO Photobooth — Kiosk + Admin, Electron .exe",
   "author": "Frameless Creative",
   "main": "electron/main.cjs",
@@ -28,6 +28,7 @@
     "appId": "com.framelesscreative.studiodo",
     "productName": "STUDIODO",
     "asar": true,
+    "afterPack": "scripts/afterPack.cjs",
     "npmRebuild": false,
     "asarUnpack": [
       "dist-client/**/*",

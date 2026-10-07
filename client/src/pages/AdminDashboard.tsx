@@ -19,6 +19,7 @@ import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
 import { Icon } from "@/components/kiosk/Icons";
+import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
@@ -709,9 +710,9 @@ export default function AdminDashboard() {
   return (
     <div className="flex h-full overflow-hidden bg-[var(--kiosk-background)] text-[var(--kiosk-text)]">
       <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-fg/10 bg-surface p-4 md:flex">
-        <div className="mb-4 flex items-center gap-3 px-1 pt-1">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="camera" className="h-5 w-5" /></span>
-          <div className="min-w-0"><p className="font-display text-lg font-bold leading-tight">STUDIODO</p><p className="text-[11px] font-medium text-fg/45">Admin booth</p></div>
+        <div className="mb-4 px-2 pt-2">
+          <BrandLogo className="h-8" />
+          <p className="mt-1.5 text-[11px] font-medium text-fg/45">Admin booth</p>
         </div>
         <nav className="space-y-4">
           {sectionGroups.map((group) => (

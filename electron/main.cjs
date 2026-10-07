@@ -23,6 +23,8 @@ if (!gotSingleInstanceLock) {
 }
 
 const APP_ICON = path.join(__dirname, "icon.png");
+// Same id as build.appId: Windows groups the taskbar button / pinned shortcut by it and takes the icon from the app.
+if (process.platform === "win32") app.setAppUserModelId("com.framelesscreative.studiodo");
 
 let kioskWin = null;
 let adminWin = null;

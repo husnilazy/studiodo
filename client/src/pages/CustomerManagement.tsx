@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { api } from "@/lib/api";
+import { Icon } from "@/components/kiosk/Icons";
 
 const PAGE_SIZE = 100;
 
@@ -17,6 +19,7 @@ export default function CustomerManagement() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return <div className="h-full overflow-y-auto px-6 py-8"><div className="mx-auto max-w-5xl">
+    <Link href="/admin" className="mb-5 inline-flex items-center gap-2 rounded-xl border border-fg/15 px-4 py-2 text-sm font-medium text-fg/70 transition hover:border-accent hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Dashboard</Link>
     <p className="text-sm uppercase tracking-[.2em] text-accent">STUDIODO CRM</p>
     <h1 className="mt-2 font-display text-4xl font-bold">Manajemen Customer</h1>
     <p className="mt-2 text-fg/50">Kontak, persetujuan publikasi, feedback, dan link galeri hasil sesi. {total} customer total, terbaru dulu.</p>

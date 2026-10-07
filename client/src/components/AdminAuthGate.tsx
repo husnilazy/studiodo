@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
 import { getAdminToken, setAdminToken } from "@/lib/api";
@@ -98,9 +99,8 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
         onSubmit={submitLogin}
         className="relative w-full max-w-sm rounded-[2rem] border border-fg/10 bg-surface p-8 shadow-glass"
       >
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="camera" className="h-6 w-6" /></span>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-        <h1 className="mt-1 font-display text-2xl font-bold">Login Admin</h1>
+        <BrandLogo className="h-10" />
+        <h1 className="mt-6 font-display text-2xl font-bold">Login Admin</h1>
         <p className="mt-2 text-sm text-fg/50">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
 
         <div className="mt-6 space-y-3">

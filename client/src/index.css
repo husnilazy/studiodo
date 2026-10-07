@@ -509,3 +509,8 @@ html.admin-kb-open #root {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(250%); }
 }
+
+/* BrandLogo: dark-ink wordmark on the light admin theme, white wordmark on the dark one. */
+.brand-logo-white { display: none; }
+html[data-admin-theme="dark"] .brand-logo-ink { display: none; }
+html[data-admin-theme="dark"] .brand-logo-white { display: block; }
