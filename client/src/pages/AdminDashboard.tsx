@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pushConfigNow, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { Link } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
@@ -215,6 +215,9 @@ function sessionAssets(session: any): SessionAsset[] {
   ];
 }
 
+// Drive thumbnails default to 800px — far more than a 160px gallery tile needs, and 30+ of them load per page.
+const galleryThumb = (url: string) => url.replace(/([?&]sz=)w\d+/, "$1w360");
+
 function formatDateInput(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -341,7 +344,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
             ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Halo! Ini foto/video sesi kamu dari ${brandName}.${session.shareUrl ? ` Bisa dilihat & didownload di sini: ${session.shareUrl}` : ""}`)}`
             : null;
           return (
-            <article key={session.id} className={panel}>
+            <article key={session.id} className={panel} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">{new Date(session.createdAt).toLocaleString("id-ID")}</p>
@@ -382,9 +385,9 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                   <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
                     <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
                       <div className="flex h-32 items-center justify-center bg-fg/5">
-                        {isMotionAsset(asset.type)
+                        {asset.type === "Video" || asset.type === "Stop Motion"
                           ? <video src={asset.url} muted preload="none" className="h-full w-full object-cover" />
-                          : <img src={asset.url} alt={asset.type} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />}
+                          : <img src={asset.type === "Foto" ? galleryThumb(asset.url) : asset.url} alt={asset.type} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />}
                       </div>
                     </a>
                     <div className="p-2.5">
@@ -456,6 +459,34 @@ type FinanceSubtab = (typeof FINANCE_SUBTABS)[number]["id"];
 // menu bar entirely (autoHideMenuBar in electron/main.cjs) to stay
 // kiosk-appropriate, so a permanent sidebar footer — visible from every
 // admin section, not just one tab — stands in for that convention instead.
+function KioskWindowToggle() {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!window.studiodo?.getKioskStatus) return;
+    const refresh = () => window.studiodo!.getKioskStatus().then((r) => setOpen(r.open)).catch(() => undefined);
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!window.studiodo?.getKioskStatus || open === null) return null;
+  const toggle = async () => {
+    if (open && !window.confirm("Tutup layar kiosk? Customer tidak bisa memakai photobooth sampai kiosk dibuka lagi.")) return;
+    setBusy(true);
+    try {
+      const r = open ? await window.studiodo!.closeKiosk() : await window.studiodo!.openKiosk();
+      setOpen(r.open);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" onClick={toggle} disabled={busy} className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition disabled:opacity-50 ${open ? "border-amber-400/40 text-amber-500 hover:bg-amber-500/10" : "border-emerald-400/40 text-emerald-500 hover:bg-emerald-500/10"}`}>
+      <Icon name="monitor" className="h-4 w-4" />{open ? "Tutup Kiosk" : "Buka Kiosk"}
+    </button>
+  );
+}
+
 function AppVersionFooter() {
   const [status, setStatus] = useState<StudiodoUpdaterStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -528,12 +559,19 @@ export default function AdminDashboard() {
   // a real error surface as a toast instead of silently doing nothing.
   const [downloadingKeys, setDownloadingKeys] = useState<Set<string>>(new Set());
 
+  const overviewFingerprintRef = useRef("");
   const loadOverview = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setRefreshing(true);
     try {
       const result = await api.getAdminOverview();
       if (result) {
-        setOverview(result);
+        // Background polls usually return identical data; swapping in a new object anyway re-rendered the whole
+        // dashboard (every gallery card + image) each time, which is what made the admin feel heavy while idle.
+        const fingerprint = JSON.stringify(result);
+        if (fingerprint !== overviewFingerprintRef.current) {
+          overviewFingerprintRef.current = fingerprint;
+          setOverview(result);
+        }
         setLastUpdated(new Date());
       }
     } catch (error) {
@@ -553,7 +591,7 @@ export default function AdminDashboard() {
   // Polls in the background, paused while the tab isn't visible so a
   // forgotten background tab doesn't poll forever for nothing.
   useEffect(() => {
-    const POLL_MS = 15000;
+    const POLL_MS = 45000;
     let inFlight = false;
     const tick = async () => {
       if (document.visibilityState !== "visible" || inFlight) return;
@@ -693,6 +731,21 @@ export default function AdminDashboard() {
           <AdminKeyboardToggle showLabel />
           <Link href="/" className="flex items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Kiosk</Link>
           <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-red-400/50 hover:text-red-500"><Icon name="logout" className="h-4 w-4" />Logout</button>
+          <KioskWindowToggle />
+          {window.studiodo?.restartApp && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { if (window.confirm("Restart aplikasi STUDIODO? Kiosk & admin akan ditutup lalu dibuka lagi.")) void window.studiodo!.restartApp(); }}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-fg/10 px-2 py-2.5 text-xs font-medium text-fg/60 transition hover:border-accent/50 hover:text-fg"
+              ><Icon name="refresh" className="h-4 w-4" />Restart</button>
+              <button
+                type="button"
+                onClick={() => { if (window.confirm("Tutup aplikasi STUDIODO sepenuhnya? Kiosk akan berhenti sampai aplikasi dibuka lagi.")) void window.studiodo!.quitApp(); }}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-red-400/30 px-2 py-2.5 text-xs font-medium text-red-500/80 transition hover:bg-red-500/10 hover:text-red-500"
+              ><Icon name="power" className="h-4 w-4" />Tutup</button>
+            </div>
+          )}
           <AppVersionFooter />
         </div>
       </aside>

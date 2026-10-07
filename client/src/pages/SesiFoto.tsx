@@ -173,6 +173,19 @@ export default function SesiFoto() {
   const [mediaUploading, setMediaUploading] = useState(false);
   const [savingStage, setSavingStage] = useState<string | null>(null);
   const [finishingEarly, setFinishingEarly] = useState(false);
+  // Retake mode: the slot whose photo the next shutter press replaces. Without this, a full session (every slot filled)
+  // refused to shoot at all — startCountdown bails on sessionComplete — so "ambil ulang" did nothing even with plenty of
+  // time left. Arriving from PreviewFoto's "ulangi" button lands here with currentSlot already on a filled slot, which is
+  // also a retake. The ref mirrors the state because capture() runs from a countdown-interval closure.
+  const [retakeTarget, setRetakeTarget] = useState<number | null>(() => {
+    const { photoUrls: urls, currentSlot: slot } = useKioskSession.getState();
+    return urls[slot] ? slot : null;
+  });
+  const retakeTargetRef = useRef<number | null>(retakeTarget);
+  retakeTargetRef.current = retakeTarget;
+  // A retake after leaving this screen starts with no local clips, so re-merging would replace the earlier GIF/video with a partial one.
+  const skipCombineRef = useRef(retakeTarget !== null);
+  const [retakeTick, setRetakeTick] = useState(0);
   // Persistent: camera/bridge genuinely unreachable — blocks the shutter and
   // shows the full "kamera belum tersedia" overlay.
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -522,7 +535,17 @@ export default function SesiFoto() {
       }
     })();
 
-    if (currentSlot + 1 < totalPhotos) {
+    if (retakeTargetRef.current !== null) {
+      // Retake done: go to the first still-empty slot if any (a partial session), otherwise stay put — shutter locks again.
+      const urls = useKioskSession.getState().photoUrls;
+      const firstEmpty = Array.from({ length: totalPhotos }).findIndex((_, i) => !urls[i]);
+      if (firstEmpty >= 0) setCurrentSlot(firstEmpty);
+      retakeTargetRef.current = null;
+      setRetakeTarget(null);
+      // The merged GIF/video was built from the old shot — rebuild it with the new one.
+      combineTriggeredRef.current = false;
+      setRetakeTick((tick) => tick + 1);
+    } else if (currentSlot + 1 < totalPhotos) {
       setCurrentSlot(currentSlot + 1);
     }
     return true;
@@ -845,15 +868,15 @@ export default function SesiFoto() {
 
   const combineTriggeredRef = useRef(false);
   useEffect(() => {
-    if (combineTriggeredRef.current) return;
+    if (combineTriggeredRef.current || skipCombineRef.current || retakeTarget !== null) return;
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
     if (!(sessionComplete || (eventTimerEnabled && remainingSeconds <= 0))) return;
     combineTriggeredRef.current = true;
     void combineSlotClips();
-  }, [sessionComplete, eventTimerEnabled, remainingSeconds, selectedPackage?.hasVideo, selectedPackage?.hasGif]);
+  }, [sessionComplete, eventTimerEnabled, remainingSeconds, selectedPackage?.hasVideo, selectedPackage?.hasGif, retakeTarget, retakeTick]);
 
   const startCountdown = () => {
-    if (!previewReady || countdown !== null || (eventTimerEnabled && remainingSeconds <= 0) || sessionComplete || captureLockRef.current) return;
+    if (!previewReady || countdown !== null || (eventTimerEnabled && remainingSeconds <= 0) || (sessionComplete && retakeTargetRef.current === null) || captureLockRef.current) return;
     captureLockRef.current = true;
     setCaptureNotice(null);
     if (cameraMode === "tether") {
@@ -903,14 +926,30 @@ export default function SesiFoto() {
   // previous capture() hasn't resolved yet, so this never double-fires.
   useEffect(() => {
     if (!config.autoCaptureEnabled || isEditMode) return;
-    if (!previewReady || sessionComplete || countdown !== null || finishingEarly) return;
+    if (!previewReady || (sessionComplete && retakeTarget === null) || countdown !== null || finishingEarly) return;
     const timer = window.setTimeout(() => startCountdown(), 2500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.autoCaptureEnabled, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot]);
+  }, [config.autoCaptureEnabled, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
 
   const retake = (slot: number) => {
+    if (countdown !== null || capturing || captureLockRef.current) return;
+    if (mediaUploading) {
+      showCaptureNotice("Tunggu sebentar, GIF/video sesi sedang disimpan.");
+      return;
+    }
+    if (eventTimerEnabled && remainingSeconds <= 0) return;
+    retakeTargetRef.current = slot;
+    setRetakeTarget(slot);
     setCurrentSlot(slot);
+  };
+
+  const cancelRetake = () => {
+    const urls = useKioskSession.getState().photoUrls;
+    const firstEmpty = Array.from({ length: totalPhotos }).findIndex((_, i) => !urls[i]);
+    setCurrentSlot(firstEmpty >= 0 ? firstEmpty : Math.max(0, totalPhotos - 1));
+    retakeTargetRef.current = null;
+    setRetakeTarget(null);
   };
 
   const finishEarly = async () => {
@@ -936,7 +975,7 @@ export default function SesiFoto() {
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{config.captureHeadline || "Siap untuk momenmu?"}</h1>
             <p className="mt-0.5 text-sm text-muted">
-              {countdown !== null ? "Tahan pose… sebentar lagi!" : sessionComplete ? "Semua foto sudah diambil. Lanjut untuk mempercantik hasilnya." : config.autoCaptureEnabled ? "Mode otomatis: foto berikutnya diambil sendiri." : "Ketuk tombol bulat di layar kamera untuk mulai hitung mundur."}
+              {countdown !== null ? "Tahan pose… sebentar lagi!" : retakeTarget !== null ? `Ambil ulang foto ke-${retakeTarget + 1}. Foto lama diganti setelah kamu menjepret.` : sessionComplete ? "Semua foto sudah diambil. Lanjut untuk mempercantik hasilnya." : config.autoCaptureEnabled ? "Mode otomatis: foto berikutnya diambil sendiri." : "Ketuk tombol bulat di layar kamera untuk mulai hitung mundur."}
             </p>
           </div>
         </Positionable>
@@ -1116,7 +1155,7 @@ export default function SesiFoto() {
               )}
               <motion.button
                 onClick={startCountdown}
-                disabled={!previewReady || countdown !== null}
+                disabled={!previewReady || countdown !== null || (sessionComplete && retakeTarget === null)}
                 whileTap={{ scale: 0.92 }}
                 aria-label="Ambil foto"
                 className="absolute left-1/2 top-[78%] z-30 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-fg shadow-[0_0_0_4px_rgba(0,0,0,0.35)] transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-28 sm:w-28"
@@ -1145,7 +1184,12 @@ export default function SesiFoto() {
               screen top-to-bottom hit "continue" before they'd even reach a
               filter row buried at the very bottom, which read as if there
               was no way forward at all. */}
-          {sessionComplete && (
+          {retakeTarget !== null && (
+            <button onClick={cancelRetake} disabled={countdown !== null || capturing} className="k-btn relative z-10 mt-3 w-full disabled:opacity-50">
+              Batal ambil ulang — pakai foto ke-{retakeTarget + 1} yang lama
+            </button>
+          )}
+          {sessionComplete && retakeTarget === null && (
             <button onClick={() => navigate(getNextRoute("capture", config.kioskFlow))} disabled={mediaUploading} className="k-btn k-btn-accent k-btn-lg relative z-10 mt-3 w-full disabled:cursor-wait disabled:opacity-60">
               {mediaUploading
                 ? <><Spinner size="md" />{selectedPackage?.hasGif && selectedPackage?.hasVideo

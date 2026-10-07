@@ -504,3 +504,8 @@ html.admin-kb-open #root {
    elements being arranged (and their resize handle), so a stray tap can never navigate or start a payment. */
 .builder-canvas * { pointer-events: none !important; }
 .builder-canvas [data-builder-id], .builder-canvas [data-builder-handle] { pointer-events: auto !important; }
+
+@keyframes print-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}

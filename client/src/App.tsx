@@ -24,6 +24,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useKioskSession } from "@/lib/sessionStore";
 import { clearKioskPairing, isKioskPaired } from "@/lib/apiConfig";
+import { prefetchFrames } from "@/lib/framesCache";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { useSubscriptionLock } from "@/lib/subscriptionLockStore";
 import SubscriptionLockedScreen from "@/components/SubscriptionLockedScreen";
@@ -202,7 +203,10 @@ export default function App() {
     // actual 401/403, same mechanism the listener above already handles.
     syncBoothConfigFromServer()
       .catch(() => {})
-      .finally(() => setCheckingPairing(false));
+      .finally(() => {
+        setCheckingPairing(false);
+        prefetchFrames();
+      });
   }, []);
 
   return (

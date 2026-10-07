@@ -9,7 +9,7 @@ const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell } = require("
 const { autoUpdater } = require("electron-updater");
 const { startCanonBridge, stopCanonBridge, getCanonBridgeStatus } = require("./canon-bridge.cjs");
 const { startDigicamBridge, stopDigicamBridge } = require("./digicam-bridge.cjs");
-const { listPrinters, printImage } = require("./print.cjs");
+const { listPrinters, printImage, waitForPrintQueue } = require("./print.cjs");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -21,6 +21,8 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 }
+
+const APP_ICON = path.join(__dirname, "icon.png");
 
 let kioskWin = null;
 let adminWin = null;
@@ -174,6 +176,8 @@ function createKioskWindow() {
     height,
     fullscreen: !isDev,
     kiosk: !isDev,
+    icon: APP_ICON,
+    backgroundColor: "#0b0b10", // matches the splash in client/index.html — no white flash before it paints
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -196,6 +200,8 @@ function createAdminWindow() {
   adminWin = new BrowserWindow({
     width: 1280,
     height: 800,
+    icon: APP_ICON,
+    backgroundColor: "#0b0b10", // matches the splash in client/index.html — no white flash before it paints
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -408,6 +414,33 @@ ipcMain.handle("app:relaunchKiosk", () => {
   if (kioskWin) kioskWin.close();
   createKioskWindow();
 });
+// Admin-window "Tutup / Restart aplikasi" buttons. Quit stops the camera bridges too (see the will-quit handler); relaunch spawns a fresh process first, so a stuck camera/bridge gets a clean start.
+// Close/reopen only the customer-facing kiosk window from the admin window; the admin window and app keep running.
+ipcMain.handle("kiosk:status", () => ({ open: Boolean(kioskWin && !kioskWin.isDestroyed()) }));
+ipcMain.handle("kiosk:close", () => {
+  if (kioskWin && !kioskWin.isDestroyed()) kioskWin.close();
+  return { open: false };
+});
+ipcMain.handle("kiosk:open", () => {
+  if (kioskWin && !kioskWin.isDestroyed()) {
+    kioskWin.show();
+    kioskWin.focus();
+  } else {
+    createKioskWindow();
+  }
+  return { open: true };
+});
+ipcMain.handle("app:quit", () => {
+  setTimeout(() => app.quit(), 150);
+  return { ok: true };
+});
+ipcMain.handle("app:restart", () => {
+  setTimeout(() => {
+    app.relaunch();
+    app.exit(0);
+  }, 150);
+  return { ok: true };
+});
 ipcMain.handle("canon:bridgeStatus", () => getCanonBridgeStatus());
 ipcMain.handle("digicam:bridgeStatus", () => ({
   enabled: process.env.DIGICAM_BRIDGE_ENABLED !== "false",
@@ -441,6 +474,13 @@ ipcMain.handle("print:listPrinters", async () => {
     return { ok: false, printers: [], error: error instanceof Error ? error.message : "Gagal membaca daftar printer" };
   }
 });
+ipcMain.handle("print:waitDone", async (_event, payload) => {
+  try {
+    return await waitForPrintQueue(payload ?? {});
+  } catch (error) {
+    return { ok: true, unknown: true, error: error instanceof Error ? error.message : undefined };
+  }
+});
 ipcMain.handle("print:image", async (_event, payload) => {
   try {
     await printImage(payload);
@@ -449,6 +489,97 @@ ipcMain.handle("print:image", async (_event, payload) => {
     return { ok: false, error: error instanceof Error ? error.message : "Print gagal" };
   }
 });
+const DOWNLOAD_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) STUDIODO-Kiosk";
+const DOWNLOAD_ATTEMPTS = 3;
+const DOWNLOAD_TIMEOUT_MS = 90 * 1000;
+
+// Any Drive link (uc?export=download, /file/d/<id>/view, thumbnail?id=) is rewritten to Drive's direct-download host with
+// confirm=t. The old uc?export=download endpoint answers bigger files with an HTML "can't scan for viruses" page, which
+// was the main reason downloads failed; this host serves the real bytes straight away. Thumbnail links are also upgraded
+// to the full original so a download never silently saves the 800px preview.
+function normalizeDownloadUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname === "drive.google.com" || u.hostname === "drive.usercontent.google.com") {
+      const id = u.searchParams.get("id") || (u.pathname.match(/\/file\/d\/([^/]+)/) || [])[1];
+      if (id) return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
+    }
+  } catch {
+    // not a parseable URL — let fetch report it
+  }
+  return rawUrl;
+}
+
+async function downloadOnce(url, filePath) {
+  const controller = new AbortController();
+  // Idle timeout, not total: a big video on slow wifi may legitimately take minutes as long as bytes keep arriving.
+  let timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  const partPath = `${filePath}.part`;
+  try {
+    const response = await fetch(url, { headers: { "User-Agent": DOWNLOAD_UA }, signal: controller.signal, redirect: "follow" });
+    if (!response.ok || !response.body) {
+      const error = new Error(`Gagal mengunduh (HTTP ${response.status})`);
+      error.retryable = response.status >= 500 || response.status === 429 || response.status === 408;
+      throw error;
+    }
+    if ((response.headers.get("content-type") ?? "").includes("text/html")) {
+      const error = new Error("Server mengembalikan halaman web, bukan file asli (file dihapus/akses privat?)");
+      error.retryable = false;
+      throw error;
+    }
+    // Streamed straight to disk — the old arrayBuffer() path held the whole file in memory before writing anything.
+    const out = fs.createWriteStream(partPath);
+    const reader = response.body.getReader();
+    await new Promise((resolve, reject) => {
+      out.on("error", reject);
+      out.on("finish", resolve);
+      (async () => {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            clearTimeout(timer);
+            timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+            if (!out.write(value)) await new Promise((r) => out.once("drain", r));
+          }
+          out.end();
+        } catch (error) {
+          out.destroy();
+          reject(error);
+        }
+      })();
+    });
+    await fs.promises.rename(partPath, filePath);
+  } catch (error) {
+    await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+    if (error?.name === "AbortError") {
+      const timeout = new Error("Koneksi terputus / terlalu lama tidak ada respon");
+      timeout.retryable = true;
+      throw timeout;
+    }
+    // Network-level failures (DNS blip, reset) have no retryable flag set: worth another try.
+    if (error.retryable === undefined) error.retryable = true;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function downloadWithRetry(url, filePath) {
+  let lastError;
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+    try {
+      await downloadOnce(url, filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!error.retryable || attempt === DOWNLOAD_ATTEMPTS) break;
+      await new Promise((r) => setTimeout(r, 800 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 // Downloads straight to disk from the main process instead of the renderer's
 // fetch()-into-blob-then-<a download> dance — that path was the slow,
 // "sangat mengganggu" one: every click held the whole file in renderer memory
@@ -461,28 +592,10 @@ ipcMain.handle("download:asset", async (_event, payload) => {
   try {
     const { url, filename } = payload ?? {};
     if (!url || !filename) throw new Error("URL atau nama file tidak ada");
-    // A plain Node fetch with no User-Agent can get a different (sometimes
-    // stricter) response from Google Drive's uc?export=download endpoint
-    // than a real browser tab does — a real UA header keeps this behaving
-    // the same as the working browser-download paths (ShareGallery.tsx,
-    // Hasil.tsx's per-clip download links).
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) STUDIODO-Kiosk" } });
-    if (!response.ok) throw new Error(`Gagal mengunduh (HTTP ${response.status})`);
-    // For a large-enough file, Drive's download endpoint can return an HTML
-    // "can't scan this file for viruses" interstitial (still HTTP 200)
-    // instead of the actual bytes — writing that straight to a .jpg/.gif/
-    // .webm silently produces a small, corrupt file with no error at all.
-    // Catching it here as a real failure is far better than a "Download"
-    // button that appears to work but hands back garbage.
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("text/html")) {
-      throw new Error("Drive mengembalikan halaman konfirmasi, bukan file asli (kemungkinan file terlalu besar untuk didownload langsung)");
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
     const dir = path.join(app.getPath("downloads"), "STUDIODO");
     await fs.promises.mkdir(dir, { recursive: true });
-    const filePath = path.join(dir, filename);
-    await fs.promises.writeFile(filePath, buffer);
+    const filePath = path.join(dir, String(filename).replace(/[\\/:*?"<>|]/g, "_"));
+    await downloadWithRetry(normalizeDownloadUrl(url), filePath);
     return { ok: true, path: filePath };
   } catch (error) {
     console.error("[download:asset] gagal", payload?.url, error);

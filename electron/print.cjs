@@ -101,4 +101,49 @@ function printImage({ dataUrl, printerName, copies, pageSize }) {
   });
 }
 
-module.exports = { listPrinters, printImage, PAGE_SIZES_MM };
+// printImage resolves once Windows has accepted the job into the spooler — the paper is usually still being printed at that
+// point. This polls the printer's Windows print queue until this recent job has left it (printed), so the kiosk can keep
+// its "Sedang mencetak" animation up until the print really finishes. Best effort: if the queue can't be read
+// (PowerShell blocked, driver without a queue) it reports `unknown` and the caller just treats the print as done.
+const { execFile } = require("child_process");
+
+function readQueue(printerName) {
+  const name = String(printerName || "").replace(/'/g, "''");
+  const script = [
+    `$n='${name}'`,
+    `if(-not $n){$n=(Get-CimInstance Win32_Printer | Where-Object Default | Select-Object -First 1).Name}`,
+    `$j=@(Get-PrintJob -PrinterName $n -ErrorAction Stop | Where-Object { $_.SubmittedTime -gt (Get-Date).AddMinutes(-5) })`,
+    `"$($j.Count)|$((($j | ForEach-Object { $_.JobStatus }) -join ','))"`,
+  ].join("; ");
+  return new Promise((resolve, reject) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { timeout: 8000, windowsHide: true }, (error, stdout) => {
+      if (error) return reject(error);
+      const [count, statuses = ""] = String(stdout).trim().split("|");
+      resolve({ count: Number(count) || 0, statuses });
+    });
+  });
+}
+
+async function waitForPrintQueue({ printerName, timeoutMs = 120000 } = {}) {
+  if (process.platform !== "win32") return { ok: true, unknown: true };
+  const deadline = Date.now() + timeoutMs;
+  let emptyStreak = 0;
+  await new Promise((r) => setTimeout(r, 1500));
+  while (Date.now() < deadline) {
+    let queue;
+    try {
+      queue = await readQueue(printerName);
+    } catch {
+      return { ok: true, unknown: true };
+    }
+    if (/error|paperout|offline|userintervention|blocked/i.test(queue.statuses)) {
+      return { ok: false, error: "Printer bermasalah (cek kertas, tinta, atau kabel printer)" };
+    }
+    emptyStreak = queue.count === 0 ? emptyStreak + 1 : 0;
+    if (emptyStreak >= 2) return { ok: true };
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return { ok: true, timedOut: true };
+}
+
+module.exports = { listPrinters, printImage, waitForPrintQueue, PAGE_SIZES_MM };

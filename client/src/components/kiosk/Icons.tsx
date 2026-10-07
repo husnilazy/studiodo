@@ -53,6 +53,7 @@ const PATHS: Record<string, string> = {
   sun: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
   moon: "M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z",
   keyboard: "M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M18 10h.01 M7 14h10",
+  power: "M12 3v8 M7.5 6.5a7 7 0 1 0 9 0",
   logout: "M10 4H5v16h5 M16 8l4 4-4 4 M20 12H9",
   menu: "M4 7h16 M4 12h16 M4 17h16",
   shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M9 12l2 2 4-4",

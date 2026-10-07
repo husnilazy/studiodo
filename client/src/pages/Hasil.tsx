@@ -130,7 +130,7 @@ export default function Hasil() {
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<"idle" | "ok" | "error">("idle");
   // What the full-screen print overlay shows: preparing the 4R file is the slow, UI-blocking part, so say so.
-  const [printStage, setPrintStage] = useState<"idle" | "preparing" | "sending" | "done" | "error">("idle");
+  const [printStage, setPrintStage] = useState<"idle" | "preparing" | "sending" | "printing" | "done" | "error">("idle");
   const [printError, setPrintError] = useState<string | null>(null);
   const autoPrintTriggeredRef = useRef(false);
   const [keyboardField, setKeyboardField] = useState<"whatsapp" | "email" | null>(null);
@@ -374,6 +374,7 @@ export default function Hasil() {
     // arrived yet, for the same reason.
     if (additionalPayment === "starting" || additionalPayment === "waiting" || additionalPayment === "printing") return;
     if (awaitingMedia || stopMotionState === "making") return;
+    if (printStage === "preparing" || printStage === "sending" || printStage === "printing") return;
     setAutoResetSeconds(AUTO_RESET_SECONDS);
     const interval = window.setInterval(() => {
       setAutoResetSeconds((value) => Math.max(0, value - 1));
@@ -383,7 +384,7 @@ export default function Hasil() {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [sessionId, additionalPayment, awaitingMedia, stopMotionState]);
+  }, [sessionId, additionalPayment, awaitingMedia, stopMotionState, printStage === "preparing" || printStage === "sending" || printStage === "printing"]);
 
   const saveCustomer = async () => {
     if (!sessionId || savingCustomer) return;
@@ -415,6 +416,18 @@ export default function Hasil() {
           copies,
         });
         if (result.ok) {
+          // The printer has the job; keep the animation up until the physical print leaves the Windows queue.
+          let finished: { ok: boolean; error?: string } = { ok: true };
+          if (window.studiodo.waitPrintDone) {
+            setPrintStage("printing");
+            finished = await window.studiodo.waitPrintDone({ printerName: config.printerName || undefined, timeoutMs: 30000 + copies * 60000 });
+          }
+          if (!finished.ok) {
+            setPrintStatus("error");
+            setPrintError(finished.error ?? "Print gagal");
+            setPrintStage("error");
+            return;
+          }
           setPrintStatus("ok");
           setPrintStage("done");
           window.setTimeout(() => setPrintStage((stage) => (stage === "done" ? "idle" : stage)), 3500);
@@ -772,14 +785,17 @@ export default function Hasil() {
               )}
               <div>
                 <p className="font-display text-2xl font-semibold">
-                  {printStage === "preparing" ? "Menyiapkan cetakan…" : printStage === "sending" ? "Mengirim ke printer…" : printStage === "done" ? "Terkirim ke printer!" : "Print gagal"}
+                  {printStage === "preparing" ? "Menyiapkan cetakan…" : printStage === "sending" ? "Mengirim ke printer…" : printStage === "printing" ? "Sedang mencetak…" : printStage === "done" ? "Cetak selesai!" : "Print gagal"}
                 </p>
                 <p className="mt-1.5 text-sm text-fg/55">
-                  {printStage === "preparing" ? "Foto sedang disusun ke kertas 4R. Layar bisa terasa berat sebentar." : printStage === "sending" ? "Hampir selesai, jangan matikan printer." : printStage === "done" ? "Ambil hasil cetakmu di printer ya." : (printError ?? "Terjadi kesalahan saat mencetak.")}
+                  {printStage === "preparing" ? "Foto sedang disusun ke kertas 4R. Layar bisa terasa berat sebentar." : printStage === "sending" ? "Hampir selesai, jangan matikan printer." : printStage === "printing" ? "Kertas sedang keluar dari printer, mohon tunggu sampai selesai." : printStage === "done" ? "Ambil hasil cetakmu di printer ya." : (printError ?? "Terjadi kesalahan saat mencetak.")}
                 </p>
               </div>
               {(printStage === "preparing" || printStage === "sending") && (
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-fg/10"><div className={`h-full rounded-full bg-accent transition-all duration-700 ${printStage === "preparing" ? "w-1/2" : "w-5/6"}`} /></div>
+              )}
+              {printStage === "printing" && (
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-fg/10"><div className="absolute inset-y-0 w-2/5 animate-[print-slide_1.3s_ease-in-out_infinite] rounded-full bg-accent" /></div>
               )}
               {printStage === "error" && (
                 <div className="flex w-full gap-2">
