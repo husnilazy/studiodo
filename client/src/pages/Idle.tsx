@@ -58,7 +58,11 @@ export default function Idle() {
         )}
 
         <div className="relative z-10 flex flex-col items-center text-center">
-          {config.logoUrl && (
+          {config.idleLogoVideoUrl ? (
+            <Positionable id="logo" type="image" label="Logo">
+              <video src={config.idleLogoVideoUrl} autoPlay muted loop playsInline className="mb-6 h-28 max-w-[80vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
+            </Positionable>
+          ) : config.logoUrl && (
             <Positionable id="logo" type="image" label="Logo">
               <img src={config.logoUrl} alt={config.brandName} className="mb-6 h-20 max-w-[70vw] object-contain" style={{ transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` }} />
             </Positionable>

@@ -12,8 +12,33 @@ import { validateFlowOrder } from "../lib/kioskFlowRules.js";
 import { getTenantPlanFeatures } from "../lib/planFeatures.js";
 import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
+import multer from "multer";
+import { transcodeToMp4 } from "../lib/ffmpeg.js";
 
 export const configRouter = Router();
+
+// Branding videos (idle cover / animated logo). Multipart instead of a base64 JSON body: these are tens of MB.
+const brandingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 120 * 1024 * 1024 } });
+
+// POST /api/config/branding-video — admin uploads an MP4 or MOV; it is converted to a muted, web-safe H.264 MP4
+// (MOV from iPhones is usually HEVC, which kiosk browsers cannot play) and stored. Returns the absolute URL.
+configRouter.post("/branding-video", requireAdminAuth, brandingUpload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "File video wajib diupload" });
+  const looksLikeVideo = /^video\//.test(file.mimetype) || /\.(mp4|mov|m4v|webm)$/i.test(file.originalname);
+  if (!looksLikeVideo) return res.status(400).json({ error: "File harus berupa video (.mp4 atau .mov)" });
+  const mp4 = await transcodeToMp4(file.buffer, { maxWidth: 1280, crf: 26 });
+  if (!mp4) {
+    const isMp4 = /mp4/i.test(file.mimetype) || /\.mp4$/i.test(file.originalname);
+    if (!isMp4) return res.status(422).json({ error: "Server belum bisa mengonversi video ini. Unggah file .mp4 atau hubungi admin." });
+    if (file.buffer.length > 40 * 1024 * 1024) return res.status(413).json({ error: "Video terlalu besar (maks 40 MB tanpa kompresi)." });
+  }
+  const buffer = mp4 ?? file.buffer;
+  const stored = await saveUploadedFile(req.tenantId!, { buffer, originalname: "branding.mp4", mimetype: "video/mp4" }, "branding", ".mp4");
+  let url = resolveFrameUrl(stored);
+  if (url.startsWith("/")) url = `${req.protocol}://${req.get("host")}${url}`;
+  res.json({ url, sizeBytes: buffer.length, converted: Boolean(mp4) });
+});
 
 async function ensureTenantSettingsRow(tenantId: string) {
   const [existing] = await db.select({ tenantId: tenantSettings.tenantId }).from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId));
@@ -114,7 +139,7 @@ const KIOSK_CONFIG_BOOLS = [
 ] as const;
 // Images arrive as data: URIs from the browser; they are moved to file storage (same as package thumbnails) so this
 // row stays small and the kiosks load a normal URL.
-const KIOSK_CONFIG_IMAGES = ["logoUrl", "idleCoverUrl", "idleBannerUrl", "eventImageUrl"] as const;
+const KIOSK_CONFIG_IMAGES = ["logoUrl", "idleCoverUrl", "idleBannerUrl", "eventImageUrl", "idleLogoVideoUrl"] as const;
 const MAX_STRING = 600;
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const COLOR_KEYS = new Set(["accentColor", "backgroundColor", "surfaceColor", "textColor", "mutedTextColor", "backgroundGradientStart", "backgroundGradientEnd"]);

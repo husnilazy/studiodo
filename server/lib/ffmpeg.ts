@@ -39,7 +39,9 @@ function resolveFfmpeg(): string | null {
 export const isMp4 = (mimetype?: string, filename?: string) => /mp4/i.test(mimetype ?? "") || /\.mp4$/i.test(filename ?? "");
 
 /** Converts a video buffer to MP4. Returns null when ffmpeg is unavailable or fails, so callers can fall back to the original. */
-export async function transcodeToMp4(input: Buffer): Promise<Buffer | null> {
+export type TranscodeOptions = { maxWidth?: number; crf?: number };
+
+export async function transcodeToMp4(input: Buffer, opts: TranscodeOptions = {}): Promise<Buffer | null> {
   const binary = resolveFfmpeg();
   if (!binary) return null;
   const dir = await mkdtemp(path.join(tmpdir(), "studiodo-vid-"));
@@ -50,9 +52,9 @@ export async function transcodeToMp4(input: Buffer): Promise<Buffer | null> {
     await new Promise<void>((resolve, reject) => {
       const args = [
         "-y", "-i", inFile,
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-        // Even dimensions are required by yuv420p.
-        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", String(opts.crf ?? 23), "-pix_fmt", "yuv420p",
+        // Even dimensions are required by yuv420p; optionally cap the width (large branding clips).
+        "-vf", opts.maxWidth ? `scale='min(${opts.maxWidth},iw)':-2` : "scale=trunc(iw/2)*2:trunc(ih/2)*2",
         "-movflags", "+faststart", "-an", outFile,
       ];
       const proc = spawn(binary, args, { stdio: ["ignore", "ignore", "pipe"] });

@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
@@ -120,15 +121,11 @@ function MediaPicker({ label, hint, value, kind = "image", accept = "image/*", a
     if (!file) return;
     setBusy(true);
     try {
-      if (file.type.startsWith("video/")) {
-        if (file.size > 8 * 1024 * 1024) throw new Error("Video maksimal 8 MB. Kompres dulu atau pakai gambar.");
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(file);
-        });
-        onPick(dataUrl, "video");
+      if (file.type.startsWith("video/") || /\.(mp4|mov|m4v)$/i.test(file.name)) {
+        if (file.size > 120 * 1024 * 1024) throw new Error("Video maksimal 120 MB.");
+        // Uploaded to the server, which converts MOV/HEVC to a web-safe MP4 — never kept as a giant data: URI in the browser.
+        const { url } = await api.uploadBrandingVideo(file);
+        onPick(url, "video");
       } else {
         onPick(await imageFileToDataUrl(file, { maxDimension, keepAlpha: alpha }), "image");
       }
@@ -262,7 +259,8 @@ export default function AdminPlaceholder() {
                 <Card title="Latar & banner">
                   <div className="space-y-5">
                     <div className="grid gap-5 md:grid-cols-2">
-                      <MediaPicker label="Cover layar awal (gambar atau video)" hint="Menggantikan latar warna. Video maksimal 8 MB, diputar tanpa suara." value={config.idleCoverUrl} kind={config.idleCoverType} accept="image/*,video/*" onPick={(dataUrl, type) => { update({ idleCoverUrl: dataUrl, idleCoverType: type }); }} onClear={() => set("idleCoverUrl", null)} />
+                      <MediaPicker label="Cover layar awal (gambar atau video)" hint="Menggantikan latar warna. Video .mp4 / .mov maks 120 MB — otomatis dikompres & diputar tanpa suara." value={config.idleCoverUrl} kind={config.idleCoverType} accept="image/*,video/mp4,video/quicktime,.mp4,.mov" onPick={(dataUrl, type) => { update({ idleCoverUrl: dataUrl, idleCoverType: type }); }} onClear={() => set("idleCoverUrl", null)} />
+                      <MediaPicker label="Video logo / branding (animasi)" hint="Klip pendek berulang yang tampil menggantikan logo di layar awal. .mp4 / .mov, diputar tanpa suara." value={config.idleLogoVideoUrl} kind="video" accept="video/mp4,video/quicktime,.mp4,.mov" onPick={(url) => set("idleLogoVideoUrl", url)} onClear={() => set("idleLogoVideoUrl", null)} />
                       <MediaPicker label="Banner promo" hint="Gambar kecil di pojok kanan bawah." value={config.idleBannerUrl} accept="image/*" alpha maxDimension={900} onPick={(dataUrl) => set("idleBannerUrl", dataUrl)} onClear={() => set("idleBannerUrl", null)} />
                     </div>
                     <div className="grid gap-2.5 md:grid-cols-2">

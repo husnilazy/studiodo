@@ -91,6 +91,8 @@ export interface BoothConfig {
   resultHeadline: string;
   idleCoverUrl: string | null;
   idleCoverType: "image" | "video";
+  /** Looping muted video shown in place of the logo image on the idle screen (animated logo / branding clip). */
+  idleLogoVideoUrl: string | null;
   idleBannerUrl: string | null;
   idleBannerEnabled: boolean;
   enabledPages: Record<KioskPageKey, boolean>;
@@ -194,6 +196,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   resultHeadline: "Hasil fotomu sudah siap.",
   idleCoverUrl: null,
   idleCoverType: "image",
+  idleLogoVideoUrl: null,
   idleBannerUrl: null,
   idleBannerEnabled: true,
   enabledPages: {

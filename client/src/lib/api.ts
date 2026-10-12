@@ -222,6 +222,17 @@ export const api = {
     }
     return res.json();
   },
+  // Admin: send a branding video (.mp4/.mov) to the server, which converts it; returns its hosted URL.
+  uploadBrandingVideo: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const res = await fetch(`${getApiBaseUrl()}/config/branding-video`, { method: "POST", body: form, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as { error?: string }));
+      throw new Error(body.error || `Upload video gagal (${res.status})`);
+    }
+    return (await res.json()) as { url: string; sizeBytes: number; converted: boolean };
+  },
   uploadMedia: async (sessionId: string, kind: "gif" | "video" | "stopmotion", blob: Blob) => {
     const form = new FormData();
     form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);

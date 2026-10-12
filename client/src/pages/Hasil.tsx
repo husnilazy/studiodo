@@ -673,8 +673,8 @@ export default function Hasil() {
 
           {/* Shown only when auto-print is off; with auto-print the strip already prints itself (a second button just invites mashing). */}
           {!config.autoPrintEnabled && (
-            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-0 !gap-2 !px-[22px] !py-[12px] !text-[17px] self-start whitespace-nowrap">
-              <IconPrinter className="h-[18px] w-[18px]" />
+            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-[76px] !w-full !gap-3 !px-8 !py-5 !text-[26px] whitespace-nowrap">
+              <IconPrinter className="h-8 w-8" />
               {printing ? "Mencetak…" : "Cetak foto"}
             </button>
           )}
