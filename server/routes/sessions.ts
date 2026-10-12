@@ -11,6 +11,7 @@ import {
   getFolderUrl,
   getFilePreviewUrl,
 } from "../lib/gdrive.js";
+import { ensureMp4Upload } from "../lib/ffmpeg.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
@@ -209,14 +210,15 @@ sessionsRouter.post("/:id/photo", requireKioskAuth, upload.single("photo"), asyn
 sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
-  const file = req.file;
-  if (!file) return res.status(400).json({ error: "File media wajib diupload" });
+  if (!req.file) return res.status(400).json({ error: "File media wajib diupload" });
+  // GIFs stay GIFs; any video is converted to MP4 so it plays on every phone (WebM doesn't on iOS).
+  const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
   // "video" packages produce a WebM (MediaRecorder); "gif" packages produce a
   // genuine encoded animated GIF (client-side gifenc) — not the same file
   // dressed up under a different field, so the extension must follow kind.
   // "stopmotion" is also a WebM, but a separate slow slideshow of every photo (see sessions.stopMotionUrl).
-  const fallbackExtension = req.body.kind === "gif" ? ".gif" : ".webm";
+  const fallbackExtension = req.body.kind === "gif" ? ".gif" : /mp4/i.test(file.mimetype) ? ".mp4" : ".webm";
 
   const row = await db.transaction(async (tx) => {
     const [session] = await tx.select().from(sessions).where(and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))).for("update");
@@ -258,10 +260,10 @@ sessionsRouter.post("/:id/slot-media", requireKioskAuth, upload.single("media"),
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   const slotIndex = Number(req.body.slotIndex);
-  const file = req.file;
-  if (!file || !Number.isInteger(slotIndex) || slotIndex < 0) return res.status(400).json({ error: "File dan slotIndex wajib diisi" });
+  if (!req.file || !Number.isInteger(slotIndex) || slotIndex < 0) return res.status(400).json({ error: "File dan slotIndex wajib diisi" });
+  const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
-  const fallbackExtension = req.body.kind === "gif" ? ".gif" : ".webm";
+  const fallbackExtension = req.body.kind === "gif" ? ".gif" : /mp4/i.test(file.mimetype) ? ".mp4" : ".webm";
 
   const row = await db.transaction(async (tx) => {
     const [session] = await tx.select().from(sessions).where(and(eq(sessions.id, id), eq(sessions.tenantId, tenantId))).for("update");

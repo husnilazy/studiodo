@@ -59,7 +59,7 @@ const IconMinus = ({ className }: IconProps) => (
 );
 
 // The URL's extension decides GIF vs video. Local fallbacks are blob: URLs, so SesiFoto tags those with a
-// "#clip.gif" / "#clip.webm" fragment — strip query/fragment before looking at the extension.
+// "#clip.gif" / "#clip.video" fragment — strip query/fragment before looking at the extension.
 const isGifUrl = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif");
 
 function canvasToJpegBlob(canvas: HTMLCanvasElement) {
@@ -241,7 +241,7 @@ export default function Hasil() {
         const blob = await renderStopMotion({ photoUrls, template: frameTemplate, secondsPerPhoto: config.stopMotionSecondsPerPhoto, mirror: outputMirrored, filter, correction: colorCorrection });
         if (!blob) throw new Error("Video stop motion kosong");
         // Show it right away from memory, then swap to the server URL once the upload lands.
-        const localUrl = `${URL.createObjectURL(blob)}#clip.webm`;
+        const localUrl = `${URL.createObjectURL(blob)}#clip.video`;
         setStopMotionUrl(localUrl);
         setStopMotionState("done");
         if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
@@ -554,8 +554,8 @@ export default function Hasil() {
       <header className="mx-auto flex w-full max-w-[1500px] shrink-0 flex-wrap items-center justify-between gap-4 pb-4">
         <Positionable id="heading" type="text" label="Judul">
           <div>
-            <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Hasil fotomu sudah siap."}</h1>
-            <p className="mt-1 text-base text-muted">Terima kasih sudah berfoto! Scan QR untuk membawa hasilnya pulang.</p>
+            <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Cantik! Hasilmu sudah jadi."}</h1>
+            <p className="mt-1 text-base text-muted">Scan QR di samping dan bawa pulang semua momen serumu.</p>
           </div>
         </Positionable>
         <div className="flex items-center gap-4">
@@ -661,8 +661,8 @@ export default function Hasil() {
               </div>
             </div>
             <div className="min-w-0">
-              <h3 className="font-display text-[22px] font-semibold leading-tight">Scan untuk unduh</h3>
-              <p className="mt-1.5 text-[15px] leading-relaxed text-fg/60">Arahkan kamera HP ke kode ini untuk mengunduh foto{hasMedia ? ", GIF, dan video" : ""} kamu.</p>
+              <h3 className="font-display text-[22px] font-semibold leading-tight">Bawa pulang momenmu</h3>
+              <p className="mt-1.5 text-[15px] leading-relaxed text-fg/60">Buka kamera HP, arahkan ke kode ini — foto{hasMedia ? ", GIF, dan video" : ""} kamu langsung bisa diunduh.</p>
               <div className="mt-3">
                 {uploadStatus === "pending" && <span className="inline-flex items-center gap-2 rounded-full bg-fg/[0.06] px-3 py-1 text-xs font-semibold text-fg/60"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan hasil…</span>}
                 {uploadStatus === "ok" && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1 text-xs font-semibold text-emerald-600"><IconCheck className="h-3.5 w-3.5" />Hasil tersimpan</span>}

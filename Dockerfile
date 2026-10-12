@@ -3,6 +3,8 @@
 # server that kiosks and the public gallery page talk to.
 FROM node:20-alpine
 WORKDIR /app
+# ffmpeg converts kiosk WebM clips to MP4 (ffmpeg-static's glibc binary does not run on Alpine).
+RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./

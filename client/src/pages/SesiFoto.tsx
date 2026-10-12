@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { pickVideoMime } from "@/lib/videoMime";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
@@ -640,7 +641,7 @@ export default function SesiFoto() {
       recordingStream = canvas.captureStream(15);
     }
     if (!recordingStream) return;
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
+    const mimeType = pickVideoMime();
     const recorder = new MediaRecorder(recordingStream, { mimeType, videoBitsPerSecond: SLOT_VIDEO_BITRATE });
     const chunks: Blob[] = [];
     recorder.ondataavailable = (event) => {
@@ -800,7 +801,7 @@ export default function SesiFoto() {
               const drawTimer = window.setInterval(drawTick, 66);
 
               const stream = canvas.captureStream(15);
-              const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
+              const mimeType = pickVideoMime();
               const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: SLOT_VIDEO_BITRATE });
               const chunks: Blob[] = [];
               recorder.ondataavailable = (event) => {
@@ -827,9 +828,9 @@ export default function SesiFoto() {
       if (!gifBlob && !videoBlob) return;
       setSavingStage("Menyimpan hasil…");
       // Keep a local copy as the preview source if the upload can't happen or fails, so the result screen is never
-      // blank. The "#clip.gif" / "#clip.webm" fragment tells Hasil.tsx which kind it is (blob: URLs have no extension).
+      // blank. The "#clip.gif" / "#clip.video" fragment tells Hasil.tsx which kind it is (blob: URLs have no extension).
       const localGifUrl = gifBlob ? `${URL.createObjectURL(gifBlob)}#clip.gif` : null;
-      const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.webm` : null;
+      const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.video` : null;
       const online = isBrowserOnline() && !isOfflineSessionId(sessionId);
       if (!online) {
         if (localGifUrl) setMediaUrl(localGifUrl);

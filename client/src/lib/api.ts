@@ -1,4 +1,5 @@
 import { clearKioskPairing, getApiBaseUrl, getDeviceId, getKioskKey } from "./apiConfig";
+import { videoExtension } from "@/lib/videoMime";
 import type { LayoutElement, ScreenOrientation } from "./screenBuilder/types";
 
 const ADMIN_TOKEN_KEY = "studiodo-admin-token";
@@ -223,7 +224,7 @@ export const api = {
   },
   uploadMedia: async (sessionId: string, kind: "gif" | "video" | "stopmotion", blob: Blob) => {
     const form = new FormData();
-    form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : "webm"}`);
+    form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);
     form.append("kind", kind);
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
@@ -234,7 +235,7 @@ export const api = {
   // opposed to uploadMedia above which is the combined all-slots-at-once clip.
   uploadSlotMedia: async (sessionId: string, slotIndex: number, kind: "gif" | "video", blob: Blob) => {
     const form = new FormData();
-    form.append("media", blob, `slot-${slotIndex}.${kind === "gif" ? "gif" : "webm"}`);
+    form.append("media", blob, `slot-${slotIndex}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);
     form.append("slotIndex", String(slotIndex));
     form.append("kind", kind);
     const kioskKey = getKioskKey();
@@ -262,7 +263,7 @@ export const api = {
     ),
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
   startQris: (sessionId: string) =>
-    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
+    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
   startAdditionalPrint: (sessionId: string, quantity: number) => request<{ demo: boolean; qrString: string; amount: number; expiresInSeconds?: number }>("/payment/additional-print", { method: "POST", body: JSON.stringify({ sessionId, quantity }) }),
   redeemAdditionalPrintVoucher: (sessionId: string, code: string, quantity: number) =>
@@ -271,8 +272,8 @@ export const api = {
   updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
     request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
-  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean }>("/config/payment"),
-  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string }) =>
+  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>("/config/payment"),
+  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production" }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
   updateCashPaymentConfig: (enabled: boolean) => request<{ enabled: boolean }>("/config/cash-payment", { method: "PATCH", body: JSON.stringify({ enabled }) }),
   createCashVoucher: (body: { amount: number; customerName?: string }) => request<any>("/vouchers/cash", { method: "POST", body: JSON.stringify(body) }),

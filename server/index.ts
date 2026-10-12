@@ -57,7 +57,8 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(cors());
-app.use(express.json({ limit: "30mb" }));
+// rawBody is kept for gateways that sign the exact bytes they send (DOKU notifications).
+app.use(express.json({ limit: "30mb", verify: (req, _res, buf) => { (req as { rawBody?: string }).rawBody = buf.toString("utf8"); } }));
 app.use("/storage", express.static(path.join(process.cwd(), "storage")));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "studiodo-server" }));

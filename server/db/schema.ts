@@ -424,6 +424,11 @@ export const tenantSettings = pgTable("tenant_settings", {
   cashPaymentEnabled: boolean("cash_payment_enabled").notNull().default(false),
   xenditSecretKey: text("xendit_secret_key"),
   xenditWebhookToken: text("xendit_webhook_token"),
+  // Which gateway collects kiosk payments for this tenant: 'xendit' (default) or 'doku' (hosted checkout, QR → pay page).
+  paymentProvider: text("payment_provider").notNull().default("xendit"),
+  dokuClientId: text("doku_client_id"),
+  dokuSecretKeyEnc: text("doku_secret_key_enc"), // encrypted with lib/secretBox
+  dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
   storageDriver: text("storage_driver"), // 'local' | 'r2' | 'gdrive'; falls back to env/local when unset
   r2AccountId: text("r2_account_id"),
   r2Endpoint: text("r2_endpoint"),

@@ -230,7 +230,7 @@ function formatDateInput(date: Date) {
 // client's whole set stays together), a date range, and a WhatsApp/email
 // search turn it back into something you can actually find a specific
 // customer's photos in.
-const MEDIA_LIBRARY_PAGE_SIZE = 8;
+const MEDIA_LIBRARY_PAGE_SIZE = 24;
 
 function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadingKeys }: { sessions: any[]; metrics: any; downloadAsset: (item: { url: string; type: string; session: any }) => void; printAsset: (item: { url: string; type: string; session: any }) => void; downloadingKeys: Set<string> }) {
   const brandName = useBoothConfig((state) => state.config.brandName) || "kami";
@@ -244,6 +244,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(MEDIA_LIBRARY_PAGE_SIZE);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const copyShareLink = async (sessionId: string, url: string) => {
     try {
       await navigator.clipboard.writeText(url);
@@ -284,6 +285,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   // previous wide search still in effect.
   useEffect(() => { setVisibleCount(MEDIA_LIBRARY_PAGE_SIZE); }, [dateFrom, dateTo, query]);
   const visibleSessions = filtered.slice(0, visibleCount);
+  const openSession = openSessionId ? sessions.find((item) => item.id === openSessionId) ?? null : null;
 
   const setQuickRange = (days: number) => {
     const to = new Date();
@@ -337,21 +339,68 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
         <p className="mt-4 text-xs text-fg/40">{filtered.length} sesi · {assetCount} aset{hasFilters ? " (terfilter)" : ""}</p>
       </section>
 
-      <div className="space-y-4">
+      {/* One tile per session showing only its finished frame (strip) — the full set of photos/videos/GIFs
+          loads only when a tile is opened, so the page never mounts hundreds of heavy media elements at once. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {visibleSessions.map((session) => {
           const assets = sessionAssets(session);
-          const waDigits = session.customerWhatsapp ? String(session.customerWhatsapp).replace(/[^0-9]/g, "") : null;
-          const waUrl = waDigits
-            ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Halo! Ini foto/video sesi kamu dari ${brandName}.${session.shareUrl ? ` Bisa dilihat & didownload di sini: ${session.shareUrl}` : ""}`)}`
-            : null;
+          const cover = session.stripUrl ? galleryThumb(session.stripUrl) : (session.photoUrls?.[0] ? galleryThumb(session.photoUrls[0]) : null);
+          const photoCount = assets.filter((a) => a.type === "Foto").length;
+          const motionCount = assets.filter((a) => isMotionAsset(a.type)).length;
           return (
-            <article key={session.id} className={panel} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 260px" }}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => setOpenSessionId(session.id)}
+              className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] text-left transition hover:border-accent/60 hover:shadow-lg"
+              style={{ contentVisibility: "auto", containIntrinsicSize: "auto 300px" }}
+            >
+              <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-fg/[0.06]">
+                {cover
+                  ? <img src={cover} alt="Hasil sesi" loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  : <span className="text-xs text-fg/30">Tanpa preview</span>}
+                <div className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6 text-[10px] font-semibold text-white">
+                  {photoCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 backdrop-blur">{photoCount} foto</span>}
+                  {motionCount > 0 && <span className="rounded-full bg-accent/80 px-2 py-0.5">{motionCount} video/GIF</span>}
+                </div>
+              </div>
+              <div className="p-2.5">
+                <p className="truncate text-xs font-semibold">{new Date(session.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                <p className="mt-0.5 truncate text-[11px] text-fg/45">{session.customerWhatsapp || session.customerEmail || `Sesi ${String(session.id).slice(0, 8)}`}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length === 0 && (
+        <div className={`${panel} text-center text-sm text-fg/40`}>
+          {sessionsWithMedia.length === 0 ? "Belum ada asset tersimpan." : "Tidak ada sesi yang cocok dengan filter ini."}
+        </div>
+      )}
+      {visibleCount < filtered.length && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + MEDIA_LIBRARY_PAGE_SIZE)}
+          className="w-full rounded-2xl border border-fg/15 py-3 text-sm text-fg/60 hover:border-accent hover:text-fg"
+        >
+          Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
+        </button>
+      )}
+
+      {openSession && (() => {
+        const session = openSession;
+        const assets = sessionAssets(session);
+        const waDigits = session.customerWhatsapp ? String(session.customerWhatsapp).replace(/[^0-9]/g, "") : null;
+        const waUrl = waDigits
+          ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Halo! Ini foto/video sesi kamu dari ${brandName}.${session.shareUrl ? ` Bisa dilihat & didownload di sini: ${session.shareUrl}` : ""}`)}`
+          : null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenSessionId(null); }}>
+            <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-fg/10 bg-canvas shadow-2xl">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-fg/10 p-5">
                 <div>
                   <p className="text-sm font-semibold">{new Date(session.createdAt).toLocaleString("id-ID")}</p>
-                  <p className="mt-1 text-xs text-fg/40">
-                    Sesi {String(session.id).slice(0, 8)} · {session.paymentMethod ?? "belum dipilih"} · {money(Number(session.totalAmount ?? 0))}
-                  </p>
+                  <p className="mt-1 text-xs text-fg/40">Sesi {String(session.id).slice(0, 8)} · {session.paymentMethod ?? "belum dipilih"} · {money(Number(session.totalAmount ?? 0))}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg/55">
                     {session.customerWhatsapp && <span>📱 {session.customerWhatsapp}</span>}
                     {session.customerEmail && <span>✉️ {session.customerEmail}</span>}
@@ -359,81 +408,46 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {waUrl && (
-                    <a href={waUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-400/20">
-                      Hubungi via WhatsApp
-                    </a>
-                  )}
+                  {waUrl && <a href={waUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/20">Hubungi via WhatsApp</a>}
                   {session.shareUrl && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => copyShareLink(session.id, session.shareUrl)}
-                        className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg"
-                      >
-                        {copiedId === session.id ? "Tersalin!" : "Salin link"}
-                      </button>
-                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">
-                        Buka galeri
-                      </a>
+                      <button type="button" onClick={() => copyShareLink(session.id, session.shareUrl)} className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">{copiedId === session.id ? "Tersalin!" : "Salin link"}</button>
+                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">Buka galeri</a>
                     </>
                   )}
+                  <button type="button" onClick={() => setOpenSessionId(null)} aria-label="Tutup" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/70 hover:border-fg/40 hover:text-fg">✕ Tutup</button>
                 </div>
               </div>
-
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-                {assets.map((asset, assetIndex) => (
-                  <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
-                    <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
-                      <div className="flex h-32 items-center justify-center bg-fg/5">
-                        {asset.type === "Video" || asset.type === "Stop Motion"
-                          ? <video src={asset.url} muted preload="none" className="h-full w-full object-cover" />
-                          : <img src={asset.type === "Foto" ? galleryThumb(asset.url) : asset.url} alt={asset.type} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />}
-                      </div>
-                    </a>
-                    <div className="p-2.5">
-                      <p className="text-xs font-semibold">{asset.type}{asset.type === "Foto" ? ` #${asset.index + 1}` : ""}</p>
-                      <div className="mt-2 flex gap-1.5">
-                        {(() => {
-                          const key = `${session.id}-${asset.type}-${asset.index ?? 0}`;
-                          const isDownloading = downloadingKeys.has(key);
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => downloadAsset({ ...asset, session })}
-                              disabled={isDownloading}
-                              className="flex-1 rounded-lg border border-fg/15 px-2 py-1.5 text-[11px] text-fg/70 hover:border-accent hover:text-fg disabled:cursor-wait disabled:opacity-50"
-                            >
-                              {isDownloading ? "Mengunduh…" : "Download"}
-                            </button>
-                          );
-                        })()}
-                        {!isMotionAsset(asset.type) && (
-                          <button type="button" onClick={() => printAsset({ ...asset, session })} disabled={!window.studiodo?.printImage} className="flex-1 rounded-lg bg-accent/80 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">Print</button>
-                        )}
+              <div className="grid grid-cols-2 gap-3 overflow-y-auto p-5 sm:grid-cols-3 md:grid-cols-4">
+                {assets.map((asset, assetIndex) => {
+                  const key = `${session.id}-${asset.type}-${asset.index ?? 0}`;
+                  const isDownloading = downloadingKeys.has(key);
+                  return (
+                    <div key={`${asset.url}-${assetIndex}`} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
+                      <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
+                        <div className="flex aspect-square items-center justify-center bg-fg/5">
+                          {asset.type === "Video" || asset.type === "Stop Motion"
+                            ? <video src={asset.url} muted preload="metadata" className="h-full w-full object-cover" />
+                            : <img src={asset.type === "Foto" ? galleryThumb(asset.url) : asset.url} alt={asset.type} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />}
+                        </div>
+                      </a>
+                      <div className="p-2.5">
+                        <p className="text-xs font-semibold">{asset.type}{asset.type === "Foto" ? ` #${asset.index + 1}` : ""}</p>
+                        <div className="mt-2 flex gap-1.5">
+                          <button type="button" onClick={() => downloadAsset({ ...asset, session })} disabled={isDownloading} className="flex-1 rounded-lg border border-fg/15 px-2 py-1.5 text-[11px] text-fg/70 hover:border-accent hover:text-fg disabled:cursor-wait disabled:opacity-50">{isDownloading ? "Mengunduh…" : "Download"}</button>
+                          {!isMotionAsset(asset.type) && (
+                            <button type="button" onClick={() => printAsset({ ...asset, session })} disabled={!window.studiodo?.printImage} className="flex-1 rounded-lg bg-accent/80 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">Print</button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </article>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className={`${panel} text-center text-sm text-fg/40`}>
-            {sessionsWithMedia.length === 0 ? "Belum ada asset tersimpan." : "Tidak ada sesi yang cocok dengan filter ini."}
+            </div>
           </div>
-        )}
-        {visibleCount < filtered.length && (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((count) => count + MEDIA_LIBRARY_PAGE_SIZE)}
-            className="w-full rounded-2xl border border-fg/15 py-3 text-sm text-fg/60 hover:border-accent hover:text-fg"
-          >
-            Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
-          </button>
-        )}
-      </div>
+        );
+      })()}
     </div>
   );
 }
@@ -643,7 +657,7 @@ export default function AdminDashboard() {
     if (downloadingKeys.has(key)) return;
     setDownloadingKeys((prev) => new Set(prev).add(key));
     const suffix = item.type === "Foto" ? `-${(item.index ?? 0) + 1}` : "";
-    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${isMotionAsset(item.type) ? "webm" : "jpg"}`;
+    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${isMotionAsset(item.type) ? (item.type === "GIF" ? "gif" : "mp4") : "jpg"}`;
     try {
       // In the Electron app, save straight to disk from the main process —
       // much faster and skips a save dialog per file (see electron/main.cjs

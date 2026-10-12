@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { encryptSecret } from "../lib/secretBox.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys, sessions, tenantSettings } from "../db/schema.js";
@@ -233,6 +234,10 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
       hasSecretKey: tenantSettings.xenditSecretKey,
       hasWebhookToken: tenantSettings.xenditWebhookToken,
       cashPaymentEnabled: tenantSettings.cashPaymentEnabled,
+      paymentProvider: tenantSettings.paymentProvider,
+      dokuClientId: tenantSettings.dokuClientId,
+      dokuSecretKeyEnc: tenantSettings.dokuSecretKeyEnc,
+      dokuEnvironment: tenantSettings.dokuEnvironment,
     })
     .from(tenantSettings)
     .where(eq(tenantSettings.tenantId, req.tenantId!));
@@ -243,23 +248,35 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
     hasWebhookToken: Boolean(config?.hasWebhookToken),
     demoMode: process.env.PAYMENT_DEMO_MODE === "true" && !hasSecretKey,
     cashPaymentEnabled: Boolean(config?.cashPaymentEnabled),
+    paymentProvider: config?.paymentProvider === "doku" ? "doku" : "xendit",
+    dokuClientId: config?.dokuClientId ?? "",
+    hasDokuSecret: Boolean(config?.dokuSecretKeyEnc),
+    dokuEnvironment: config?.dokuEnvironment === "production" ? "production" : "sandbox",
   });
 });
 
 configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
   const tenantId = req.tenantId!;
-  const { secretKey, webhookToken } = req.body as {
+  const { secretKey, webhookToken, paymentProvider, dokuClientId, dokuSecretKey, dokuEnvironment } = req.body as {
     secretKey?: string;
     webhookToken?: string;
+    paymentProvider?: string;
+    dokuClientId?: string;
+    dokuSecretKey?: string;
+    dokuEnvironment?: string;
   };
   const values = {
     ...(secretKey?.trim() ? { xenditSecretKey: secretKey.trim() } : {}),
     ...(webhookToken?.trim() ? { xenditWebhookToken: webhookToken.trim() } : {}),
+    ...(paymentProvider === "xendit" || paymentProvider === "doku" ? { paymentProvider } : {}),
+    ...(dokuClientId?.trim() ? { dokuClientId: dokuClientId.trim().slice(0, 100) } : {}),
+    ...(dokuSecretKey?.trim() ? { dokuSecretKeyEnc: encryptSecret(dokuSecretKey.trim()) } : {}),
+    ...(dokuEnvironment === "sandbox" || dokuEnvironment === "production" ? { dokuEnvironment } : {}),
     updatedAt: new Date(),
   };
 
   if (Object.keys(values).length === 1) {
-    return res.status(400).json({ error: "Isi minimal satu kredensial Xendit." });
+    return res.status(400).json({ error: "Tidak ada perubahan pembayaran yang dikirim." });
   }
 
   await ensureTenantSettingsRow(tenantId);

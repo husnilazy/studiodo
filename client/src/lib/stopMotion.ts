@@ -1,4 +1,5 @@
 import { drawImageCover, loadImage } from "./output";
+import { pickVideoMime } from "@/lib/videoMime";
 import { composeFilterCss, type CameraFilter, type ColorCorrection } from "./sessionStore";
 import type { LocalTemplate } from "./templateStore";
 
@@ -85,7 +86,7 @@ export async function renderStopMotion(options: StopMotionOptions): Promise<Blob
 
   paint(0);
   const stream = canvas.captureStream(30);
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
+  const mimeType = pickVideoMime();
   const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: VIDEO_BITRATE });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => {
