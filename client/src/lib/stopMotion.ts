@@ -13,7 +13,7 @@ export const STOP_MOTION_CATEGORY = "__stopmotion";
 const MAX_WIDTH = 720;
 const INTRO_MS = 600; // empty frame first, so the first photo "arrives" instead of already being there
 const OUTRO_EXTRA_MS = 900; // the last photo stays a little longer before the loop restarts
-const POP_MS = 220; // each new photo scales in + a soft flash, like a camera snapshot
+const POP_MS = 220; // each new photo scales in slightly (no flash)
 const VIDEO_BITRATE = 5_000_000;
 
 export interface StopMotionOptions {
@@ -75,10 +75,6 @@ export async function renderStopMotion(options: StopMotionOptions): Promise<Blob
       ctx.scale(zoom, zoom);
       drawImageCover(ctx, shown, -box.w / 2, -box.h / 2, box.w, box.h, options.mirror);
       ctx.filter = "none";
-      if (pop > 0) {
-        ctx.fillStyle = `rgba(255,255,255,${0.55 * pop})`;
-        ctx.fillRect(-box.w / 2, -box.h / 2, box.w, box.h);
-      }
       ctx.restore();
     }
     if (frameImage) ctx.drawImage(frameImage, 0, 0, width, height);
