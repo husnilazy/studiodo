@@ -197,7 +197,7 @@ export default function StopMotionFramePanel() {
         {frames.map((frame) => {
           const active = config.stopMotionTemplateId === frame.id;
           return (
-            <article key={frame.id} className={`overflow-hidden rounded-2xl border transition ${active ? "border-accent ring-2 ring-accent/30" : "border-fg/10"}`}>
+            <article key={frame.id} className={`overflow-hidden rounded-2xl border transition ${active ? "border-accent" : "border-fg/10"}`}>
               <button type="button" onClick={() => update({ stopMotionTemplateId: frame.id })} className="block w-full bg-[repeating-conic-gradient(var(--hairline)_0_25%,transparent_0_50%)] [background-size:16px_16px]">
                 <img src={frame.frameDataUrl} alt={frame.name} className="h-44 w-full object-contain" />
               </button>

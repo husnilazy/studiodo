@@ -413,8 +413,8 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
         <h1 className="mt-1 font-display text-2xl font-bold">Admin Pusat</h1>
         <p className="mt-2 text-sm text-fg/50">Panel superadmin — kelola semua tenant, paket harga, dan pembayaran di platform ini.</p>
         <div className="mt-6 space-y-3">
-          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
         </div>
         {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
         <button type="submit" disabled={submitting || !email || !password} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">

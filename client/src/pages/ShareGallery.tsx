@@ -160,7 +160,7 @@ export default function ShareGallery({ id }: { id: string }) {
     }
   };
 
-  const fieldClass = "w-full rounded-xl border border-fg/[0.12] bg-fg/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60 focus:ring-1 focus:ring-accent/30";
+  const fieldClass = "w-full rounded-xl border border-fg/[0.12] bg-fg/[0.05] px-4 py-3 text-sm outline-none transition focus:border-accent/60";
   const card = "rounded-3xl border border-fg/10 bg-fg/[0.03] p-4 sm:p-6";
   const ghostBtn = "mt-3 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-fg/15 text-sm font-semibold hover:border-accent hover:text-accent";
 

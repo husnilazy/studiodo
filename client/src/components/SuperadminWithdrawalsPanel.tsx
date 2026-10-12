@@ -3,7 +3,7 @@ import { superadminApi, type TenantQrisBalance, type WithdrawalAdminRow } from "
 import Spinner from "@/components/Spinner";
 
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
-const inputClass = "w-full rounded-xl border border-fg/15 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20";
+const inputClass = "w-full rounded-xl border border-fg/15 bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent";
 
 const STATUS_LABEL: Record<WithdrawalAdminRow["status"], { label: string; className: string }> = {
   pending: { label: "Baru", className: "bg-amber-300/20 text-amber-600" },

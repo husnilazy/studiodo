@@ -172,12 +172,17 @@ button:not(:disabled):active {
   transform: scale(0.97);
 }
 
-button:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Fields already have a border: focus just recolors it. A second ring/outline on top read as a double stroke. */
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: none;
+  border-color: var(--accent);
 }
 
 button:disabled {
@@ -332,7 +337,6 @@ button:disabled {
 }
 .k-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .kinetic-card-hover:hover {

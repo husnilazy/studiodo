@@ -90,7 +90,7 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
           type="button"
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
-          className={`flex flex-col items-center gap-3 rounded-2xl border p-3.5 transition ${value === option.value ? "border-accent bg-accent/[0.08] ring-2 ring-accent/20" : "border-fg/10 hover:border-fg/30"}`}
+          className={`flex flex-col items-center gap-3 rounded-2xl border p-3.5 transition ${value === option.value ? "border-accent bg-accent/[0.08]" : "border-fg/10 hover:border-fg/30"}`}
         >
           {option.preview && <span className="flex h-12 items-center justify-center">{option.preview}</span>}
           <span className="text-sm font-semibold">{option.label}</span>
@@ -293,7 +293,7 @@ export default function AdminPlaceholder() {
                 <Card title="Warna aksen" description="Warna tombol utama, penanda langkah, dan sorotan di seluruh kiosk.">
                   <div className="flex flex-wrap items-center gap-2.5">
                     {ACCENT_SWATCHES.map((color) => (
-                      <button key={color} type="button" onClick={() => set("accentColor", color)} aria-label={`Aksen ${color}`} className={`h-10 w-10 rounded-full border-2 transition hover:scale-110 ${config.accentColor.toUpperCase() === color ? "border-fg ring-2 ring-offset-2 ring-offset-surface" : "border-transparent"}`} style={{ background: color, ["--tw-ring-color" as string]: color }} />
+                      <button key={color} type="button" onClick={() => set("accentColor", color)} aria-label={`Aksen ${color}`} className={`h-10 w-10 rounded-full border-2 transition hover:scale-110 ${config.accentColor.toUpperCase() === color ? "border-fg scale-110" : "border-transparent"}`} style={{ background: color, ["--tw-ring-color" as string]: color }} />
                     ))}
                   </div>
                   <div className="mt-4 max-w-xs"><ColorField label="Warna kustom" value={config.accentColor} onChange={(value) => set("accentColor", value)} /></div>
@@ -328,7 +328,7 @@ export default function AdminPlaceholder() {
                 <Card title="Huruf" description="Pasangan font untuk judul dan teks biasa.">
                   <div className="grid gap-2.5 sm:grid-cols-2">
                     {Object.entries(FONT_PAIRINGS).map(([key, definition]) => (
-                      <button key={key} type="button" onClick={() => set("fontPairing", key as BoothConfig["fontPairing"])} aria-pressed={config.fontPairing === key} className={`rounded-2xl border p-4 text-left transition ${config.fontPairing === key ? "border-accent bg-accent/[0.08] ring-2 ring-accent/20" : "border-fg/10 hover:border-fg/30"}`}>
+                      <button key={key} type="button" onClick={() => set("fontPairing", key as BoothConfig["fontPairing"])} aria-pressed={config.fontPairing === key} className={`rounded-2xl border p-4 text-left transition ${config.fontPairing === key ? "border-accent bg-accent/[0.08]" : "border-fg/10 hover:border-fg/30"}`}>
                         <span className="block text-2xl font-semibold leading-tight" style={{ fontFamily: `${definition.display}, sans-serif` }}>Abadikan momen</span>
                         <span className="mt-1 block text-sm text-fg/60" style={{ fontFamily: `${definition.body}, sans-serif` }}>Bagikan senyum bersama kami.</span>
                         <span className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-fg/40">{definition.label}</span>
