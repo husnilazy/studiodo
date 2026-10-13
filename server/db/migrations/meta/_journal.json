@@ -218,6 +218,48 @@
       "when": 1791885317289,
       "tag": "0030_crm_and_session_booth",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791898078335,
+      "tag": "0031_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791901515522,
+      "tag": "0032_notification_dedupe",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791904753992,
+      "tag": "0033_creator_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791905392634,
+      "tag": "0034_marketplace_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791905798248,
+      "tag": "0035_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791906210320,
+      "tag": "0036_email_prefs",
+      "breakpoints": true
     }
   ]
 }

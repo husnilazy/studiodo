@@ -8,6 +8,10 @@ import { signAdminToken } from "../lib/jwt.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { getTenantLicenseSummary } from "../lib/license.js";
 import { portalBaseUrl } from "../lib/urls.js";
+import { createLoginGuard, minutesLabel } from "../lib/loginGuard.js";
+import { clientIp } from "../lib/clientIp.js";
+import { logEvent } from "../lib/platformEvents.js";
+import { onTenantLoginLockout } from "../lib/securityAlerts.js";
 
 export const authRouter = Router();
 
@@ -16,28 +20,10 @@ export const authRouter = Router();
 // which emails have an admin account.
 const DUMMY_PASSWORD_HASH = hashPassword(crypto.randomUUID());
 
-// Basic in-memory brute-force guard, keyed by normalized email. Good enough
-// for Phase 1 (single process) — a real multi-instance deployment would need
-// this in a shared store (e.g. Redis) instead, same caveat as the JWT design.
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
-const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
-
-function isLockedOut(email: string): number {
-  const entry = loginAttempts.get(email);
-  if (!entry || entry.lockedUntil <= Date.now()) return 0;
-  return entry.lockedUntil - Date.now();
-}
-
-function recordLoginFailure(email: string) {
-  const entry = loginAttempts.get(email) ?? { count: 0, lockedUntil: 0 };
-  entry.count += 1;
-  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
-    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
-    entry.count = 0;
-  }
-  loginAttempts.set(email, entry);
-}
+// Brute-force guard: escalating lockouts per account (5 wrong passwords → 5 min, then 30 min, then 2 h) plus a looser
+// per-IP guard so one machine can't cycle through many accounts. See lib/loginGuard.ts.
+const accountGuard = createLoginGuard({ maxFailures: 5 });
+const ipGuard = createLoginGuard({ maxFailures: 20 });
 
 // POST /api/auth/login — { email, password } → tenant admin login
 authRouter.post("/login", async (req, res) => {
@@ -45,18 +31,22 @@ authRouter.post("/login", async (req, res) => {
   const password = String(req.body?.password ?? "");
   if (!email || !password) return res.status(400).json({ error: "Email dan password wajib diisi" });
 
-  const lockedForMs = isLockedOut(email);
+  const ip = clientIp(req);
+  const lockedForMs = Math.max(accountGuard.lockedFor(email), ipGuard.lockedFor(ip));
   if (lockedForMs > 0) {
-    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Coba lagi dalam ${Math.ceil(lockedForMs / 60000)} menit.` });
+    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Akun dikunci sementara, coba lagi dalam ${minutesLabel(lockedForMs)}.`, retryAfterSeconds: Math.ceil(lockedForMs / 1000) });
   }
 
   const [admin] = await db.select().from(admins).where(eq(admins.email, email));
   const valid = verifyPassword(password, admin?.passwordHash ?? DUMMY_PASSWORD_HASH);
   if (!admin || !valid) {
-    recordLoginFailure(email);
+    const lock = accountGuard.fail(email);
+    const ipLock = ipGuard.fail(ip);
+    if (lock) void onTenantLoginLockout(email, ip, lock);
+    if (ipLock) logEvent({ level: "warning", category: "auth", action: "login.lockout.ip", message: `Satu alamat IP (${ip}) dikunci ${Math.round(ipLock.lockMs / 60000)} menit setelah banyak percobaan masuk gagal`, actorType: "system", metadata: { ip } });
     return res.status(401).json({ error: "Email atau password salah" });
   }
-  loginAttempts.delete(email);
+  accountGuard.succeed(email);
 
   const token = signAdminToken({ adminId: admin.id, tenantId: admin.tenantId });
   res.json({ token });

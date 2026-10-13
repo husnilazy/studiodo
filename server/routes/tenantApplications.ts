@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
-import { tenantApplications } from "../db/schema.js";
+import { platformSettings, tenantApplications } from "../db/schema.js";
+import { applicationReceivedMail, sendMail } from "../lib/mailer.js";
+import { verifyLink } from "../lib/emails.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 
@@ -59,6 +61,19 @@ tenantApplicationsRouter.post("/", async (req, res) => {
     message: `Aplikasi tenant baru masuk: "${businessName}" (${ownerEmail})`,
     actorType: "system",
   });
+
+  // Confirmation email straight away (best-effort: a mail problem never fails the sign-up). Without RESEND_API_KEY
+  // nothing is sent and the activity log says so, so the Superadmin knows to follow up by WhatsApp instead.
+  void (async () => {
+    const [settings] = await db.select({ wa: platformSettings.renewalWhatsapp }).from(platformSettings).limit(1).catch(() => []);
+    const result = await sendMail({ to: ownerEmail, ...applicationReceivedMail({ ownerName, businessName, supportWhatsapp: settings?.wa?.replace(/\D/g, "") || null, verifyUrl: verifyLink("tenant", row.id, ownerEmail) }) });
+    logEvent({
+      tenantId: null, level: result.sent ? "info" : "warning", category: "system",
+      action: result.sent ? "email.application_confirmation.sent" : "email.application_confirmation.skipped",
+      message: result.sent ? `Email konfirmasi pengajuan terkirim ke ${ownerEmail}` : `Email konfirmasi ke ${ownerEmail} TIDAK terkirim (${result.reason}${result.detail ? `: ${result.detail}` : ""}) — hubungi lewat WhatsApp`,
+      actorType: "system",
+    });
+  })();
 
   res.status(201).json({ ok: true, id: row.id });
 });

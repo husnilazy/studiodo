@@ -1,3 +1,4 @@
+import { deliverToTenant, receiptMail } from "./emails.js";
 import crypto from "node:crypto";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -23,6 +24,19 @@ const PROVIDER_LABEL: Record<string, string> = { midtrans: "Midtrans", xendit: "
  *  - failed/expired → only moves an order that is still pending
  * Returns what happened, for the webhook's log line.
  */
+/** Payment receipt to the tenant's admins. Best-effort and after the money path has committed, so it can never fail a payment. */
+async function sendReceipt(order: Order) {
+  try {
+    const [tenant] = await db.select({ ownerName: tenants.ownerName }).from(tenants).where(eq(tenants.id, order.tenantId));
+    await deliverToTenant(order.tenantId, receiptMail({
+      ownerName: tenant?.ownerName ?? null, orderId: order.orderId, planName: order.planName, boothCount: order.boothCount ?? 1,
+      periodDays: order.periodDays, amount: Number(order.amount), discountPercent: order.discountPercent ?? 0, paidAt: new Date(),
+    }), "kuitansi pembayaran", { key: "receipts", label: "Kuitansi pembayaran" });
+  } catch (error) {
+    console.error("[STUDIODO] kuitansi gagal dikirim:", error instanceof Error ? error.message : error);
+  }
+}
+
 export async function settleOrder(order: Order, outcome: OrderOutcome, paymentType: string | null): Promise<"paid" | "duplicate" | "closed" | "ignored"> {
   if (outcome === "paid") {
     const summary = await db.transaction(async (tx) => {
@@ -93,6 +107,7 @@ export async function settleOrder(order: Order, outcome: OrderOutcome, paymentTy
         actorType: "system", metadata: { orderId: order.orderId },
       });
     }
+    void sendReceipt(order);
     return "paid";
   }
 

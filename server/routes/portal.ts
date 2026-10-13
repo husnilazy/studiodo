@@ -14,6 +14,8 @@ import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type Xend
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
 import { reconcileOrder, settleOrder } from "../lib/billing.js";
 import { portalBaseUrl } from "../lib/urls.js";
+import { deliver, passwordChangedMail } from "../lib/emails.js";
+import { TENANT_CATEGORIES, cleanPrefsPatch, getPrefs, setPrefs } from "../lib/emailPrefs.js";
 
 // --- Tenant portal API (web dashboard for tenant admins) — tenant-admin JWT, same as /api/auth ---
 
@@ -172,8 +174,19 @@ portalRouter.post("/password", async (req, res) => {
 
   passwordAttempts.delete(adminId);
   await db.update(admins).set({ passwordHash: hashPassword(newPassword) }).where(eq(admins.id, adminId));
+  void deliver(admin.email, passwordChangedMail({ name: null, when: new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" }) }), { tenantId: req.tenantId!, what: "kata sandi diubah" });
   logEvent({ tenantId: req.tenantId!, category: "auth", action: "password.changed", message: `Password diganti oleh ${admin.email} lewat portal web`, actorType: "tenant_admin", actorLabel: admin.email });
   res.json({ ok: true });
+});
+
+// GET/PATCH /api/portal/email-preferences — which optional emails this tenant receives (security mail can't be turned off).
+portalRouter.get("/email-preferences", async (req, res) => {
+  res.json({ categories: TENANT_CATEGORIES, prefs: await getPrefs("tenant", req.tenantId!) });
+});
+portalRouter.patch("/email-preferences", async (req, res) => {
+  const patch = cleanPrefsPatch("tenant", req.body);
+  if (!patch) return res.status(400).json({ error: "Tidak ada perubahan yang valid" });
+  res.json({ categories: TENANT_CATEGORIES, prefs: await setPrefs("tenant", req.tenantId!, patch) });
 });
 
 // GET /api/portal/billing/orders — this tenant's checkout attempts, newest first.

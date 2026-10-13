@@ -21,6 +21,8 @@ import { publicPlansRouter } from "./routes/publicPlans.js";
 import { publicContentRouter } from "./routes/siteContent.js";
 import { portalRouter, billingWebhookRouter } from "./routes/portal.js";
 import { crmRouter } from "./routes/crm.js";
+import { accountEmailRouter } from "./routes/accountEmail.js";
+import { notificationsTenantRouter } from "./routes/notifications.js";
 import { liveRouter } from "./routes/live.js";
 import { publicBlogRouter } from "./routes/blog.js";
 import { publicMarketplaceRouter, marketplaceTenantRouter } from "./routes/marketplace.js";
@@ -29,6 +31,7 @@ import { publicDirectoryRouter, directoryTenantRouter } from "./routes/directory
 import { publicAssetsRouter } from "./routes/siteAssets.js";
 import { creatorPortalRouter } from "./routes/creatorPortal.js";
 import { client } from "./db/client.js";
+import { runNotificationRules } from "./lib/notificationRules.js";
 import { logEvent } from "./lib/platformEvents.js";
 
 // Without these, an error thrown outside an Express route handler (e.g. the
@@ -90,12 +93,14 @@ app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);
 app.use("/api/public", publicPlansRouter);
 app.use("/api/public", publicContentRouter);
+app.use("/api/public", accountEmailRouter);
 app.use("/api/public", publicBlogRouter);
 app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
 app.use("/api/public", publicAssetsRouter);
 app.use("/api/creator", creatorPortalRouter);
+app.use("/api/portal/notifications", notificationsTenantRouter);
 app.use("/api/portal/directory", directoryTenantRouter);
 app.use("/api/portal/marketplace", marketplaceTenantRouter);
 app.use("/api/crm", crmRouter);
@@ -179,8 +184,16 @@ function startKeepDbWarm() {
   }, intervalMs);
 }
 
+// Automatic notifications (booth licence ending / locked / offline). Idempotent, so a restart or overlap is harmless.
+function startNotificationRules() {
+  const run = () => runNotificationRules().catch((error: any) => console.error("[STUDIODO] aturan notifikasi gagal:", error?.message ?? error));
+  setTimeout(run, 60_000);
+  setInterval(run, 30 * 60 * 1000);
+}
+
 app.listen(PORT, () => {
   console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
   checkDatabase();
   startKeepDbWarm();
+  startNotificationRules();
 });

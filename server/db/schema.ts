@@ -8,6 +8,7 @@ import {
   uuid,
   numeric,
   index,
+  uniqueIndex,
   unique,
   customType,
 } from "drizzle-orm/pg-core";
@@ -31,6 +32,8 @@ export const tenants = pgTable("tenants", {
   // landing-page signup form (see tenantApplications below) without a schema
   // change once that page exists. All nullable: every pre-existing tenant
   // simply has none of this yet.
+  // Optional email categories the tenant switched OFF (lib/emailPrefs.ts). Missing key = on. Security mail is never optional.
+  emailPrefs: jsonb("email_prefs").$type<Record<string, boolean>>().notNull().default({}),
   ownerName: text("owner_name"),
   ownerWhatsapp: text("owner_whatsapp"),
   businessType: text("business_type"), // e.g. 'photobooth_rental' | 'event_organizer' | 'studio' | 'other'
@@ -71,6 +74,8 @@ export const tenantApplications = pgTable("tenant_applications", {
   businessName: text("business_name").notNull(),
   ownerName: text("owner_name").notNull(),
   ownerEmail: text("owner_email").notNull(),
+  // Set when the applicant clicks the verification link in the confirmation email (lib/emailTokens.ts). Null = unverified.
+  emailVerifiedAt: timestamp("email_verified_at"),
   ownerWhatsapp: text("owner_whatsapp"),
   businessType: text("business_type"),
   city: text("city"),
@@ -406,6 +411,62 @@ export const customerProfiles = pgTable("customer_profiles", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [unique("customer_profiles_tenant_key_unique").on(table.tenantId, table.contactKey)]);
 
+// In-app notifications for the tenant dashboard. `tenantId` null = broadcast to every tenant. Read state is per tenant
+// (notification_reads) so one broadcast row serves everybody. `kind` lets future producers plug in without a schema change:
+// 'platform' (message from STUDIODO), 'customer_message', 'billing', 'booth', 'system'.
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("platform"),
+  severity: text("severity").notNull().default("info"), // 'info' | 'success' | 'warning' | 'critical'
+  title: text("title").notNull(),
+  body: text("body"),
+  linkUrl: text("link_url"), // in-portal path (/portal/...) or https URL
+  createdBy: text("created_by"), // superadmin email, or a producer label such as 'system'
+  expiresAt: timestamp("expires_at"),
+  // Set by automatic producers (lib/notificationRules.ts) so the same alert is never raised twice. Null for hand-written ones.
+  dedupeKey: text("dedupe_key"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("notifications_tenant_created_idx").on(table.tenantId, table.createdAt),
+  uniqueIndex("notifications_dedupe_idx").on(table.tenantId, table.dedupeKey),
+]);
+
+export const notificationReads = pgTable("notification_reads", {
+  notificationId: uuid("notification_id").notNull().references(() => notifications.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (table) => [unique("notification_reads_pk").on(table.notificationId, table.tenantId)]);
+
+// Tenant feedback on marketplace templates. A review needs an installed copy (checked in the API); one per tenant per
+// template, editable. Reports flag a template for the Superadmin (broken file, copyright, inappropriate…).
+export const marketplaceReviews = pgTable("marketplace_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  marketplaceTemplateId: uuid("marketplace_template_id").notNull().references(() => marketplaceTemplates.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1..5
+  comment: text("comment").notNull().default(""),
+  status: text("status").notNull().default("published"), // 'published' | 'hidden' (moderated)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  unique("marketplace_reviews_unique").on(table.marketplaceTemplateId, table.tenantId),
+  index("marketplace_reviews_template_idx").on(table.marketplaceTemplateId, table.status),
+]);
+
+export const marketplaceReports = pgTable("marketplace_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  marketplaceTemplateId: uuid("marketplace_template_id").notNull().references(() => marketplaceTemplates.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(), // 'rusak' | 'hak_cipta' | 'tidak_pantas' | 'menyesatkan' | 'lainnya'
+  detail: text("detail").notNull().default(""),
+  status: text("status").notNull().default("open"), // 'open' | 'resolved' | 'dismissed'
+  resolution: text("resolution"), // what the Superadmin did / said
+  resolvedBy: text("resolved_by"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("marketplace_reports_status_idx").on(table.status, table.createdAt), index("marketplace_reports_template_idx").on(table.marketplaceTemplateId)]);
+
 // Admin-uploaded custom templates (frame PNG + slot positions)
 export const templates = pgTable("templates", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -620,6 +681,7 @@ export const creatorSubmissions = pgTable("creator_submissions", {
   whatsapp: text("whatsapp"),
   portfolioUrl: text("portfolio_url").notNull(),
   description: text("description").notNull().default(""),
+  emailVerifiedAt: timestamp("email_verified_at"),
   status: text("status").notNull().default("new"), // 'new' | 'reviewing' | 'accepted' | 'rejected'
   note: text("note"), // superadmin-only
   reviewedBy: text("reviewed_by"),
@@ -670,6 +732,11 @@ export const creators = pgTable("creators", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   whatsapp: text("whatsapp"),
+  emailPrefs: jsonb("email_prefs").$type<Record<string, boolean>>().notNull().default({}),
+  // Public profile shown on /kreator/<id> and under each published template.
+  bio: text("bio"),
+  instagramHandle: text("instagram_handle"),
+  website: text("website"),
   status: text("status").notNull().default("active"), // 'active' | 'suspended'
   submissionId: uuid("submission_id"),
   lastLoginAt: timestamp("last_login_at"),

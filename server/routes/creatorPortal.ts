@@ -9,6 +9,11 @@ import { logEvent } from "../lib/platformEvents.js";
 import { sniffImageType } from "./siteAssets.js";
 import { MARKETPLACE_CATEGORIES } from "./marketplace.js";
 import crypto from "node:crypto";
+import { ratingSummaries } from "../lib/marketplaceFeedback.js";
+import { CREATOR_CATEGORIES, cleanPrefsPatch, getPrefs, setPrefs } from "../lib/emailPrefs.js";
+import { deliver, deliverToCreator, passwordChangedMail, templateSubmittedMail } from "../lib/emails.js";
+import { createLoginGuard, minutesLabel } from "../lib/loginGuard.js";
+import { clientIp } from "../lib/clientIp.js";
 
 // --- Marketplace creator portal API (web /kreator/portal) — creator JWT, separate realm ---------
 
@@ -22,9 +27,8 @@ const MAX_SLOTS = 12;
 export const FRAME_ASSET_PREFIX = "creator:";
 
 const DUMMY_HASH = hashPassword(crypto.randomUUID());
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 5 * 60 * 1000;
-const attempts = new Map<string, { count: number; lockedUntil: number }>();
+const loginGuard = createLoginGuard({ maxFailures: 5 });
+const loginIpGuard = createLoginGuard({ maxFailures: 20 });
 
 /** PNG header → pixel size (frames must be PNG: they need transparent photo windows). */
 function pngSize(buf: Buffer): { width: number; height: number } | null {
@@ -37,27 +41,62 @@ creatorPortalRouter.post("/login", async (req, res) => {
   const password = String(req.body?.password ?? "");
   if (!email || !password) return res.status(400).json({ error: "Email dan password wajib diisi" });
 
-  const entry = attempts.get(email) ?? { count: 0, lockedUntil: 0 };
-  if (entry.lockedUntil > Date.now()) {
-    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Coba lagi dalam ${Math.ceil((entry.lockedUntil - Date.now()) / 60000)} menit.` });
+  const ip = clientIp(req);
+  const lockedForMs = Math.max(loginGuard.lockedFor(email), loginIpGuard.lockedFor(ip));
+  if (lockedForMs > 0) {
+    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Akun dikunci sementara, coba lagi dalam ${minutesLabel(lockedForMs)}.`, retryAfterSeconds: Math.ceil(lockedForMs / 1000) });
   }
   const [creator] = await db.select().from(creators).where(eq(creators.email, email));
   const valid = verifyPassword(password, creator?.passwordHash ?? DUMMY_HASH);
   if (!creator || !valid || creator.status !== "active") {
-    entry.count += 1;
-    if (entry.count >= LOGIN_MAX_ATTEMPTS) { entry.lockedUntil = Date.now() + LOCKOUT_MS; entry.count = 0; }
-    attempts.set(email, entry);
+    const lock = loginGuard.fail(email);
+    loginIpGuard.fail(ip);
+    if (lock) logEvent({ level: "warning", category: "auth", action: "creator.login.lockout", message: `Login kreator ${email} dikunci ${Math.round(lock.lockMs / 60000)} menit setelah kata sandi salah beruntun`, actorType: "system", actorLabel: email, metadata: { email, ip } });
     return res.status(401).json({ error: "Email atau password salah" });
   }
-  attempts.delete(email);
+  loginGuard.succeed(email);
   await db.update(creators).set({ lastLoginAt: new Date() }).where(eq(creators.id, creator.id));
   res.json({ token: signCreatorToken({ creatorId: creator.id }) });
 });
 
 creatorPortalRouter.use(requireCreatorAuth);
 
+const ME_COLUMNS = { id: creators.id, name: creators.name, email: creators.email, whatsapp: creators.whatsapp, bio: creators.bio, instagramHandle: creators.instagramHandle, website: creators.website };
+
 creatorPortalRouter.get("/me", async (req, res) => {
-  const [c] = await db.select({ name: creators.name, email: creators.email, whatsapp: creators.whatsapp }).from(creators).where(eq(creators.id, req.creatorId!));
+  const [c] = await db.select(ME_COLUMNS).from(creators).where(eq(creators.id, req.creatorId!));
+  res.json(c);
+});
+
+creatorPortalRouter.get("/email-preferences", async (req, res) => {
+  res.json({ categories: CREATOR_CATEGORIES, prefs: await getPrefs("creator", req.creatorId!) });
+});
+creatorPortalRouter.patch("/email-preferences", async (req, res) => {
+  const patch = cleanPrefsPatch("creator", req.body);
+  if (!patch) return res.status(400).json({ error: "Tidak ada perubahan yang valid" });
+  res.json({ categories: CREATOR_CATEGORIES, prefs: await setPrefs("creator", req.creatorId!, patch) });
+});
+
+// PATCH /api/creator/me — the public profile (name credited on templates, bio, links) and contact number.
+creatorPortalRouter.patch("/me", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const patch: Partial<typeof creators.$inferInsert> = {};
+  if (b.name !== undefined) { const v = text(b.name, 100); if (v.length < 2) return res.status(400).json({ error: "Nama minimal 2 karakter" }); patch.name = v; }
+  if (b.bio !== undefined) patch.bio = text(b.bio, 600) || null;
+  if (b.whatsapp !== undefined) patch.whatsapp = text(b.whatsapp, 40) || null;
+  if (b.instagramHandle !== undefined) patch.instagramHandle = text(b.instagramHandle, 40).replace(/^@/, "").replace(/[^A-Za-z0-9._]/g, "") || null;
+  if (b.website !== undefined) {
+    const v = text(b.website, 200);
+    if (v) {
+      let url: URL;
+      try { url = new URL(v); } catch { return res.status(400).json({ error: "Situs web harus berupa alamat lengkap, mis. https://…" }); }
+      if (url.protocol !== "https:" && url.protocol !== "http:") return res.status(400).json({ error: "Situs web harus diawali http:// atau https://" });
+      patch.website = url.toString();
+    } else patch.website = null;
+  }
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan" });
+  const [c] = await db.update(creators).set(patch).where(eq(creators.id, req.creatorId!)).returning(ME_COLUMNS);
   res.json(c);
 });
 
@@ -70,6 +109,7 @@ creatorPortalRouter.post("/password", async (req, res) => {
   if (!c || !verifyPassword(current, c.passwordHash)) return res.status(400).json({ error: "Password saat ini salah" });
   if (verifyPassword(next, c.passwordHash)) return res.status(400).json({ error: "Password baru harus berbeda dari yang lama" });
   await db.update(creators).set({ passwordHash: hashPassword(next) }).where(eq(creators.id, c.id));
+  void deliver(c.email, passwordChangedMail({ name: c.name, when: new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" }) }), { what: "kata sandi diubah" });
   res.json({ ok: true });
 });
 
@@ -113,7 +153,8 @@ creatorPortalRouter.get("/templates", async (req, res) => {
     const [m] = await db.select({ n: marketplaceTemplates.installCount }).from(marketplaceTemplates).where(eq(marketplaceTemplates.id, t.marketplaceTemplateId));
     installs.set(t.id, m?.n ?? 0);
   }
-  res.json(rows.map((t) => toDto(t, installs.get(t.id) ?? 0)));
+  const sums = await ratingSummaries(rows.map((t) => t.marketplaceTemplateId).filter((v): v is string => Boolean(v)));
+  res.json(rows.map((t) => ({ ...toDto(t, installs.get(t.id) ?? 0), ratingAverage: t.marketplaceTemplateId ? sums.get(t.marketplaceTemplateId)?.average ?? null : null, ratingCount: t.marketplaceTemplateId ? sums.get(t.marketplaceTemplateId)?.count ?? 0 : 0 })));
 });
 
 creatorPortalRouter.post("/templates", async (req, res) => {
@@ -194,9 +235,31 @@ creatorPortalRouter.post("/templates/:id/submit", async (req, res) => {
   if (t.slots.length === 0) return res.status(400).json({ error: "Tambahkan minimal satu slot foto" });
   if (t.description.trim().length < 10) return res.status(400).json({ error: "Isi deskripsi singkat (minimal 10 karakter)" });
   const [row] = await db.update(creatorTemplates).set({ status: "pending", submittedAt: new Date(), reviewNote: null, updatedAt: new Date() }).where(eq(creatorTemplates.id, t.id)).returning();
-  const [c] = await db.select({ name: creators.name }).from(creators).where(eq(creators.id, req.creatorId!));
+  const [c] = await db.select({ name: creators.name, email: creators.email }).from(creators).where(eq(creators.id, req.creatorId!));
+  void deliverToCreator(req.creatorId!, templateSubmittedMail({ name: c.name, templateName: t.name }), "template dikirim", { key: "submitted", label: "Konfirmasi template diterima" });
   logEvent({ category: "system", action: "creator_template.submitted", message: `${c?.name ?? "Kreator"} mengirim template "${t.name}" untuk ditinjau`, actorType: "system" });
   res.json(toDto(row));
+});
+
+// POST /templates/:id/duplicate — a fresh draft copy (own copy of the frame file, so deleting one never breaks the other).
+creatorPortalRouter.post("/templates/:id/duplicate", async (req, res) => {
+  const t = await ownTemplate(req);
+  if (!t) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const drafts = await db.select({ id: creatorTemplates.id }).from(creatorTemplates).where(and(eq(creatorTemplates.creatorId, req.creatorId!), eq(creatorTemplates.status, "draft")));
+  if (drafts.length >= 20) return res.status(400).json({ error: "Maksimal 20 draft sekaligus. Hapus atau kirim draft lama dulu." });
+  let frameAssetId: string | null = null;
+  if (t.frameAssetId) {
+    const [asset] = await db.select().from(siteAssets).where(eq(siteAssets.id, t.frameAssetId));
+    if (asset) {
+      const [copy] = await db.insert(siteAssets).values({ filename: asset.filename, contentType: asset.contentType, data: asset.data, size: asset.size, uploadedBy: asset.uploadedBy }).returning({ id: siteAssets.id });
+      frameAssetId = copy.id;
+    }
+  }
+  const [row] = await db.insert(creatorTemplates).values({
+    creatorId: req.creatorId!, name: `${t.name} (salinan)`.slice(0, 80), description: t.description, category: t.category, orientation: t.orientation,
+    outputPreset: t.outputPreset, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, slots: t.slots, frameAssetId,
+  }).returning();
+  res.status(201).json(toDto(row));
 });
 
 creatorPortalRouter.post("/templates/:id/withdraw", async (req, res) => {

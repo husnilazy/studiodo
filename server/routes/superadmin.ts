@@ -15,9 +15,14 @@ import { siteAssetsAdminRouter } from "./siteAssets.js";
 import { paymentGatewaysAdminRouter } from "./paymentGateways.js";
 import { reconcileOrder } from "../lib/billing.js";
 import { licensesAdminRouter } from "./licenses.js";
+import { notificationsAdminRouter } from "./notifications.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { createLoginGuard, minutesLabel } from "../lib/loginGuard.js";
+import { clientIp } from "../lib/clientIp.js";
+import { LOCKOUT_ACTION } from "../lib/securityAlerts.js";
+import { deliver, resetLink, SETUP_TTL_MS, welcomeTenantMail } from "../lib/emails.js";
 import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
 
 export const superadminRouter = Router();
@@ -28,25 +33,8 @@ const DUMMY_PASSWORD_HASH = hashPassword(crypto.randomUUID());
 
 // Separate brute-force guard from the tenant-admin login (server/routes/auth.ts) —
 // these are two different identity realms and must not share any state.
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
-const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
-
-function isLockedOut(email: string): number {
-  const entry = loginAttempts.get(email);
-  if (!entry || entry.lockedUntil <= Date.now()) return 0;
-  return entry.lockedUntil - Date.now();
-}
-
-function recordLoginFailure(email: string) {
-  const entry = loginAttempts.get(email) ?? { count: 0, lockedUntil: 0 };
-  entry.count += 1;
-  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
-    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
-    entry.count = 0;
-  }
-  loginAttempts.set(email, entry);
-}
+const loginGuard = createLoginGuard({ maxFailures: 5 });
+const loginIpGuard = createLoginGuard({ maxFailures: 20 });
 
 // POST /api/superadmin/login — { email, password } → superadmin login (separate realm from tenant admin)
 superadminRouter.post("/login", async (req, res) => {
@@ -54,18 +42,21 @@ superadminRouter.post("/login", async (req, res) => {
   const password = String(req.body?.password ?? "");
   if (!email || !password) return res.status(400).json({ error: "Email dan password wajib diisi" });
 
-  const lockedForMs = isLockedOut(email);
+  const ip = clientIp(req);
+  const lockedForMs = Math.max(loginGuard.lockedFor(email), loginIpGuard.lockedFor(ip));
   if (lockedForMs > 0) {
-    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Coba lagi dalam ${Math.ceil(lockedForMs / 60000)} menit.` });
+    return res.status(429).json({ error: `Terlalu banyak percobaan gagal. Coba lagi dalam ${minutesLabel(lockedForMs)}.`, retryAfterSeconds: Math.ceil(lockedForMs / 1000) });
   }
 
   const [superadmin] = await db.select().from(superadmins).where(eq(superadmins.email, email));
   const valid = verifyPassword(password, superadmin?.passwordHash ?? DUMMY_PASSWORD_HASH);
   if (!superadmin || !valid) {
-    recordLoginFailure(email);
+    const lock = loginGuard.fail(email);
+    const ipLock = loginIpGuard.fail(ip);
+    if (lock || ipLock) logEvent({ level: "error", category: "auth", action: "superadmin.login.lockout", message: `Login Admin Pusat dikunci ${Math.round((lock ?? ipLock)!.lockMs / 60000)} menit setelah percobaan gagal beruntun (email: ${email}, IP: ${ip})`, actorType: "system", actorLabel: email, metadata: { email, ip } });
     return res.status(401).json({ error: "Email atau password salah" });
   }
-  loginAttempts.delete(email);
+  loginGuard.succeed(email);
 
   const token = signSuperadminToken({ superadminId: superadmin.id });
   res.json({ token });
@@ -88,6 +79,7 @@ superadminRouter.use("/creators", creatorsAdminRouter);
 superadminRouter.use("/assets", siteAssetsAdminRouter);
 superadminRouter.use("/payment-gateways", paymentGatewaysAdminRouter);
 superadminRouter.use("/licenses", licensesAdminRouter);
+superadminRouter.use("/notifications", notificationsAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of
@@ -599,6 +591,10 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
     actorLabel,
   });
 
+  // Welcome email with a one-time "set your password" link (never the password itself).
+  const [createdAdmin] = await db.select({ id: admins.id, hash: admins.passwordHash }).from(admins).where(eq(admins.email, application.ownerEmail));
+  if (createdAdmin) void deliver(application.ownerEmail, welcomeTenantMail({ ownerName: application.ownerName, businessName: application.businessName, email: application.ownerEmail, setupUrl: resetLink("tenant", createdAdmin.id, createdAdmin.hash, SETUP_TTL_MS), trialDays }), { tenantId: tenant.id, what: "selamat datang tenant" });
+
   res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays });
 });
 
@@ -642,6 +638,24 @@ superadminRouter.get("/events", async (req, res) => {
 // but that, before this, only ever showed up one tenant at a time on that
 // tenant's own Kiosk page — nothing gave a superadmin the platform-wide
 // "which booths are down right now" view a fleet operator actually needs.
+// GET /api/superadmin/security-alerts — recent login lockouts (last 14 days) with the owner's contact details, so the
+// Superadmin can follow up on WhatsApp right away. Fed by lib/securityAlerts.ts.
+superadminRouter.get("/security-alerts", async (_req, res) => {
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const rows = await db.select({ id: platformEvents.id, createdAt: platformEvents.createdAt, message: platformEvents.message, tenantId: platformEvents.tenantId, metadata: platformEvents.metadata })
+    .from(platformEvents)
+    .where(and(eq(platformEvents.action, LOCKOUT_ACTION), gte(platformEvents.createdAt, since)))
+    .orderBy(desc(platformEvents.createdAt)).limit(50);
+  res.json(rows.map((r) => {
+    const m = (r.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: r.id, createdAt: r.createdAt, message: r.message, tenantId: r.tenantId,
+      email: (m.email as string) ?? null, ip: (m.ip as string) ?? null, lockMinutes: Number(m.lockMinutes ?? 0), lockoutCount: Number(m.lockoutCount ?? 1),
+      tenantName: (m.tenantName as string) ?? null, ownerName: (m.ownerName as string) ?? null, ownerWhatsapp: (m.ownerWhatsapp as string) ?? null,
+    };
+  }));
+});
+
 superadminRouter.get("/fleet-alerts", async (_req, res) => {
   const rows = await db.select({
     id: kioskKeys.id,
