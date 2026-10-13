@@ -22,6 +22,8 @@ import { logEvent } from "../lib/platformEvents.js";
 import { createLoginGuard, minutesLabel } from "../lib/loginGuard.js";
 import { clientIp } from "../lib/clientIp.js";
 import { LOCKOUT_ACTION } from "../lib/securityAlerts.js";
+import { emailLogSummary, listEmailLog } from "../lib/emailLog.js";
+import { esc, layout, sendMail } from "../lib/mailer.js";
 import { deliver, resetLink, SETUP_TTL_MS, welcomeTenantMail } from "../lib/emails.js";
 import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
 
@@ -638,6 +640,23 @@ superadminRouter.get("/events", async (req, res) => {
 // but that, before this, only ever showed up one tenant at a time on that
 // tenant's own Kiosk page — nothing gave a superadmin the platform-wide
 // "which booths are down right now" view a fleet operator actually needs.
+// --- Email: delivery log + a test message to check the Resend setup ---------------------------------------------
+superadminRouter.get("/email-log/summary", async (_req, res) => res.json(await emailLogSummary()));
+
+superadminRouter.get("/email-log", async (req, res) => {
+  res.json(await listEmailLog({ status: typeof req.query.status === "string" ? req.query.status : undefined, q: typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : undefined, limit: Number(req.query.limit) || 100 }));
+});
+
+// POST /api/superadmin/email-log/test — sends a test message to the signed-in superadmin's own address.
+superadminRouter.post("/email-log/test", async (req, res) => {
+  const to = await currentSuperadminEmail(req);
+  if (!to) return res.status(400).json({ error: "Email superadmin tidak ditemukan" });
+  const mail = { subject: "Tes email STUDIODO", html: layout("Email berfungsi", `<p>Ini email uji dari STUDIODO. Jika Anda membacanya, pengiriman email (Resend) sudah terkonfigurasi dengan benar.</p><p style="color:#7b849c;font-size:13px">Dikirim ${esc(new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "medium", timeZone: "Asia/Jakarta" }))}</p>`), text: "Ini email uji dari STUDIODO. Pengiriman email sudah berfungsi." };
+  const r = await sendMail({ to, ...mail }, { kind: "email uji" });
+  if (r.sent) return res.json({ ok: true, to });
+  res.status(r.reason === "not_configured" ? 409 : 502).json({ error: r.reason === "not_configured" ? "RESEND_API_KEY belum diisi di .env server (lalu restart service)." : `Resend menolak/gagal: ${r.detail ?? r.reason}` });
+});
+
 // GET /api/superadmin/security-alerts — recent login lockouts (last 14 days) with the owner's contact details, so the
 // Superadmin can follow up on WhatsApp right away. Fed by lib/securityAlerts.ts.
 superadminRouter.get("/security-alerts", async (_req, res) => {

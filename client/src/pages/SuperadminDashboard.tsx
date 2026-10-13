@@ -33,6 +33,7 @@ const CreatorsPanel = lazy(() => import("@/components/CreatorsPanel").then((m) =
 const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").then((m) => ({ default: m.BillingOrdersPanel })));
 const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
 const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
+const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 
@@ -1332,12 +1333,13 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "settings";
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
     { id: "events", label: "Aktivitas & Error", icon: "activity" },
     { id: "notifications", label: "Notifikasi", icon: "bell" },
+    { id: "email", label: "Email", icon: "mail" },
   ] },
   { title: "Tenant", items: [
     { id: "tenants", label: "Tenant", icon: "users" },
@@ -1559,6 +1561,8 @@ export default function SuperadminDashboard() {
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
 
         {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
+
+        {section === "email" && <EmailLogPanel />}
 
         {section === "settings" && (
           <div className="grid gap-6">

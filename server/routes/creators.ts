@@ -197,7 +197,7 @@ creatorsAdminRouter.post("/templates/:id/approve", async (req, res) => {
   await db.update(creatorTemplates).set({ status: "approved", marketplaceTemplateId: m.id, reviewNote: null, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(creatorTemplates.id, t.id));
   logEvent({ category: "system", action: "creator_template.approved", message: `Template "${t.name}" oleh ${row.creatorName} disetujui dan terbit di marketplace`, actorType: "superadmin", actorLabel: await actor(req) });
   const [creator] = await db.select({ email: creators.email, name: creators.name }).from(creators).where(eq(creators.id, t.creatorId));
-  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: true, portalUrl: PORTAL_URL }) });
+  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: true, portalUrl: PORTAL_URL }) }, { kind: "template disetujui" });
   res.json({ ok: true, marketplaceTemplateId: m.id });
 });
 
@@ -212,7 +212,7 @@ creatorsAdminRouter.post("/templates/:id/reject", async (req, res) => {
   await db.update(creatorTemplates).set({ status: "rejected", reviewNote: note, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(creatorTemplates.id, t.id));
   logEvent({ category: "system", action: "creator_template.rejected", message: `Template "${t.name}" ditolak: ${note}`, actorType: "superadmin", actorLabel: await actor(req) });
   const [creator] = await db.select({ email: creators.email, name: creators.name }).from(creators).where(eq(creators.id, t.creatorId));
-  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: false, note, portalUrl: PORTAL_URL }) });
+  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: false, note, portalUrl: PORTAL_URL }) }, { kind: "template ditolak" });
   res.json({ ok: true });
 });
 

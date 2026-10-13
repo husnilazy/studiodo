@@ -260,6 +260,13 @@
       "when": 1791906210320,
       "tag": "0036_email_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791907586886,
+      "tag": "0037_email_log",
+      "breakpoints": true
     }
   ]
 }

@@ -310,6 +310,8 @@ export interface MarketReportRow {
   tenantId: string; tenantName: string; tenantWhatsapp: string | null; tenantOwner: string | null;
 }
 export interface MarketReviewRow { id: string; rating: number; comment: string; status: "published" | "hidden"; createdAt: string; templateId: string; templateName: string; tenantName: string }
+export interface EmailLogRow { id: string; toEmail: string; subject: string; kind: string; status: "sent" | "failed" | "skipped"; error: string | null; createdAt: string; tenantId: string | null; tenantName: string | null }
+export interface EmailSummary { configured: boolean; from: string; last7Days: { sent: number; failed: number; skipped: number } }
 export interface ReviewCheck { id: string; label: string; status: "ok" | "warn" | "fail"; detail: string }
 export interface ModerationLogEntry { id: string; createdAt: string; action: string; message: string; actorLabel: string | null }
 
@@ -521,6 +523,9 @@ export const superadminApi = {
   getMarketReviews: () => request<MarketReviewRow[]>("/marketplace/reviews"),
   setMarketReviewStatus: (id: string, status: "published" | "hidden") =>
     request<{ ok: boolean }>(`/marketplace/reviews/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  getEmailSummary: () => request<EmailSummary>("/email-log/summary"),
+  getEmailLog: (status = "", q = "") => request<EmailLogRow[]>(`/email-log?${new URLSearchParams({ ...(status ? { status } : {}), ...(q ? { q } : {}) }).toString()}`),
+  sendTestEmail: () => request<{ ok: boolean; to: string }>("/email-log/test", { method: "POST" }),
   getCreatorQueueSummary: () => request<{ pending: number; oldestWaitingDays: number | null; rejectionPresets: string[] }>("/creators/templates/summary"),
   getModerationLog: () => request<ModerationLogEntry[]>("/creators/moderation-log"),
   resetCreatorPassword: (id: string) => request<{ password: string }>(`/creators/accounts/${id}/reset-password`, { method: "POST" }),

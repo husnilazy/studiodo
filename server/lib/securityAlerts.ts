@@ -43,7 +43,7 @@ export async function onTenantLoginLockout(email: string, ip: string, info: Lock
       body: `Login akun ${email} dikunci ${lockMinutes} menit karena kata sandi salah berulang kali. Jika itu bukan Anda, segera ganti kata sandi atau hubungi STUDIODO.`,
       linkUrl: "/portal/akun", createdBy: "system",
     });
-    const mail = await sendMail({ to: email, ...accountLockedMail({ ownerName: row.ownerName, lockMinutes }) });
+    const mail = await sendMail({ to: email, ...accountLockedMail({ ownerName: row.ownerName, lockMinutes }) }, { kind: "akun dikunci", tenantId: row.tenantId });
     if (!mail.sent && mail.reason !== "not_configured") {
       logEvent({ tenantId: row.tenantId, level: "warning", category: "system", action: "email.failed", message: `Email peringatan keamanan ke ${email} gagal: ${mail.detail ?? mail.reason}`, actorType: "system" });
     }

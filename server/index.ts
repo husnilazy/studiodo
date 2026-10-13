@@ -32,6 +32,7 @@ import { publicAssetsRouter } from "./routes/siteAssets.js";
 import { creatorPortalRouter } from "./routes/creatorPortal.js";
 import { client } from "./db/client.js";
 import { runNotificationRules } from "./lib/notificationRules.js";
+import { pruneEmailLog } from "./lib/emailLog.js";
 import { logEvent } from "./lib/platformEvents.js";
 
 // Without these, an error thrown outside an Express route handler (e.g. the
@@ -186,7 +187,7 @@ function startKeepDbWarm() {
 
 // Automatic notifications (booth licence ending / locked / offline). Idempotent, so a restart or overlap is harmless.
 function startNotificationRules() {
-  const run = () => runNotificationRules().catch((error: any) => console.error("[STUDIODO] aturan notifikasi gagal:", error?.message ?? error));
+  const run = () => { void pruneEmailLog(); return runNotificationRules().catch((error: any) => console.error("[STUDIODO] aturan notifikasi gagal:", error?.message ?? error)); };
   setTimeout(run, 60_000);
   setInterval(run, 30 * 60 * 1000);
 }

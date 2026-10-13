@@ -28,7 +28,7 @@ const web = (path: string) => `${portalBaseUrl()}${path}`;
 
 /** Send and record. A skipped send (no API key) is silent here — the callers that matter log it themselves. */
 export async function deliver(to: string, mail: Mail, ctx: { tenantId?: string | null; what: string }): Promise<MailResult> {
-  const result = await sendMail({ to, ...mail });
+  const result = await sendMail({ to, ...mail }, { kind: ctx.what, tenantId: ctx.tenantId ?? null });
   if (!result.sent && result.reason !== "not_configured") {
     logEvent({ tenantId: ctx.tenantId ?? null, level: "warning", category: "system", action: "email.failed", message: `Email "${ctx.what}" ke ${to} gagal: ${result.detail ?? result.reason}`, actorType: "system" });
   }

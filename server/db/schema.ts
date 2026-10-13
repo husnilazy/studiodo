@@ -467,6 +467,19 @@ export const marketplaceReports = pgTable("marketplace_reports", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("marketplace_reports_status_idx").on(table.status, table.createdAt), index("marketplace_reports_template_idx").on(table.marketplaceTemplateId)]);
 
+// One row per email attempt (sent / failed / skipped because no API key). Recipient + subject only, never the body, and
+// pruned after 90 days. Shown in Superadmin → Email so a missing welcome mail can be traced and followed up.
+export const emailLog = pgTable("email_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  kind: text("kind").notNull().default(""), // short label of why it was sent ("kuitansi pembayaran")
+  status: text("status").notNull(), // 'sent' | 'failed' | 'skipped'
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("email_log_created_idx").on(table.createdAt), index("email_log_status_idx").on(table.status, table.createdAt)]);
+
 // Admin-uploaded custom templates (frame PNG + slot positions)
 export const templates = pgTable("templates", {
   id: uuid("id").primaryKey().defaultRandom(),

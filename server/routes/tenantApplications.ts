@@ -66,7 +66,7 @@ tenantApplicationsRouter.post("/", async (req, res) => {
   // nothing is sent and the activity log says so, so the Superadmin knows to follow up by WhatsApp instead.
   void (async () => {
     const [settings] = await db.select({ wa: platformSettings.renewalWhatsapp }).from(platformSettings).limit(1).catch(() => []);
-    const result = await sendMail({ to: ownerEmail, ...applicationReceivedMail({ ownerName, businessName, supportWhatsapp: settings?.wa?.replace(/\D/g, "") || null, verifyUrl: verifyLink("tenant", row.id, ownerEmail) }) });
+    const result = await sendMail({ to: ownerEmail, ...applicationReceivedMail({ ownerName, businessName, supportWhatsapp: settings?.wa?.replace(/\D/g, "") || null, verifyUrl: verifyLink("tenant", row.id, ownerEmail) }) }, { kind: "konfirmasi pendaftaran tenant" });
     logEvent({
       tenantId: null, level: result.sent ? "info" : "warning", category: "system",
       action: result.sent ? "email.application_confirmation.sent" : "email.application_confirmation.skipped",

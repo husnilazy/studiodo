@@ -10,7 +10,22 @@ const FROM = () => process.env.MAIL_FROM || "STUDIODO <no-reply@studiodo.id>";
 
 export const mailConfigured = () => Boolean(process.env.RESEND_API_KEY);
 
-export async function sendMail(input: MailInput): Promise<MailResult> {
+export interface MailMeta { kind?: string; tenantId?: string | null }
+
+/** Record the attempt (recipient + subject only). Never throws: a logging problem must not affect delivery. */
+async function recordAttempt(input: MailInput, result: MailResult, meta?: MailMeta) {
+  try {
+    const { db } = await import("../db/client.js");
+    const { emailLog } = await import("../db/schema.js");
+    await db.insert(emailLog).values({
+      tenantId: meta?.tenantId ?? null, toEmail: input.to.slice(0, 200), subject: input.subject.slice(0, 300), kind: (meta?.kind ?? "").slice(0, 80),
+      status: result.sent ? "sent" : result.reason === "not_configured" ? "skipped" : "failed",
+      error: result.sent ? null : (result.detail ?? (result.reason === "not_configured" ? "RESEND_API_KEY belum diisi" : result.reason ?? null))?.slice(0, 400) ?? null,
+    });
+  } catch { /* logging is best-effort */ }
+}
+
+async function sendRaw(input: MailInput): Promise<MailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { sent: false, reason: "not_configured" };
   try {
@@ -25,6 +40,12 @@ export async function sendMail(input: MailInput): Promise<MailResult> {
   } catch (error) {
     return { sent: false, reason: "network", detail: error instanceof Error ? error.message : String(error) };
   }
+}
+
+export async function sendMail(input: MailInput, meta?: MailMeta): Promise<MailResult> {
+  const result = await sendRaw(input);
+  await recordAttempt(input, result, meta);
+  return result;
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
