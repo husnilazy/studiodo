@@ -267,6 +267,13 @@
       "when": 1791907586886,
       "tag": "0037_email_log",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791911185490,
+      "tag": "0038_pos",
+      "breakpoints": true
     }
   ]
 }
