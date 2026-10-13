@@ -1,3 +1,4 @@
+import { fetchFrames, peekFrames } from "@/lib/framesCache";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -39,8 +40,8 @@ export default function PilihFrame() {
   // frame outside the old hardcoded six silently collapsing into "Custom".
   const { categories: knownCategories } = useFrameCategories();
   const categoryLabel = (key: string) => knownCategories.find((category) => category.key === key)?.label ?? key;
-  const [frames, setFrames] = useState<FrameOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [frames, setFrames] = useState<FrameOption[]>(() => (peekFrames(orientation) as FrameOption[] | undefined) ?? []);
+  const [loading, setLoading] = useState(() => !peekFrames(orientation));
   const [loadError, setLoadError] = useState<string | null>(null);
   // "__none__" = explicitly chose no frame; null = nothing chosen yet
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,14 +52,21 @@ export default function PilihFrame() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // Show the warmed copy at once and refresh quietly; only a truly empty first load shows the spinner.
+    const warm = peekFrames(orientation);
+    if (warm) {
+      setFrames(warm as FrameOption[]);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setLoadError(null);
     const loadFrames = async () => {
       try {
-        const result = await api.getFrames(orientation);
+        const result = await fetchFrames(orientation);
         if (!cancelled) setFrames(result ?? []);
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && !peekFrames(orientation)) {
           setFrames([]);
           setLoadError(error instanceof Error ? error.message : "Frame gagal dimuat");
         }

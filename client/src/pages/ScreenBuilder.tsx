@@ -37,7 +37,7 @@ type Patch = Partial<Omit<LayoutElement, "id" | "type">>;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round1 = (value: number) => Math.round(value * 10) / 10;
-const inputClass = "w-full rounded-lg border border-fg/15 bg-surface px-2.5 py-1.5 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20";
+const inputClass = "w-full rounded-lg border border-fg/15 bg-surface px-2.5 py-1.5 text-sm outline-none transition focus:border-accent";
 
 function readAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {

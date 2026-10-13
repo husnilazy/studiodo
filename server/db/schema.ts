@@ -8,6 +8,7 @@ import {
   uuid,
   numeric,
   index,
+  uniqueIndex,
   unique,
   customType,
 } from "drizzle-orm/pg-core";
@@ -31,6 +32,8 @@ export const tenants = pgTable("tenants", {
   // landing-page signup form (see tenantApplications below) without a schema
   // change once that page exists. All nullable: every pre-existing tenant
   // simply has none of this yet.
+  // Optional email categories the tenant switched OFF (lib/emailPrefs.ts). Missing key = on. Security mail is never optional.
+  emailPrefs: jsonb("email_prefs").$type<Record<string, boolean>>().notNull().default({}),
   ownerName: text("owner_name"),
   ownerWhatsapp: text("owner_whatsapp"),
   businessType: text("business_type"), // e.g. 'photobooth_rental' | 'event_organizer' | 'studio' | 'other'
@@ -51,6 +54,10 @@ export const tenants = pgTable("tenants", {
   // balance (see `withdrawals`). `qrisPlatformSince` marks when that began: only QRIS payments after it count.
   qrisSettlement: text("qris_settlement").notNull().default("direct"), // 'direct' | 'platform'
   qrisPlatformSince: timestamp("qris_platform_since"),
+  // Negotiated discount (0-90 %) a superadmin grants this tenant on every booth subscription it buys, on top of the
+  // platform-wide volume tiers (platform_settings.volume_discounts). The better of the two applies — they do not stack.
+  boothDiscountPercent: integer("booth_discount_percent").notNull().default(0),
+  boothDiscountNote: text("booth_discount_note"), // superadmin-only reason, e.g. "Paket 12 booth event organizer"
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -67,6 +74,8 @@ export const tenantApplications = pgTable("tenant_applications", {
   businessName: text("business_name").notNull(),
   ownerName: text("owner_name").notNull(),
   ownerEmail: text("owner_email").notNull(),
+  // Set when the applicant clicks the verification link in the confirmation email (lib/emailTokens.ts). Null = unverified.
+  emailVerifiedAt: timestamp("email_verified_at"),
   ownerWhatsapp: text("owner_whatsapp"),
   businessType: text("business_type"),
   city: text("city"),
@@ -173,6 +182,9 @@ export const platformSettings = pgTable("platform_settings", {
   qrisFeePercent: numeric("qris_fee_percent", { precision: 5, scale: 2 }).notNull().default("0.70"),
   withdrawalMinAmount: integer("withdrawal_min_amount").notNull().default(50000),
   withdrawalFlatFee: integer("withdrawal_flat_fee").notNull().default(0),
+  // Volume discount on booth subscriptions: buying `minBooths` or more booths in one order takes `percent` off each of
+  // them. Managed by the superadmin; the default is the "10+ booths" offer advertised on the website.
+  volumeDiscounts: jsonb("volume_discounts").$type<{ minBooths: number; percent: number }[]>().notNull().default([{ minBooths: 10, percent: 10 }]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -261,6 +273,17 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // response and enforced client-side in electron/main.cjs, not by the
   // server refusing anything — this is advisory, not a security boundary.
   autoUpdateEnabled: boolean("auto_update_enabled").notNull().default(true),
+  // Per-booth subscription: ONE key = ONE booth = ONE licence. A tenant that runs five booths pays for five keys, each
+  // with its own end date, so an expired or unpaid booth locks without touching the others.
+  //   'trial'  — free trial issued by a superadmin; locks the moment `licenseEndsAt` passes (no grace period)
+  //   'paid'   — a paying booth; locks `gracePeriodDays` after `licenseEndsAt`. A null end date = unlimited (complimentary)
+  //   'unpaid' — key created but never subscribed to; the kiosk can pair but stays locked until it is paid for
+  licenseType: text("license_type").notNull().default("unpaid"),
+  licenseEndsAt: timestamp("license_ends_at"),
+  licensePlanSlug: text("license_plan_slug"), // plan the booth was last bought on (display only)
+  // Set when the key was issued as a trial. Survives a later trial→paid conversion, so a computer that already used a
+  // trial can't be paired with a second trial key (see requireKioskAuth).
+  trialStartedAt: timestamp("trial_started_at"),
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
 
 // Paket foto (packages)
@@ -329,6 +352,9 @@ export const voucherRedemptions = pgTable("voucher_redemptions", {
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  // Which booth (kiosk key) ran this session — what lets the live monitor say "booth X is mid-session". Null on sessions
+  // from before this column existed, and when the booth's key is later deleted.
+  kioskKeyId: uuid("kiosk_key_id").references(() => kioskKeys.id, { onDelete: "set null" }),
   packageId: uuid("package_id").references(() => packages.id),
   orientation: text("orientation").notNull().default("portrait"), // 'portrait' | 'landscape'
   paymentMethod: text("payment_method").notNull().default("qris"), // 'qris' | 'voucher'
@@ -365,7 +391,94 @@ export const sessions = pgTable("sessions", {
   customerEmail: text("customer_email"),
   publishConsent: boolean("publish_consent").notNull().default(false),
   feedback: text("feedback"),
-}, (table) => [index("sessions_tenant_id_created_at_idx").on(table.tenantId, table.createdAt)]);
+}, (table) => [
+  index("sessions_tenant_id_created_at_idx").on(table.tenantId, table.createdAt),
+  index("sessions_kiosk_key_id_idx").on(table.kioskKeyId, table.createdAt),
+]);
+
+// CRM: a customer is not a row of its own — they are derived from the contact details on their sessions (grouped by
+// WhatsApp number, else email). This table only holds what the tenant adds ON TOP of that: a name, notes, tags, and a
+// "do not message" flag. `contactKey` is "wa:<62…>" or "em:<email>" (see lib/crm.ts).
+export const customerProfiles = pgTable("customer_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  contactKey: text("contact_key").notNull(),
+  name: text("name"),
+  notes: text("notes"),
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  marketingOptOut: boolean("marketing_opt_out").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [unique("customer_profiles_tenant_key_unique").on(table.tenantId, table.contactKey)]);
+
+// In-app notifications for the tenant dashboard. `tenantId` null = broadcast to every tenant. Read state is per tenant
+// (notification_reads) so one broadcast row serves everybody. `kind` lets future producers plug in without a schema change:
+// 'platform' (message from STUDIODO), 'customer_message', 'billing', 'booth', 'system'.
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("platform"),
+  severity: text("severity").notNull().default("info"), // 'info' | 'success' | 'warning' | 'critical'
+  title: text("title").notNull(),
+  body: text("body"),
+  linkUrl: text("link_url"), // in-portal path (/portal/...) or https URL
+  createdBy: text("created_by"), // superadmin email, or a producer label such as 'system'
+  expiresAt: timestamp("expires_at"),
+  // Set by automatic producers (lib/notificationRules.ts) so the same alert is never raised twice. Null for hand-written ones.
+  dedupeKey: text("dedupe_key"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("notifications_tenant_created_idx").on(table.tenantId, table.createdAt),
+  uniqueIndex("notifications_dedupe_idx").on(table.tenantId, table.dedupeKey),
+]);
+
+export const notificationReads = pgTable("notification_reads", {
+  notificationId: uuid("notification_id").notNull().references(() => notifications.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (table) => [unique("notification_reads_pk").on(table.notificationId, table.tenantId)]);
+
+// Tenant feedback on marketplace templates. A review needs an installed copy (checked in the API); one per tenant per
+// template, editable. Reports flag a template for the Superadmin (broken file, copyright, inappropriate…).
+export const marketplaceReviews = pgTable("marketplace_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  marketplaceTemplateId: uuid("marketplace_template_id").notNull().references(() => marketplaceTemplates.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1..5
+  comment: text("comment").notNull().default(""),
+  status: text("status").notNull().default("published"), // 'published' | 'hidden' (moderated)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  unique("marketplace_reviews_unique").on(table.marketplaceTemplateId, table.tenantId),
+  index("marketplace_reviews_template_idx").on(table.marketplaceTemplateId, table.status),
+]);
+
+export const marketplaceReports = pgTable("marketplace_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  marketplaceTemplateId: uuid("marketplace_template_id").notNull().references(() => marketplaceTemplates.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(), // 'rusak' | 'hak_cipta' | 'tidak_pantas' | 'menyesatkan' | 'lainnya'
+  detail: text("detail").notNull().default(""),
+  status: text("status").notNull().default("open"), // 'open' | 'resolved' | 'dismissed'
+  resolution: text("resolution"), // what the Superadmin did / said
+  resolvedBy: text("resolved_by"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("marketplace_reports_status_idx").on(table.status, table.createdAt), index("marketplace_reports_template_idx").on(table.marketplaceTemplateId)]);
+
+// One row per email attempt (sent / failed / skipped because no API key). Recipient + subject only, never the body, and
+// pruned after 90 days. Shown in Superadmin → Email so a missing welcome mail can be traced and followed up.
+export const emailLog = pgTable("email_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  kind: text("kind").notNull().default(""), // short label of why it was sent ("kuitansi pembayaran")
+  status: text("status").notNull(), // 'sent' | 'failed' | 'skipped'
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("email_log_created_idx").on(table.createdAt), index("email_log_status_idx").on(table.status, table.createdAt)]);
 
 // Admin-uploaded custom templates (frame PNG + slot positions)
 export const templates = pgTable("templates", {
@@ -424,6 +537,11 @@ export const tenantSettings = pgTable("tenant_settings", {
   cashPaymentEnabled: boolean("cash_payment_enabled").notNull().default(false),
   xenditSecretKey: text("xendit_secret_key"),
   xenditWebhookToken: text("xendit_webhook_token"),
+  // Which gateway collects kiosk payments for this tenant: 'xendit' (default) or 'doku' (hosted checkout, QR → pay page).
+  paymentProvider: text("payment_provider").notNull().default("xendit"),
+  dokuClientId: text("doku_client_id"),
+  dokuSecretKeyEnc: text("doku_secret_key_enc"), // encrypted with lib/secretBox
+  dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
   storageDriver: text("storage_driver"), // 'local' | 'r2' | 'gdrive'; falls back to env/local when unset
   r2AccountId: text("r2_account_id"),
   r2Endpoint: text("r2_endpoint"),
@@ -510,6 +628,11 @@ export const billingOrders = pgTable("billing_orders", {
   planName: text("plan_name").notNull(), // snapshot
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // snapshot — what was actually charged
   periodDays: integer("period_days").notNull(),
+  // Which booths this payment covers: existing keys to renew (`keyId`) and brand-new booths to create once paid
+  // (`keyId` null). Empty on orders made before per-booth licences — those extend every active key of the tenant.
+  items: jsonb("items").$type<{ keyId: string | null; label: string | null }[]>().notNull().default([]),
+  boothCount: integer("booth_count").notNull().default(1),
+  discountPercent: integer("discount_percent").notNull().default(0), // snapshot of the volume/negotiated discount applied
   status: text("status").notNull().default("pending"), // 'pending' | 'paid' | 'failed' | 'expired'
   snapToken: text("snap_token"),
   redirectUrl: text("redirect_url"),
@@ -571,6 +694,7 @@ export const creatorSubmissions = pgTable("creator_submissions", {
   whatsapp: text("whatsapp"),
   portfolioUrl: text("portfolio_url").notNull(),
   description: text("description").notNull().default(""),
+  emailVerifiedAt: timestamp("email_verified_at"),
   status: text("status").notNull().default("new"), // 'new' | 'reviewing' | 'accepted' | 'rejected'
   note: text("note"), // superadmin-only
   reviewedBy: text("reviewed_by"),
@@ -621,6 +745,11 @@ export const creators = pgTable("creators", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   whatsapp: text("whatsapp"),
+  emailPrefs: jsonb("email_prefs").$type<Record<string, boolean>>().notNull().default({}),
+  // Public profile shown on /kreator/<id> and under each published template.
+  bio: text("bio"),
+  instagramHandle: text("instagram_handle"),
+  website: text("website"),
   status: text("status").notNull().default("active"), // 'active' | 'suspended'
   submissionId: uuid("submission_id"),
   lastLoginAt: timestamp("last_login_at"),

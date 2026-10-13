@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pushConfigNow, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { Link } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
@@ -11,6 +11,8 @@ import Spinner from "@/components/Spinner";
 import TrendChart from "@/components/TrendChart";
 import WithdrawalPanel from "@/components/WithdrawalPanel";
 import AdminPlaceholder from "./AdminPlaceholder";
+import CrmPanel from "@/components/CrmPanel";
+import LiveMonitorPanel from "@/components/LiveMonitorPanel";
 import GalleryProfile from "./GalleryProfile";
 import KioskKeys from "./KioskKeys";
 import KioskFlowSettings from "./KioskFlowSettings";
@@ -19,17 +21,21 @@ import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
 import { Icon } from "@/components/kiosk/Icons";
+import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
+import AdminNotificationBell from "@/components/AdminNotificationBell";
+import NetProgressBar from "@/components/NetProgressBar";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
-type Section = "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
+type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
 const sections: { id: Section; label: string; icon: string; group: string; hint: string }[] = [
+  { id: "monitor", label: "Monitor Booth", icon: "dashboard", group: "Operasional", hint: "Semua booth dalam satu layar: siapa yang sedang sesi, menunggu bayar, atau offline." },
   { id: "control", label: "Kustomisasi Kiosk", icon: "sliders", group: "Tampilan", hint: "Logo, warna, tombol, dan teks kiosk — lihat hasilnya langsung di pratinjau kiosk asli." },
   { id: "gallery", label: "Profil Gallery", icon: "sparkles", group: "Tampilan", hint: "Profil dan tampilan galeri publik hasil foto." },
   { id: "kiosk", label: "Kiosk", icon: "monitor", group: "Operasional", hint: "Kunci kiosk, kamera, dan printer di PC booth." },
   { id: "flow", label: "Flow Kiosk", icon: "shuffle", group: "Operasional", hint: "Urutan layar yang dilalui pelanggan." },
   { id: "finance", label: "Finance", icon: "wallet", group: "Bisnis", hint: "Pendapatan, paket, harga, dan voucher." },
-  { id: "crm", label: "Database / CRM", icon: "users", group: "Bisnis", hint: "Data pelanggan yang ikut sesi foto." },
+  { id: "crm", label: "Pelanggan / CRM", icon: "users", group: "Bisnis", hint: "Semua pelanggan di satu tempat: hubungi lewat WhatsApp, catatan, label, dan riwayat sesi." },
   { id: "traffic", label: "Traffic", icon: "activity", group: "Bisnis", hint: "Jumlah sesi dan performa booth per hari." },
   { id: "media", label: "Database Foto & Video", icon: "folder", group: "Bisnis", hint: "Semua foto, GIF, dan video dari setiap sesi." },
 ];
@@ -68,7 +74,15 @@ function OverviewSkeleton() {
   );
 }
 
-type MeInfo = { subscriptionEndsAt: string | null; status: string | null; gracePeriodDays: number; renewalWhatsapp: string | null; renewalCheckoutUrl: string | null } | null;
+type MeInfo = {
+  subscriptionEndsAt: string | null;
+  status: string | null;
+  gracePeriodDays: number;
+  renewalWhatsapp: string | null;
+  renewalCheckoutUrl: string | null;
+  portalUrl?: string;
+  licenses?: { activeKeys: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number; nearestEndsAt: string | null };
+} | null;
 
 // Only shown once subscriptionEndsAt is within 14 days (or already past) — Fase 6
 // made this grace-period-aware and tied to real enforcement (see
@@ -79,6 +93,31 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
   const [dismissed, setDismissed] = useState(false);
   if (!me) return null;
   const suspended = me.status === "suspended";
+  const lic = me.licenses;
+  // Newer servers report per-booth licences: say how many booths need attention rather than one account-wide countdown.
+  if (lic && !suspended) {
+    const needAttention = lic.locked + lic.expiringSoon;
+    if (needAttention === 0 && lic.unpaid === 0) return null;
+    if (dismissed && lic.locked === 0) return null;
+    const parts = [
+      lic.locked > 0 ? `${lic.locked} booth terkunci` : null,
+      lic.expiringSoon > 0 ? `${lic.expiringSoon} booth berakhir dalam 7 hari` : null,
+      lic.trial > 0 ? `${lic.trial} booth masih trial` : null,
+    ].filter(Boolean);
+    const urgent = lic.locked > 0;
+    return (
+      <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4 ${urgent ? "border-red-400/30 bg-red-500/10" : "border-amber-400/30 bg-amber-500/10"}`}>
+        <div>
+          <p className={`text-sm font-semibold ${urgent ? "text-red-200" : "text-amber-200"}`}>{parts.join(" · ") || "Ada booth yang belum berlangganan"}</p>
+          <p className="mt-1 text-xs text-fg/50">Satu booth = satu langganan. Kelola dan bayar semua booth sekaligus di dashboard web (ada potongan harga untuk banyak booth).</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={me.portalUrl ?? "https://www.studiodo.id/portal/booth"} target="_blank" rel="noreferrer" className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold">Kelola langganan</a>
+          {!urgent && <button type="button" onClick={() => setDismissed(true)} className="text-sm text-fg/40 hover:text-fg/70">Tutup</button>}
+        </div>
+      </div>
+    );
+  }
   if (!me.subscriptionEndsAt && !suspended) return null;
 
   const daysLeft = me.subscriptionEndsAt ? Math.ceil((new Date(me.subscriptionEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : 0;
@@ -215,6 +254,9 @@ function sessionAssets(session: any): SessionAsset[] {
   ];
 }
 
+// Drive thumbnails default to 800px — far more than a 160px gallery tile needs, and 30+ of them load per page.
+const galleryThumb = (url: string) => url.replace(/([?&]sz=)w\d+/, "$1w360");
+
 function formatDateInput(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -226,7 +268,7 @@ function formatDateInput(date: Date) {
 // client's whole set stays together), a date range, and a WhatsApp/email
 // search turn it back into something you can actually find a specific
 // customer's photos in.
-const MEDIA_LIBRARY_PAGE_SIZE = 8;
+const MEDIA_LIBRARY_PAGE_SIZE = 24;
 
 function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadingKeys }: { sessions: any[]; metrics: any; downloadAsset: (item: { url: string; type: string; session: any }) => void; printAsset: (item: { url: string; type: string; session: any }) => void; downloadingKeys: Set<string> }) {
   const brandName = useBoothConfig((state) => state.config.brandName) || "kami";
@@ -240,6 +282,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(MEDIA_LIBRARY_PAGE_SIZE);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const copyShareLink = async (sessionId: string, url: string) => {
     try {
       await navigator.clipboard.writeText(url);
@@ -280,6 +323,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   // previous wide search still in effect.
   useEffect(() => { setVisibleCount(MEDIA_LIBRARY_PAGE_SIZE); }, [dateFrom, dateTo, query]);
   const visibleSessions = filtered.slice(0, visibleCount);
+  const openSession = openSessionId ? sessions.find((item) => item.id === openSessionId) ?? null : null;
 
   const setQuickRange = (days: number) => {
     const to = new Date();
@@ -290,18 +334,21 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Foto" value={String(metrics.photos ?? 0)} />
-        <Metric label="Video" value={String(metrics.videos ?? 0)} />
-        <Metric label="GIF" value={String(metrics.gifs ?? 0)} />
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="grid shrink-0 grid-cols-3 gap-3">
+        {[["Foto", metrics.photos], ["Video", metrics.videos], ["GIF", metrics.gifs]].map(([label, value]) => (
+          <div key={String(label)} className="flex items-baseline justify-between gap-3 rounded-2xl border border-fg/10 bg-surface px-5 py-3 shadow-sm">
+            <span className="text-xs font-semibold uppercase tracking-[.14em] text-fg/45">{label}</span>
+            <span className="font-display text-2xl font-semibold">{String(value ?? 0)}</span>
+          </div>
+        ))}
       </div>
 
-      <section className={panel}>
+      <section className={`${panel} shrink-0 !p-4`}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[.16em] text-accent">FILTER</p>
-            <h3 className="mt-2 font-display text-2xl font-semibold">Cari sesi</h3>
+            <h3 className="mt-1 font-display text-xl font-semibold">Cari sesi</h3>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {[{ label: "Hari ini", days: 1 }, { label: "7 hari", days: 7 }, { label: "30 hari", days: 30 }, { label: "90 hari", days: 90 }].map((preset) => (
@@ -333,21 +380,70 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
         <p className="mt-4 text-xs text-fg/40">{filtered.length} sesi · {assetCount} aset{hasFilters ? " (terfilter)" : ""}</p>
       </section>
 
-      <div className="space-y-4">
+      {/* One tile per session showing only its finished frame (strip) — the full set of photos/videos/GIFs
+          loads only when a tile is opened, so the page never mounts hundreds of heavy media elements at once. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-3xl border border-fg/10 bg-surface p-3 shadow-sm">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {visibleSessions.map((session) => {
           const assets = sessionAssets(session);
-          const waDigits = session.customerWhatsapp ? String(session.customerWhatsapp).replace(/[^0-9]/g, "") : null;
-          const waUrl = waDigits
-            ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Halo! Ini foto/video sesi kamu dari ${brandName}.${session.shareUrl ? ` Bisa dilihat & didownload di sini: ${session.shareUrl}` : ""}`)}`
-            : null;
+          const cover = session.stripUrl ? galleryThumb(session.stripUrl) : (session.photoUrls?.[0] ? galleryThumb(session.photoUrls[0]) : null);
+          const photoCount = assets.filter((a) => a.type === "Foto").length;
+          const motionCount = assets.filter((a) => isMotionAsset(a.type)).length;
           return (
-            <article key={session.id} className={panel}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => setOpenSessionId(session.id)}
+              className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] text-left transition hover:border-accent/60 hover:shadow-lg"
+              style={{ contentVisibility: "auto", containIntrinsicSize: "auto 300px" }}
+            >
+              <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-fg/[0.06]">
+                {cover
+                  ? <img src={cover} alt="Hasil sesi" loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  : <span className="text-xs text-fg/30">Tanpa preview</span>}
+                <div className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6 text-[10px] font-semibold text-white">
+                  {photoCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 backdrop-blur">{photoCount} foto</span>}
+                  {motionCount > 0 && <span className="rounded-full bg-accent/80 px-2 py-0.5">{motionCount} video/GIF</span>}
+                </div>
+              </div>
+              <div className="p-2.5">
+                <p className="truncate text-xs font-semibold">{new Date(session.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                <p className="mt-0.5 truncate text-[11px] text-fg/45">{session.customerWhatsapp || session.customerEmail || `Sesi ${String(session.id).slice(0, 8)}`}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length === 0 && (
+        <div className={`${panel} text-center text-sm text-fg/40`}>
+          {sessionsWithMedia.length === 0 ? "Belum ada asset tersimpan." : "Tidak ada sesi yang cocok dengan filter ini."}
+        </div>
+      )}
+      {visibleCount < filtered.length && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + MEDIA_LIBRARY_PAGE_SIZE)}
+          className="w-full rounded-2xl border border-fg/15 py-3 text-sm text-fg/60 hover:border-accent hover:text-fg"
+        >
+          Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
+        </button>
+      )}
+      </div>
+
+      {openSession && (() => {
+        const session = openSession;
+        const assets = sessionAssets(session);
+        const waDigits = session.customerWhatsapp ? String(session.customerWhatsapp).replace(/[^0-9]/g, "") : null;
+        const waUrl = waDigits
+          ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Halo! Ini foto/video sesi kamu dari ${brandName}.${session.shareUrl ? ` Bisa dilihat & didownload di sini: ${session.shareUrl}` : ""}`)}`
+          : null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpenSessionId(null); }}>
+            <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-fg/10 bg-canvas shadow-2xl">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-fg/10 p-5">
                 <div>
                   <p className="text-sm font-semibold">{new Date(session.createdAt).toLocaleString("id-ID")}</p>
-                  <p className="mt-1 text-xs text-fg/40">
-                    Sesi {String(session.id).slice(0, 8)} · {session.paymentMethod ?? "belum dipilih"} · {money(Number(session.totalAmount ?? 0))}
-                  </p>
+                  <p className="mt-1 text-xs text-fg/40">Sesi {String(session.id).slice(0, 8)} · {session.paymentMethod ?? "belum dipilih"} · {money(Number(session.totalAmount ?? 0))}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg/55">
                     {session.customerWhatsapp && <span>📱 {session.customerWhatsapp}</span>}
                     {session.customerEmail && <span>✉️ {session.customerEmail}</span>}
@@ -355,81 +451,46 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {waUrl && (
-                    <a href={waUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-400/20">
-                      Hubungi via WhatsApp
-                    </a>
-                  )}
+                  {waUrl && <a href={waUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/20">Hubungi via WhatsApp</a>}
                   {session.shareUrl && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => copyShareLink(session.id, session.shareUrl)}
-                        className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg"
-                      >
-                        {copiedId === session.id ? "Tersalin!" : "Salin link"}
-                      </button>
-                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">
-                        Buka galeri
-                      </a>
+                      <button type="button" onClick={() => copyShareLink(session.id, session.shareUrl)} className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">{copiedId === session.id ? "Tersalin!" : "Salin link"}</button>
+                      <a href={session.shareUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-accent hover:text-fg">Buka galeri</a>
                     </>
                   )}
+                  <button type="button" onClick={() => setOpenSessionId(null)} aria-label="Tutup" className="rounded-xl border border-fg/15 px-3 py-2 text-xs text-fg/70 hover:border-fg/40 hover:text-fg">✕ Tutup</button>
                 </div>
               </div>
-
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-                {assets.map((asset, assetIndex) => (
-                  <div key={`${asset.url}-${assetIndex}`} className="group w-40 shrink-0 overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
-                    <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
-                      <div className="flex h-32 items-center justify-center bg-fg/5">
-                        {isMotionAsset(asset.type)
-                          ? <video src={asset.url} muted preload="none" className="h-full w-full object-cover" />
-                          : <img src={asset.url} alt={asset.type} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />}
-                      </div>
-                    </a>
-                    <div className="p-2.5">
-                      <p className="text-xs font-semibold">{asset.type}{asset.type === "Foto" ? ` #${asset.index + 1}` : ""}</p>
-                      <div className="mt-2 flex gap-1.5">
-                        {(() => {
-                          const key = `${session.id}-${asset.type}-${asset.index ?? 0}`;
-                          const isDownloading = downloadingKeys.has(key);
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => downloadAsset({ ...asset, session })}
-                              disabled={isDownloading}
-                              className="flex-1 rounded-lg border border-fg/15 px-2 py-1.5 text-[11px] text-fg/70 hover:border-accent hover:text-fg disabled:cursor-wait disabled:opacity-50"
-                            >
-                              {isDownloading ? "Mengunduh…" : "Download"}
-                            </button>
-                          );
-                        })()}
-                        {!isMotionAsset(asset.type) && (
-                          <button type="button" onClick={() => printAsset({ ...asset, session })} disabled={!window.studiodo?.printImage} className="flex-1 rounded-lg bg-accent/80 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">Print</button>
-                        )}
+              <div className="grid grid-cols-2 gap-3 overflow-y-auto p-5 sm:grid-cols-3 md:grid-cols-4">
+                {assets.map((asset, assetIndex) => {
+                  const key = `${session.id}-${asset.type}-${asset.index ?? 0}`;
+                  const isDownloading = downloadingKeys.has(key);
+                  return (
+                    <div key={`${asset.url}-${assetIndex}`} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/5">
+                      <a href={asset.downloadUrl ?? asset.url} target="_blank" rel="noreferrer" className="block">
+                        <div className="flex aspect-square items-center justify-center bg-fg/5">
+                          {asset.type === "Video" || asset.type === "Stop Motion"
+                            ? <video src={asset.url} muted preload="metadata" className="h-full w-full object-cover" />
+                            : <img src={asset.type === "Foto" ? galleryThumb(asset.url) : asset.url} alt={asset.type} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />}
+                        </div>
+                      </a>
+                      <div className="p-2.5">
+                        <p className="text-xs font-semibold">{asset.type}{asset.type === "Foto" ? ` #${asset.index + 1}` : ""}</p>
+                        <div className="mt-2 flex gap-1.5">
+                          <button type="button" onClick={() => downloadAsset({ ...asset, session })} disabled={isDownloading} className="flex-1 rounded-lg border border-fg/15 px-2 py-1.5 text-[11px] text-fg/70 hover:border-accent hover:text-fg disabled:cursor-wait disabled:opacity-50">{isDownloading ? "Mengunduh…" : "Download"}</button>
+                          {!isMotionAsset(asset.type) && (
+                            <button type="button" onClick={() => printAsset({ ...asset, session })} disabled={!window.studiodo?.printImage} className="flex-1 rounded-lg bg-accent/80 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">Print</button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </article>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className={`${panel} text-center text-sm text-fg/40`}>
-            {sessionsWithMedia.length === 0 ? "Belum ada asset tersimpan." : "Tidak ada sesi yang cocok dengan filter ini."}
+            </div>
           </div>
-        )}
-        {visibleCount < filtered.length && (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((count) => count + MEDIA_LIBRARY_PAGE_SIZE)}
-            className="w-full rounded-2xl border border-fg/15 py-3 text-sm text-fg/60 hover:border-accent hover:text-fg"
-          >
-            Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
-          </button>
-        )}
-      </div>
+        );
+      })()}
     </div>
   );
 }
@@ -456,6 +517,34 @@ type FinanceSubtab = (typeof FINANCE_SUBTABS)[number]["id"];
 // menu bar entirely (autoHideMenuBar in electron/main.cjs) to stay
 // kiosk-appropriate, so a permanent sidebar footer — visible from every
 // admin section, not just one tab — stands in for that convention instead.
+function KioskWindowToggle() {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!window.studiodo?.getKioskStatus) return;
+    const refresh = () => window.studiodo!.getKioskStatus().then((r) => setOpen(r.open)).catch(() => undefined);
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!window.studiodo?.getKioskStatus || open === null) return null;
+  const toggle = async () => {
+    if (open && !window.confirm("Tutup layar kiosk? Customer tidak bisa memakai photobooth sampai kiosk dibuka lagi.")) return;
+    setBusy(true);
+    try {
+      const r = open ? await window.studiodo!.closeKiosk() : await window.studiodo!.openKiosk();
+      setOpen(r.open);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" onClick={toggle} disabled={busy} className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition disabled:opacity-50 ${open ? "border-amber-400/40 text-amber-500 hover:bg-amber-500/10" : "border-emerald-400/40 text-emerald-500 hover:bg-emerald-500/10"}`}>
+      <Icon name="monitor" className="h-4 w-4" />{open ? "Tutup Kiosk" : "Buka Kiosk"}
+    </button>
+  );
+}
+
 function AppVersionFooter() {
   const [status, setStatus] = useState<StudiodoUpdaterStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -511,7 +600,7 @@ function AppVersionFooter() {
 }
 
 export default function AdminDashboard() {
-  const [section, setSection] = useState<Section>("control");
+  const [section, setSection] = useState<Section>("monitor");
   const [kioskSubtab, setKioskSubtab] = useState<KioskSubtab>("keys");
   const [financeSubtab, setFinanceSubtab] = useState<FinanceSubtab>("packages");
   const [overview, setOverview] = useState<any>({ sessions: [], metrics: {}, traffic: [] });
@@ -528,12 +617,19 @@ export default function AdminDashboard() {
   // a real error surface as a toast instead of silently doing nothing.
   const [downloadingKeys, setDownloadingKeys] = useState<Set<string>>(new Set());
 
+  const overviewFingerprintRef = useRef("");
   const loadOverview = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setRefreshing(true);
     try {
       const result = await api.getAdminOverview();
       if (result) {
-        setOverview(result);
+        // Background polls usually return identical data; swapping in a new object anyway re-rendered the whole
+        // dashboard (every gallery card + image) each time, which is what made the admin feel heavy while idle.
+        const fingerprint = JSON.stringify(result);
+        if (fingerprint !== overviewFingerprintRef.current) {
+          overviewFingerprintRef.current = fingerprint;
+          setOverview(result);
+        }
         setLastUpdated(new Date());
       }
     } catch (error) {
@@ -553,7 +649,7 @@ export default function AdminDashboard() {
   // Polls in the background, paused while the tab isn't visible so a
   // forgotten background tab doesn't poll forever for nothing.
   useEffect(() => {
-    const POLL_MS = 15000;
+    const POLL_MS = 45000;
     let inFlight = false;
     const tick = async () => {
       if (document.visibilityState !== "visible" || inFlight) return;
@@ -604,7 +700,7 @@ export default function AdminDashboard() {
     if (downloadingKeys.has(key)) return;
     setDownloadingKeys((prev) => new Set(prev).add(key));
     const suffix = item.type === "Foto" ? `-${(item.index ?? 0) + 1}` : "";
-    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${isMotionAsset(item.type) ? "webm" : "jpg"}`;
+    const filename = `${item.type.toLowerCase().replace(/\s+/g, "-")}${suffix}-${item.session.id}.${isMotionAsset(item.type) ? (item.type === "GIF" ? "gif" : "mp4") : "jpg"}`;
     try {
       // In the Electron app, save straight to disk from the main process —
       // much faster and skips a save dialog per file (see electron/main.cjs
@@ -655,13 +751,15 @@ export default function AdminDashboard() {
   };
 
   const currentSection = sections.find((item) => item.id === section)!;
+  // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
+  const fitSection = section === "media" || section === "crm";
   const navButton = (item: (typeof sections)[number]) => (
     <button
       key={item.id}
       type="button"
       onClick={() => setSection(item.id)}
       aria-current={section === item.id ? "page" : undefined}
-      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/60 hover:bg-fg/[0.06] hover:text-fg"}`}
+      className={`group flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.06] hover:text-fg"}`}
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
       {item.label}
@@ -669,11 +767,12 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="flex h-full overflow-hidden bg-[var(--kiosk-background)] text-[var(--kiosk-text)]">
-      <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-fg/10 bg-surface p-4 md:flex">
-        <div className="mb-4 flex items-center gap-3 px-1 pt-1">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="camera" className="h-5 w-5" /></span>
-          <div className="min-w-0"><p className="font-display text-lg font-bold leading-tight">STUDIODO</p><p className="text-[11px] font-medium text-fg/45">Admin booth</p></div>
+    <div className="flex h-full gap-3 overflow-hidden bg-[var(--kiosk-background)] p-0 text-[var(--kiosk-text)] md:p-3 md:gap-4">
+      <NetProgressBar />
+      <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm md:flex">
+        <div className="mb-4 px-2 pt-2">
+          <BrandLogo className="h-8" />
+          <p className="mt-1.5 text-[11px] font-medium text-fg/45">Admin booth</p>
         </div>
         <nav className="space-y-4">
           {sectionGroups.map((group) => (
@@ -685,7 +784,6 @@ export default function AdminDashboard() {
           <div>
             <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">Konten</p>
             <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="frame" className="h-[18px] w-[18px] shrink-0" />Kelola Frame</Link>
-            <Link href="/admin/customers" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="user" className="h-[18px] w-[18px] shrink-0" />CRM detail</Link>
           </div>
         </nav>
         <div className="mt-auto space-y-2 pt-6">
@@ -693,21 +791,37 @@ export default function AdminDashboard() {
           <AdminKeyboardToggle showLabel />
           <Link href="/" className="flex items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Kiosk</Link>
           <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-red-400/50 hover:text-red-500"><Icon name="logout" className="h-4 w-4" />Logout</button>
+          <KioskWindowToggle />
+          {window.studiodo?.restartApp && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { if (window.confirm("Restart aplikasi STUDIODO? Kiosk & admin akan ditutup lalu dibuka lagi.")) void window.studiodo!.restartApp(); }}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-fg/10 px-2 py-2.5 text-xs font-medium text-fg/60 transition hover:border-accent/50 hover:text-fg"
+              ><Icon name="refresh" className="h-4 w-4" />Restart</button>
+              <button
+                type="button"
+                onClick={() => { if (window.confirm("Tutup aplikasi STUDIODO sepenuhnya? Kiosk akan berhenti sampai aplikasi dibuka lagi.")) void window.studiodo!.quitApp(); }}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-red-400/30 px-2 py-2.5 text-xs font-medium text-red-500/80 transition hover:bg-red-500/10 hover:text-red-500"
+              ><Icon name="power" className="h-4 w-4" />Tutup</button>
+            </div>
+          )}
           <AppVersionFooter />
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
-        <div className="mx-auto max-w-7xl">
+      <main className="min-w-0 flex-1 overflow-y-auto p-4 md:px-4 md:py-2">
+        <div className={`mx-auto max-w-7xl ${fitSection ? "flex h-full min-h-0 flex-col" : ""}`}>
           <SubscriptionBanner me={me} />
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="mb-5 flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="eyebrow">{currentSection.group}</p>
-              <h2 className="mt-1 font-display text-3xl font-bold tracking-tight md:text-4xl">{currentSection.label}</h2>
+              <h2 className="mt-1 font-display text-2xl font-bold tracking-tight md:text-[32px]">{currentSection.label}</h2>
               <p className="mt-1.5 text-sm text-[var(--kiosk-muted)] md:text-base">{currentSection.hint}</p>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && <span className="hidden text-xs text-fg/40 lg:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
               <div className="flex items-center gap-2 md:hidden"><AdminKeyboardToggle /><AdminThemeToggle /></div>
+              <AdminNotificationBell />
               <button
                 type="button"
                 onClick={() => loadOverview()}
@@ -727,12 +841,14 @@ export default function AdminDashboard() {
           {initialLoading ? <OverviewSkeleton /> : (
           <AnimatePresence mode="wait">
             <motion.div
+              className={fitSection ? "min-h-0 flex-1" : undefined}
               key={section}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
             >
+          {section === "monitor" && <LiveMonitorPanel />}
           {section === "control" && <AdminPlaceholder />}
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
@@ -776,7 +892,7 @@ export default function AdminDashboard() {
               {financeSubtab === "withdraw" && <WithdrawalPanel />}
             </div>
           )}
-          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric icon="users" label="Total clients" value={String(metrics.customers ?? 0)} /><Metric icon="phone" label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric icon="shield" label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
+          {section === "crm" && <CrmPanel />}
           {section === "traffic" && <TrafficMonitor sessions={sessions} traffic={overview.traffic} metrics={metrics} />}
           {section === "media" && <MediaLibrary sessions={sessions} metrics={metrics} downloadAsset={downloadAsset} printAsset={printAsset} downloadingKeys={downloadingKeys} />}
             </motion.div>

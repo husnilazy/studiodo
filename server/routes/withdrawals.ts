@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, tenants, withdrawals } from "../db/schema.js";
@@ -9,6 +10,7 @@ import { logEvent } from "../lib/platformEvents.js";
 // Tenant side of QRIS withdrawals (mounted at /api/withdrawals). The superadmin side — reviewing, paying and
 // rejecting requests — lives in routes/superadmin.ts.
 export const withdrawalsRouter = Router();
+withdrawalsRouter.param("id", validateUuidParam("Permintaan tidak ditemukan"));
 withdrawalsRouter.use(requireAdminAuth);
 
 // GET /api/withdrawals — balance summary + the tenant's requests, newest first

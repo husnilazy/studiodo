@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -9,6 +10,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 
 export const vouchersRouter = Router();
+vouchersRouter.param("id", validateUuidParam("Voucher tidak ditemukan"));
 
 // Shared by the single-create and bulk-create endpoints — same validation
 // either way, just applied to N generated codes instead of one given code.
@@ -172,13 +174,21 @@ vouchersRouter.post("/bulk", requireAdminAuth, async (req, res) => {
 });
 
 vouchersRouter.patch("/:id", requireAdminAuth, async (req, res) => {
-  const patch = { ...req.body };
+  // Whitelisted: spreading the body let a client rewrite usedCount, voucherType, cashAmount, createdAt …
+  const patch: Record<string, any> = {};
+  for (const key of ["code", "discountType", "discountValue", "maxUses", "active", "startsAt", "expiresAt", "customerName"]) {
+    if (req.body?.[key] !== undefined) patch[key] = req.body[key];
+  }
+  if (patch.discountType !== undefined && !["percent", "fixed", "free"].includes(String(patch.discountType))) return res.status(400).json({ error: "Tipe diskon tidak valid" });
+  if (patch.discountValue != null && (!Number.isFinite(Number(patch.discountValue)) || Number(patch.discountValue) < 0)) return res.status(400).json({ error: "Nilai diskon tidak valid" });
+  if (patch.active !== undefined) patch.active = Boolean(patch.active);
+  if (patch.maxUses != null && patch.maxUses !== "") patch.maxUses = Math.max(0, Math.floor(Number(patch.maxUses)) || 0);
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
   if (patch.code) patch.code = String(patch.code).trim().toUpperCase();
   if (patch.discountValue != null) patch.discountValue = String(Number(patch.discountValue));
   if (patch.maxUses === "") patch.maxUses = null;
   if (patch.startsAt !== undefined) patch.startsAt = patch.startsAt ? new Date(patch.startsAt) : null;
   if (patch.expiresAt !== undefined) patch.expiresAt = patch.expiresAt ? new Date(patch.expiresAt) : null;
-  delete patch.tenantId;
   try {
     const [row] = await db.update(vouchers).set(patch).where(and(eq(vouchers.id, String(req.params.id)), eq(vouchers.tenantId, req.tenantId!))).returning();
     if (!row) return res.status(404).json({ error: "Voucher tidak ditemukan" });

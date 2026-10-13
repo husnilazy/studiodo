@@ -1,9 +1,12 @@
-import PlansPanel from "@/components/PlansPanel";
 import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import { Icon } from "@/components/kiosk/Icons";
+import { BrandLogo } from "@/components/BrandLogo";
+import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
+import NetProgressBar from "@/components/NetProgressBar";
+import SecurityAlertsPanel from "@/components/SecurityAlertsPanel";
 import { useAdminThemeScope } from "@/lib/adminTheme";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   superadminApi,
   getSuperadminToken,
@@ -19,13 +22,20 @@ import {
   type PlatformEvent,
   type TenantApplication,
   type FleetAlertKiosk,
+  type VolumeTier,
 } from "@/lib/superadminApi";
-import { SiteContentPanel } from "@/components/SiteContentPanel";
-import { BlogPanel } from "@/components/BlogPanel";
-import { MarketplacePanel } from "@/components/MarketplacePanel";
-import { CreatorsPanel } from "@/components/CreatorsPanel";
-import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
-import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
+// Heavy panels load on first visit instead of with the dashboard, so the first paint after login is much lighter and
+// switching sections only pays for the panel you open.
+const PlansPanel = lazy(() => import("@/components/PlansPanel"));
+const SiteContentPanel = lazy(() => import("@/components/SiteContentPanel").then((m) => ({ default: m.SiteContentPanel })));
+const BlogPanel = lazy(() => import("@/components/BlogPanel").then((m) => ({ default: m.BlogPanel })));
+const MarketplacePanel = lazy(() => import("@/components/MarketplacePanel").then((m) => ({ default: m.MarketplacePanel })));
+const CreatorsPanel = lazy(() => import("@/components/CreatorsPanel").then((m) => ({ default: m.CreatorsPanel })));
+const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").then((m) => ({ default: m.BillingOrdersPanel })));
+const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
+const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
+const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
+const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -220,7 +230,7 @@ function PlatformOverviewPanel() {
   }, [rangeDays]);
 
   if (!overview) return null;
-  const { tenants, kiosks, sessions } = overview;
+  const { tenants, kiosks, sessions, booths } = overview;
   const activeCount = tenants.byStatus.active ?? 0;
   const trialCount = tenants.byStatus.trial ?? 0;
   const suspendedCount = tenants.byStatus.suspended ?? 0;
@@ -237,6 +247,14 @@ function PlatformOverviewPanel() {
         <StatCard label="Total sesi" value={String(sessions.total)} detail={`${sessions.paid} sesi berhasil bayar`} />
         <StatCard label="Revenue platform" value={money(sessions.revenue)} detail="Semua tenant, sepanjang waktu" />
       </div>
+      {booths && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Booth aktif" value={String(booths.total)} detail={`${booths.paid} berlangganan · ${booths.trial} trial`} />
+          <StatCard label="Booth belum bayar" value={String(booths.unpaid)} detail="Key dibuat tapi belum berlangganan" tone={booths.unpaid > 0 ? "amber" : undefined} />
+          <StatCard label="Booth terkunci" value={String(booths.locked)} detail="Trial/langganan habis atau belum bayar" tone={booths.locked > 0 ? "amber" : undefined} />
+          <StatCard label="Segera habis (7h)" value={String(booths.expiringSoon)} detail="Booth berlangganan/trial" tone={booths.expiringSoon > 0 ? "amber" : undefined} />
+        </div>
+      )}
       {overview.subscriptions && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Pendapatan langganan (30h)" value={money(overview.subscriptions.revenue30d)} detail={`${overview.subscriptions.payments30d} pembayaran dicatat`} />
@@ -409,12 +427,12 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
       </div>
       <form onSubmit={submit} className="relative w-full max-w-sm rounded-[2rem] border border-fg/10 bg-surface p-8 shadow-glass">
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="shield" className="h-6 w-6" /></span>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-        <h1 className="mt-1 font-display text-2xl font-bold">Admin Pusat</h1>
+        <div className="mt-5"><BrandLogo className="h-8" /></div>
+        <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
         <p className="mt-2 text-sm text-fg/50">Panel superadmin — kelola semua tenant, paket harga, dan pembayaran di platform ini.</p>
         <div className="mt-6 space-y-3">
-          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
         </div>
         {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
         <button type="submit" disabled={submitting || !email || !password} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
@@ -429,6 +447,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 function PlatformSettingsPanel() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [draft, setDraft] = useState({ defaultTrialDays: "7", renewalWhatsapp: "", renewalCheckoutUrl: "", gracePeriodDays: "3", qrisFeePercent: "0.7", withdrawalMinAmount: "50000", withdrawalFlatFee: "0" });
+  const [tiers, setTiers] = useState<{ minBooths: string; percent: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -445,6 +464,7 @@ function PlatformSettingsPanel() {
         withdrawalMinAmount: String(result.withdrawalMinAmount),
         withdrawalFlatFee: String(result.withdrawalFlatFee),
       });
+      setTiers((result.volumeDiscounts ?? []).map((t) => ({ minBooths: String(t.minBooths), percent: String(t.percent) })));
     });
   };
   useEffect(() => { load(); }, []);
@@ -461,6 +481,7 @@ function PlatformSettingsPanel() {
         qrisFeePercent: Number(draft.qrisFeePercent) || 0,
         withdrawalMinAmount: Number(draft.withdrawalMinAmount) || 0,
         withdrawalFlatFee: Number(draft.withdrawalFlatFee) || 0,
+        volumeDiscounts: tiers.filter((t) => t.minBooths.trim() && t.percent.trim()).map((t): VolumeTier => ({ minBooths: Number(t.minBooths), percent: Number(t.percent) })),
       });
       if (result) setSettings(result);
       setMessage("Tersimpan.");
@@ -496,7 +517,26 @@ function PlatformSettingsPanel() {
           <input placeholder="https://studiodo.id/pricing" className={inputClass} value={draft.renewalCheckoutUrl} onChange={(e) => setDraft({ ...draft, renewalCheckoutUrl: e.target.value })} />
         </label>
       </div>
-      <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan lewat sebelum kiosk benar-benar terkunci.</p>
+      <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan berbayar lewat sebelum booth benar-benar terkunci. Trial tidak punya masa tenggang: langsung terkunci saat habis.</p>
+      <div className="mt-6 border-t border-fg/10 pt-5">
+        <p className="text-sm font-semibold">Diskon banyak booth</p>
+        <p className="mt-0.5 text-xs text-fg/45">Harga paket dihitung per booth. Tenant yang berlangganan banyak booth sekaligus otomatis dapat potongan dari tier di bawah. Diskon khusus per tenant diatur di detail tenant; yang berlaku adalah yang terbaik (tidak ditumpuk).</p>
+        <div className="mt-3 space-y-2">
+          {tiers.map((tier, index) => (
+            <div key={index} className="flex flex-wrap items-end gap-3">
+              <label className="text-sm text-fg/60">Mulai dari (booth)
+                <input type="number" min={2} max={100} className={`${inputClass} w-32`} value={tier.minBooths} onChange={(e) => setTiers(tiers.map((t, i) => (i === index ? { ...t, minBooths: e.target.value } : t)))} />
+              </label>
+              <label className="text-sm text-fg/60">Diskon (%)
+                <input type="number" min={1} max={90} className={`${inputClass} w-28`} value={tier.percent} onChange={(e) => setTiers(tiers.map((t, i) => (i === index ? { ...t, percent: e.target.value } : t)))} />
+              </label>
+              <button type="button" onClick={() => setTiers(tiers.filter((_, i) => i !== index))} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-red-400 hover:text-red-300">Hapus</button>
+            </div>
+          ))}
+          {tiers.length === 0 && <p className="text-xs text-fg/40">Belum ada tier — tidak ada diskon volume.</p>}
+        </div>
+        <button type="button" onClick={() => setTiers([...tiers, { minBooths: "", percent: "" }])} className="mt-3 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/70 hover:border-accent">+ Tambah tier</button>
+      </div>
       <div className="mt-6 border-t border-fg/10 pt-5">
         <p className="text-sm font-semibold">Penarikan saldo QRIS</p>
         <p className="mt-0.5 text-xs text-fg/45">Hanya untuk tenant yang QRIS-nya ditampung akun STUDIODO.</p>
@@ -582,7 +622,7 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
         </div>
       </div>
 
-      <div className="mt-5 space-y-2">
+      <div className="mt-5 max-h-[62vh] space-y-2 overflow-y-auto pr-1">
         {events.map((event) => (
           <div key={event.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -684,7 +724,7 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-display text-lg font-semibold">{application.businessName}</p>
-                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""}</p>
+                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""} <span title={application.emailVerifiedAt ? `Terverifikasi ${formatDate(application.emailVerifiedAt)}` : "Pengaju belum mengklik tautan verifikasi di email"} className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${application.emailVerifiedAt ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{application.emailVerifiedAt ? "Email terverifikasi ✓" : "Email belum diverifikasi"}</span></p>
                 <p className="mt-1 text-xs text-fg/35">
                   {[application.businessType, application.city, application.referralSource ? `via ${application.referralSource}` : null].filter(Boolean).join(" · ")}
                 </p>
@@ -692,6 +732,7 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
                 <p className="mt-1 text-xs text-fg/30">Diajukan {formatDate(application.createdAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <WhatsAppFollowUp phone={application.ownerWhatsapp} context="application" vars={{ owner: application.ownerName, business: application.businessName }} />
                 {application.status !== "pending" ? (
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>
                     {application.status === "converted" ? "Diterima" : "Ditolak"}
@@ -790,16 +831,16 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
           <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
         </div>
       </div>
-      <div className="mt-5 overflow-x-auto">
+      <div className="mt-5 max-h-[60vh] overflow-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/45">
+          <thead className="sticky top-0 z-10 bg-surface text-fg/45">
             <tr>
               <th className="p-3">Tenant</th>
               <th className="p-3">Admin</th>
               <th className="p-3">Plan</th>
               <th className="p-3">Status</th>
               <th className="p-3">Langganan</th>
-              <th className="p-3">Kiosk</th>
+              <th className="p-3">Booth</th>
               <th className="p-3">Sesi</th>
               <th className="p-3">Revenue</th>
               <th className="p-3">Extend cepat</th>
@@ -850,7 +891,14 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                       <StatusPill subscriptionEndsAt={tenant.subscriptionEndsAt} locked={tenant.locked} />
                     </div>
                   </td>
-                  <td className="p-3 text-fg/60">{tenant.onlineKioskCount}/{tenant.kioskCount}</td>
+                  <td className="p-3 text-fg/60">
+                    {tenant.onlineKioskCount}/{tenant.kioskCount} online
+                    {tenant.licenses && (tenant.licenses.trial > 0 || tenant.licenses.unpaid > 0 || tenant.licenses.locked > 0) && (
+                      <p className="text-[11px] text-fg/40">
+                        {tenant.licenses.paid} bayar{tenant.licenses.trial > 0 ? ` · ${tenant.licenses.trial} trial` : ""}{tenant.licenses.unpaid > 0 ? ` · ${tenant.licenses.unpaid} belum bayar` : ""}{tenant.licenses.locked > 0 ? ` · ${tenant.licenses.locked} terkunci` : ""}
+                      </p>
+                    )}
+                  </td>
                   <td className="p-3 text-fg/60">{tenant.sessionCount}</td>
                   <td className="p-3 text-fg/60">{money(tenant.revenue)}</td>
                   <td className="p-3">
@@ -866,6 +914,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                           Simpan
                         </button>
                       )}
+                      <WhatsAppFollowUp phone={tenant.ownerWhatsapp} context={tenant.locked || tenant.expiringSoon ? "expiring" : "tenant"} vars={{ owner: tenant.ownerName, business: tenant.name, days: daysRemaining(tenant.subscriptionEndsAt) }} compact />
                       <button type="button" onClick={() => onSelectTenant(tenant.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">Detail</button>
                     </div>
                   </td>
@@ -887,7 +936,7 @@ const EMPTY_PROFILE: Partial<TenantProfileFields> = { ownerName: "", ownerWhatsa
 function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [draft, setDraft] = useState({ name: "", slug: "", email: "", password: "", plan: "" });
+  const [draft, setDraft] = useState({ name: "", slug: "", email: "", password: "", plan: "", trialDays: "" });
   const [profile, setProfile] = useState<Partial<TenantProfileFields>>(EMPTY_PROFILE);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -906,11 +955,12 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
         email: draft.email.trim(),
         password: draft.password,
         plan: draft.plan || undefined,
+        trialDays: draft.trialDays.trim() ? Number(draft.trialDays) : undefined,
         ...profile,
       });
       if (!created) throw new Error("Gagal membuat tenant");
       setResult({ kioskKey: created.kioskKey, adminEmail: created.adminEmail, slug: created.tenant.slug, trialDays: created.trialDays });
-      setDraft({ name: "", slug: "", email: "", password: "", plan: "" });
+      setDraft({ name: "", slug: "", email: "", password: "", plan: "", trialDays: "" });
       setProfile(EMPTY_PROFILE);
       onCreated();
     } catch (err) {
@@ -949,7 +999,7 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
                   {copied ? "Tersalin!" : "Salin"}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-emerald-100/50">Tempel key ini ke layar "Setup / Pair kiosk ini" di aplikasi Electron tenant ini.</p>
+              <p className="mt-2 text-xs text-emerald-100/50">Ini key <b>trial {result.trialDays} hari</b>. Tempel ke layar "Setup kiosk ini" di aplikasi STUDIODO; saat trial habis kiosk terkunci sampai tenant berlangganan.</p>
             </div>
             <button type="button" onClick={() => setResult(null)} className="mt-4 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60">Buat tenant lain</button>
           </div>
@@ -968,7 +1018,10 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
               <label className="text-sm text-fg/60">Password admin
                 <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} autoComplete="new-password" />
               </label>
-              <label className="text-sm text-fg/60 sm:col-span-2">Plan awal (opsional)
+              <label className="text-sm text-fg/60">Lama trial booth pertama (hari)
+                <input className={inputClass} type="number" min={1} max={3650} placeholder="Kosong = default platform" value={draft.trialDays} onChange={(e) => setDraft({ ...draft, trialDays: e.target.value })} />
+              </label>
+              <label className="text-sm text-fg/60">Plan awal (opsional)
                 <select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
                   <option value="">Trial (default)</option>
                   {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
@@ -1009,6 +1062,8 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const liveKeys = tenant.kioskKeys.filter((k) => !k.revokedAt);
+  const [picked, setPicked] = useState<string[]>([]);
 
   const applyPlan = (id: string) => {
     setPlanId(id);
@@ -1027,7 +1082,7 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
     if (!Number.isFinite(daysNum) || daysNum <= 0) return setError("Periode tidak valid");
     setSubmitting(true);
     try {
-      const result = await superadminApi.recordPayment(tenant.id, { amount: amountNum, periodDays: daysNum, method, note: note.trim() || undefined, planId: planId || null });
+      const result = await superadminApi.recordPayment(tenant.id, { amount: amountNum, periodDays: daysNum, method, note: note.trim() || undefined, planId: planId || null, keyIds: picked.length > 0 ? picked : undefined });
       if (!result) throw new Error("Gagal mencatat pembayaran");
       setAmount("");
       setNote("");
@@ -1061,10 +1116,65 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
         </label>
         <label className="text-sm text-fg/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       </div>
+      {liveKeys.length > 0 && (
+        <div className="mt-3">
+          <p className="text-sm text-fg/60">Booth yang dibayar <span className="text-fg/35">(kosong = semua booth berlangganan/trial)</span></p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {liveKeys.map((k) => {
+              const on = picked.includes(k.id);
+              return (
+                <button key={k.id} type="button" onClick={() => setPicked(on ? picked.filter((id) => id !== k.id) : [...picked, k.id])} className={`rounded-full border px-3 py-1 text-xs ${on ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55"}`}>
+                  {k.label ?? "(tanpa label)"} · {k.licenseType === "trial" ? "trial" : k.licenseType === "unpaid" ? "belum bayar" : "bayar"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-fg/35">Nominal di atas adalah total untuk semua booth yang dipilih. Booth trial/belum bayar otomatis menjadi berlangganan.</p>
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
       <button type="button" onClick={submit} disabled={submitting || !amount} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">
         {submitting ? "Menyimpan…" : "Catat & perpanjang langganan"}
       </button>
+    </div>
+  );
+}
+
+// Negotiated booth discount for one tenant (e.g. a 12-booth event organiser). Combines with the platform volume tiers by
+// "best of", never stacked — see server/lib/boothPricing.ts.
+function TenantDiscountForm({ tenant, onSaved }: { tenant: TenantDetail; onSaved: () => void }) {
+  const [percent, setPercent] = useState(String(tenant.boothDiscountPercent ?? 0));
+  const [note, setNote] = useState(tenant.boothDiscountNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => { setPercent(String(tenant.boothDiscountPercent ?? 0)); setNote(tenant.boothDiscountNote ?? ""); }, [tenant.id, tenant.boothDiscountPercent, tenant.boothDiscountNote]);
+
+  const save = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await superadminApi.updateTenant(tenant.id, { boothDiscountPercent: Number(percent) || 0, boothDiscountNote: note.trim() || null });
+      setMessage("Tersimpan.");
+      onSaved();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Potongan harga khusus</p>
+      <p className="mt-1 text-xs text-fg/40">Berlaku untuk semua booth yang tenant ini beli. Dibandingkan dengan diskon banyak booth otomatis; yang lebih besar yang dipakai.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-[110px_1fr]">
+        <label className="text-sm text-fg/60">Diskon (%)<input className={inputClass} type="number" min={0} max={90} value={percent} onChange={(e) => setPercent(e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Catatan internal<input className={inputClass} placeholder="mis. Kontrak 12 booth event organizer" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button type="button" onClick={save} disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:opacity-50">{busy ? "Menyimpan…" : "Simpan diskon"}</button>
+        {message && <span className="text-xs text-fg/50">{message}</span>}
+      </div>
     </div>
   );
 }
@@ -1121,6 +1231,13 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
       {tenant && (
         <div className="mt-5 grid gap-5 lg:grid-cols-[1.3fr_1fr]">
           <div className="space-y-5">
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Booth &amp; lisensi</p>
+              <div className="mt-3">
+                <LicensesPanel tenantId={tenantId} onChanged={refreshAll} />
+              </div>
+            </div>
+
             <RecordPaymentForm tenant={tenant} plans={plans} onRecorded={refreshAll} />
 
             <div>
@@ -1185,8 +1302,10 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
               </div>
             </div>
 
+            <TenantDiscountForm tenant={tenant} onSaved={refreshAll} />
+
             <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Kiosk key ({tenant.kioskKeys.length})</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Kiosk key — diagnostik ({tenant.kioskKeys.length})</p>
               <div className="mt-2 space-y-2">
                 {tenant.kioskKeys.map((key) => {
                   const diag = key.lastDiagnostics;
@@ -1215,21 +1334,33 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "settings";
-const SECTIONS: { id: Section; label: string; icon: string }[] = [
-  { id: "overview", label: "Ringkasan", icon: "⌘" },
-  { id: "tenants", label: "Tenant", icon: "◎" },
-  { id: "applications", label: "Aplikasi Tenant", icon: "✦" },
-  { id: "events", label: "Aktivitas & Error", icon: "⌁" },
-  { id: "plans", label: "Plans", icon: "▣" },
-  { id: "website", label: "Konten Website", icon: "❖" },
-  { id: "blog", label: "Blog", icon: "✎" },
-  { id: "marketplace", label: "Marketplace", icon: "❒" },
-  { id: "creators", label: "Kreator", icon: "✧" },
-  { id: "billing", label: "Pembayaran", icon: "₪" },
-  { id: "withdrawals", label: "Penarikan QRIS", icon: "⇩" },
-  { id: "settings", label: "Pengaturan", icon: "⚙" },
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
+const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
+  { title: "Platform", items: [
+    { id: "overview", label: "Ringkasan", icon: "chart" },
+    { id: "events", label: "Aktivitas & Error", icon: "activity" },
+    { id: "notifications", label: "Notifikasi", icon: "bell" },
+    { id: "email", label: "Email", icon: "mail" },
+  ] },
+  { title: "Tenant", items: [
+    { id: "tenants", label: "Tenant", icon: "users" },
+    { id: "licenses", label: "Lisensi & Trial", icon: "lock" },
+    { id: "applications", label: "Aplikasi Tenant", icon: "user-plus" },
+  ] },
+  { title: "Keuangan", items: [
+    { id: "billing", label: "Pembayaran", icon: "card" },
+    { id: "withdrawals", label: "Penarikan QRIS", icon: "wallet" },
+    { id: "plans", label: "Plans", icon: "box" },
+  ] },
+  { title: "Konten", items: [
+    { id: "website", label: "Konten Website", icon: "globe" },
+    { id: "blog", label: "Blog", icon: "file" },
+    { id: "marketplace", label: "Marketplace", icon: "image" },
+    { id: "creators", label: "Kreator", icon: "sparkles" },
+  ] },
+  { title: "Sistem", items: [{ id: "settings", label: "Pengaturan", icon: "sliders" }] },
 ];
+const SECTIONS = SECTION_GROUPS.flatMap((g) => g.items);
 
 export default function SuperadminDashboard() {
   useAdminThemeScope();
@@ -1240,6 +1371,8 @@ export default function SuperadminDashboard() {
   const [section, setSection] = useState<Section>("overview");
   const [pendingApplicationCount, setPendingApplicationCount] = useState(0);
   const [openWithdrawalCount, setOpenWithdrawalCount] = useState(0);
+  const [creatorQueueCount, setCreatorQueueCount] = useState(0);
+  const [marketReportCount, setMarketReportCount] = useState(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const tenantsReloadRef = useRef<(() => void) | null>(null);
 
@@ -1268,6 +1401,8 @@ export default function SuperadminDashboard() {
   // a successful login.
   useEffect(() => {
     if (status === "authenticated") {
+      superadminApi.getCreatorQueueSummary().then((x) => setCreatorQueueCount(x?.pending ?? 0)).catch(() => undefined);
+      superadminApi.getMarketReportsSummary().then((x) => setMarketReportCount(x?.open ?? 0)).catch(() => undefined);
       loadPlans();
       loadTenantsForFilter();
       loadPendingApplicationCount();
@@ -1318,48 +1453,75 @@ export default function SuperadminDashboard() {
     setSection("tenants");
   };
 
+  const current = SECTIONS.find((item) => item.id === section);
+  const badgeFor = (id: Section) => (id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
+
   return (
-    <div className="min-h-screen bg-canvas px-6 py-10 text-fg">
+    <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
+      <NetProgressBar />
       <AdminKeyboard />
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+      <aside className="hidden w-[250px] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
+        <div className="mb-5 px-2">
+          <BrandLogo className="h-7" />
+          <h1 className="mt-1.5 font-display text-xl font-bold leading-tight">Admin Pusat</h1>
+        </div>
+        <nav className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2">
+          {SECTION_GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-fg/40">{group.title}</div>
+              <ul className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSection(item.id)}
+                      aria-current={section === item.id ? "page" : undefined}
+                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
+                    >
+                      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {badgeFor(item.id) > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badgeFor(item.id)}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        {email && <p className="mt-3 truncate rounded-2xl bg-fg/[0.05] px-3 py-2.5 text-xs text-fg/55">Masuk sebagai<br /><span className="font-semibold text-fg/80">{email}</span></p>}
+      </aside>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-            <h1 className="mt-1 font-display text-3xl font-bold">Admin Pusat</h1>
-            {email && <p className="mt-1 text-sm text-fg/45">Masuk sebagai {email}</p>}
+            <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-accent lg:hidden">Admin Pusat</p>
+            <h2 className="font-display text-2xl font-bold leading-tight">{current?.label}</h2>
           </div>
           <div className="flex items-center gap-2">
             <AdminKeyboardToggle />
             <AdminThemeToggle />
-            <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
+            <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
               <Icon name="logout" className="h-4 w-4" />
               Keluar
             </button>
           </div>
         </header>
 
-        <nav className="flex flex-wrap gap-2 border-b border-fg/10 pb-4">
+        <nav className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 lg:hidden" aria-label="Bagian">
           {SECTIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSection(item.id)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}
-            >
-              <span className="opacity-70">{item.icon}</span>
+            <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${section === item.id ? "bg-fg text-canvas" : "bg-surface text-fg/60"}`}>
               {item.label}
-              {item.id === "withdrawals" && openWithdrawalCount > 0 && (
-                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{openWithdrawalCount}</span>
-              )}
-              {item.id === "applications" && pendingApplicationCount > 0 && (
-                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{pendingApplicationCount}</span>
-              )}
+              {badgeFor(item.id) > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badgeFor(item.id)}</span>}
             </button>
           ))}
         </nav>
 
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+        <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
+        <div className="mx-auto max-w-6xl space-y-6 pb-8">
         {section === "overview" && (
           <div className="space-y-6">
+            <SecurityAlertsPanel />
             <FleetAlertsPanel />
             <PlatformOverviewPanel />
           </div>
@@ -1380,6 +1542,8 @@ export default function SuperadminDashboard() {
           </div>
         )}
 
+        {section === "licenses" && <LicensesPanel tenants={tenants} onChanged={loadTenantsForFilter} />}
+
         {section === "applications" && (
           <TenantApplicationsPanel onConverted={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />
         )}
@@ -1398,12 +1562,19 @@ export default function SuperadminDashboard() {
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
 
+        {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
+
+        {section === "email" && <EmailLogPanel />}
+
         {section === "settings" && (
           <div className="grid gap-6">
             <PlatformSettingsPanel />
             <PaymentGatewaysPanel />
           </div>
         )}
+        </div>
+        </Suspense>
+        </main>
       </div>
     </div>
   );

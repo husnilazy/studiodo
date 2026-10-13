@@ -10,4 +10,4 @@ export const panel = "rounded-3xl border border-fg/10 bg-surface p-5 shadow-glas
 // "currently active/in-progress" (e.g. FrameManagement's batch queue / edit panel).
 export const panelAccent = "rounded-3xl border border-accent/40 bg-surface p-5 shadow-glass";
 export const sectionClass = "rounded-2xl border border-fg/10 bg-fg/[0.03] p-5";
-export const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20";
+export const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent";

@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { platformSettings, tenants } from "../db/schema.js";
+import { kioskKeys, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
-import { computeLocked } from "../lib/subscription.js";
+import { computeKeyLock, getGracePeriodDays } from "../lib/license.js";
 import { logEvent } from "../lib/platformEvents.js";
 
 // --- Public booth directory ---------------------------------------------------------------
@@ -47,11 +47,15 @@ publicDirectoryRouter.get("/directory", async (req, res) => {
     .orderBy(asc(tenants.city), asc(tenants.name))
     .limit(500);
 
-  // Hide tenants whose subscription lapsed past the grace period (same rule the kiosk uses to lock),
-  // computed from the rows already in hand plus one settings read — not one query per tenant.
-  const [settings] = await db.select({ gracePeriodDays: platformSettings.gracePeriodDays }).from(platformSettings).limit(1);
-  const grace = settings?.gracePeriodDays ?? 3;
-  const live = rows.filter((r) => !computeLocked(r.status, r.endsAt ? new Date(r.endsAt) : null, grace));
+  // Hide tenants that have no booth left running: every licence lapsed past its grace period (the same rule the kiosk
+  // uses to lock), computed from one keys query for all listed tenants rather than one query per tenant.
+  const grace = await getGracePeriodDays();
+  const keyRows = rows.length === 0 ? [] : await db
+    .select({ tenantId: kioskKeys.tenantId, licenseType: kioskKeys.licenseType, licenseEndsAt: kioskKeys.licenseEndsAt })
+    .from(kioskKeys)
+    .where(and(inArray(kioskKeys.tenantId, rows.map((r) => r.id)), isNull(kioskKeys.revokedAt)));
+  const liveTenants = new Set(keyRows.filter((k) => !computeKeyLock("active", k, grace).locked).map((k) => k.tenantId));
+  const live = rows.filter((r) => liveTenants.has(r.id));
 
   const cities = [...new Set(live.map((r) => r.city!.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
   res.set("Cache-Control", "public, max-age=120");

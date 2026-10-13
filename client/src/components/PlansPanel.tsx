@@ -105,9 +105,9 @@ function PlanForm({ draft, setDraft, creating }: { draft: PlanDraft; setDraft: (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-fg/60">Nama<input className={inputClass} placeholder="Pro" value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
           <label className="text-sm text-fg/60">Slug<input className={inputClass} placeholder="pro" disabled={!creating} value={draft.slug} onChange={(e) => set("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} /></label>
-          <label className="text-sm text-fg/60">Harga normal (Rp)<input className={inputClass} type="number" min={0} placeholder="350000" value={draft.price} onChange={(e) => set("price", e.target.value)} /></label>
+          <label className="text-sm text-fg/60">Harga normal per booth (Rp)<input className={inputClass} type="number" min={0} placeholder="350000" value={draft.price} onChange={(e) => set("price", e.target.value)} /></label>
           <label className="text-sm text-fg/60">Interval harga<select className={inputClass} value={draft.billingInterval} onChange={(e) => set("billingInterval", e.target.value as "monthly" | "yearly")}><option value="monthly">Bulanan</option><option value="yearly">Tahunan (harga per tahun)</option></select></label>
-          <label className="text-sm text-fg/60">Batas kiosk<input className={inputClass} type="number" min={0} placeholder="Kosong = tanpa batas" value={draft.kioskLimit} onChange={(e) => set("kioskLimit", e.target.value)} /></label>
+          <label className="text-sm text-fg/60">Info jumlah booth (hanya tampilan, tidak membatasi)<input className={inputClass} type="number" min={0} placeholder="Kosong = tanpa batas" value={draft.kioskLimit} onChange={(e) => set("kioskLimit", e.target.value)} /></label>
           <label className="text-sm text-fg/60">Deskripsi singkat<input className={inputClass} placeholder="Untuk studio dengan beberapa booth" value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
         </div>
       </div>

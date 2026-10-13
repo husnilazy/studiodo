@@ -25,7 +25,11 @@ export default function PaymentSettings() {
   const [paymentConfig, setPaymentConfig] = useState({ secretKey: "", webhookToken: "" });
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false });
+  const [paymentStatus, setPaymentStatus] = useState<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false, paymentProvider: "xendit", dokuClientId: "", hasDokuSecret: false, dokuEnvironment: "sandbox" });
+  const [dokuDraft, setDokuDraft] = useState({ clientId: "", secretKey: "" });
+  const [dokuSaved, setDokuSaved] = useState(false);
+  const [dokuError, setDokuError] = useState<string | null>(null);
+  const [providerSaving, setProviderSaving] = useState(false);
   const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
   const [packages, setPackages] = useState<any[]>([]);
   const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "" });
@@ -65,7 +69,7 @@ export default function PaymentSettings() {
   const refreshPackages = () => api.getPackagesAll().then((result) => setPackages(result ?? [])).catch((error) => console.error("Gagal memuat paket", error));
   useEffect(() => { refreshPackages(); }, []);
   useEffect(() => {
-    api.getPaymentConfig().then((result) => { if (result) setPaymentStatus(result); }).catch((error) => console.error("Gagal memuat konfigurasi pembayaran", error));
+    api.getPaymentConfig().then((result) => { if (result) { setPaymentStatus(result); setDokuDraft((draft) => ({ ...draft, clientId: result.dokuClientId ?? "" })); } }).catch((error) => console.error("Gagal memuat konfigurasi pembayaran", error));
   }, []);
 
   const savePaymentConfig = async () => {
@@ -77,6 +81,30 @@ export default function PaymentSettings() {
       hasSecretKey: Boolean(paymentConfig.secretKey.trim()) || state.hasSecretKey,
       hasWebhookToken: Boolean(paymentConfig.webhookToken.trim()) || state.hasWebhookToken,
     }));
+  };
+
+  const chooseProvider = async (paymentProvider: "xendit" | "doku") => {
+    if (paymentProvider === paymentStatus.paymentProvider || providerSaving) return;
+    setProviderSaving(true);
+    try {
+      await api.updatePaymentConfig({ paymentProvider });
+      setPaymentStatus((state) => ({ ...state, paymentProvider }));
+    } finally {
+      setProviderSaving(false);
+    }
+  };
+
+  const saveDoku = async (environment: "sandbox" | "production" = paymentStatus.dokuEnvironment) => {
+    setDokuError(null);
+    try {
+      await api.updatePaymentConfig({ dokuClientId: dokuDraft.clientId, dokuSecretKey: dokuDraft.secretKey, dokuEnvironment: environment });
+      setDokuDraft((draft) => ({ ...draft, secretKey: "" }));
+      setPaymentStatus((state) => ({ ...state, dokuClientId: dokuDraft.clientId.trim() || state.dokuClientId, hasDokuSecret: Boolean(dokuDraft.secretKey.trim()) || state.hasDokuSecret, dokuEnvironment: environment }));
+      setDokuSaved(true);
+      window.setTimeout(() => setDokuSaved(false), 1800);
+    } catch (error) {
+      setDokuError(error instanceof Error ? error.message : "Gagal menyimpan pengaturan DOKU.");
+    }
   };
 
   const toggleCashPayment = async (enabled: boolean) => {
@@ -369,6 +397,54 @@ export default function PaymentSettings() {
       </section>
 
       <section className={sectionClass}>
+        <h2 className="font-display text-xl font-semibold">Platform pembayaran kiosk</h2>
+        <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Pilih gateway yang dipakai kiosk saat customer membayar. Hanya satu yang aktif pada satu waktu.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {([{ id: "xendit", name: "Xendit QRIS", desc: "QR QRIS langsung di layar kiosk." }, { id: "doku", name: "DOKU", desc: "Customer scan QR → halaman bayar DOKU (QRIS, e-wallet, virtual account)." }] as const).map((option) => (
+            <button key={option.id} type="button" onClick={() => chooseProvider(option.id)} disabled={providerSaving} className={`rounded-2xl border p-4 text-left transition ${paymentStatus.paymentProvider === option.id ? "border-accent bg-accent/10" : "border-fg/15 hover:border-fg/35"}`}>
+              <p className="flex items-center justify-between font-semibold">{option.name}{paymentStatus.paymentProvider === option.id && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase">Aktif</span>}</p>
+              <p className="mt-1 text-xs text-fg/55">{option.desc}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {paymentStatus.paymentProvider === "doku" && (
+      <section className={sectionClass}>
+        <h2 className="font-display text-xl font-semibold">Pembayaran DOKU</h2>
+        <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Client ID & Secret Key ada di DOKU Back Office → Integration → API Keys. Secret Key disimpan terenkripsi dan tidak pernah dikirim kembali.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <Field label="DOKU Client ID">
+            <input className={inputClass} value={dokuDraft.clientId} onChange={(e) => setDokuDraft({ ...dokuDraft, clientId: e.target.value })} placeholder="BRN-xxxx-xxxxxxxxxxxxx" autoComplete="off" />
+          </Field>
+          <Field label={`DOKU Secret Key${paymentStatus.hasDokuSecret ? " (sudah tersimpan, isi untuk mengganti)" : ""}`}>
+            <input className={inputClass} type="password" value={dokuDraft.secretKey} onChange={(e) => setDokuDraft({ ...dokuDraft, secretKey: e.target.value })} placeholder="SK-xxxxxxxxxxxx" autoComplete="new-password" />
+          </Field>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex rounded-xl border border-fg/15 p-1 text-sm">
+            {(["sandbox", "production"] as const).map((env) => (
+              <button key={env} type="button" onClick={() => saveDoku(env)} className={`rounded-lg px-3 py-1.5 font-medium ${paymentStatus.dokuEnvironment === env ? "bg-accent text-white" : "text-fg/60 hover:text-fg"}`}>{env === "sandbox" ? "Sandbox (uji coba)" : "Produksi"}</button>
+            ))}
+          </div>
+          <button onClick={() => saveDoku()} className="bg-accent px-4 py-2 text-sm font-semibold">{dokuSaved ? "Tersimpan" : "Simpan API DOKU"}</button>
+          <span className="text-xs text-fg/50">{paymentStatus.dokuClientId && paymentStatus.hasDokuSecret ? `DOKU siap (mode ${paymentStatus.dokuEnvironment === "production" ? "produksi" : "sandbox"}).` : "Isi Client ID dan Secret Key agar pembayaran DOKU aktif."}</span>
+        </div>
+        {dokuError && <p className="mt-2 text-sm text-red-300">{dokuError}</p>}
+        {tenantId && (
+          <div className="mt-5 rounded-2xl border border-amber-400/25 bg-amber-500/[0.06] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">URL notifikasi DOKU</p>
+            <p className="mt-2 text-sm text-fg/60">Otomatis dikirim lewat setiap transaksi. Jika perlu, daftarkan juga di <span className="text-fg/80">DOKU Back Office → Settings → Notification URL</span>:</p>
+            <code className="mt-3 block overflow-x-auto rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/80">
+              {(() => { const base = getApiBaseUrl(); const abs = base.startsWith("http") ? base : `${window.location.origin}${base}`; return `${abs}/payment/webhook/doku/${tenantId}`; })()}
+            </code>
+          </div>
+        )}
+      </section>
+      )}
+
+      {paymentStatus.paymentProvider === "xendit" && (
+      <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Pembayaran QRIS Xendit</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">
           Kredensial disimpan di server dan tidak pernah dikirim kembali ke kiosk.
@@ -425,6 +501,7 @@ export default function PaymentSettings() {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

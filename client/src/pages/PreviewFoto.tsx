@@ -1,3 +1,4 @@
+import { fetchFrames } from "@/lib/framesCache";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -202,7 +203,7 @@ export default function PreviewFoto() {
 
   // ---- frames / templates ---------------------------------------------------------------------------------
   useEffect(() => {
-    api.getFrames(orientation)
+    fetchFrames(orientation)
       .then((frames) => setServerTemplates((frames ?? []).filter((frame) => frame.kind === "template").map((frame) => ({
         id: frame.id, name: frame.name, orientation, outputPreset: "4r" as const, canvasWidth: frame.canvasWidth ?? 1200, canvasHeight: frame.canvasHeight ?? 1800,
         frameDataUrl: frame.imageUrl, slots: frame.slots ?? [], category: "custom" as const, style: "Server template",

@@ -55,6 +55,7 @@ export default function Pembayaran() {
   const [starting, setStarting] = useState(false);
   const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [qrisString, setQrisString] = useState<string | null>(null);
+  const [viaDoku, setViaDoku] = useState(false);
   const [cashPaymentEnabled, setCashPaymentEnabled] = useState(false);
   const [cashRedeemed, setCashRedeemed] = useState(false);
   const [qrisExpirySeconds, setQrisExpirySeconds] = useState(QRIS_DISPLAY_SECONDS);
@@ -180,6 +181,7 @@ export default function Pembayaran() {
       const result = await api.startQris(sessionId);
       if (!result) throw new Error("Gagal memulai QRIS");
       setQrisString(result.qrString);
+      setViaDoku(result.provider === "doku");
 
       // Visual ring only — reaching 0 just tells the customer the QR looks
       // stale and offers a fresh one. It must NOT stop the background poll:
@@ -470,6 +472,7 @@ export default function Pembayaran() {
                     </div>
                   )}
                 </div>
+                {viaDoku && <p className="-mt-1 text-center text-sm text-muted">Scan dengan kamera HP, lalu bayar di halaman DOKU (QRIS, e-wallet, atau VA).</p>}
                 <p className="font-display text-2xl font-semibold text-accent">{rupiah(payableAmount)}</p>
 
                 {checking && qrisExpirySeconds > 0 && (

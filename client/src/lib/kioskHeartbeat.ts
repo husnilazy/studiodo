@@ -34,6 +34,11 @@ async function sendHeartbeat() {
   }
 }
 
+/** Reports right away (e.g. just after pairing) so the booth's licence — trial, unpaid, locked — shows up without waiting 5 minutes. */
+export function sendKioskHeartbeatNow() {
+  return sendHeartbeat();
+}
+
 /** Periodic self-report so the admin dashboard's "Perangkat" table (KioskKeys.tsx) has fresh online/diagnostic data. */
 export function startKioskHeartbeat() {
   if (started) return;

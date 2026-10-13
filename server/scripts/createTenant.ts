@@ -4,9 +4,9 @@
 // Usage:
 //   npm run tenant:create -- --name "Studio X" --slug studio-x --email owner@studiox.com --password secret123
 import "dotenv/config";
-import crypto from "node:crypto";
 import { client, db } from "../db/client.js";
-import { admins, kioskKeys, packages, platformSettings, tenantSettings, tenants, templates } from "../db/schema.js";
+import { admins, packages, platformSettings, tenantSettings, tenants, templates } from "../db/schema.js";
+import { issueKioskKey } from "../lib/license.js";
 import { hashPassword } from "../lib/passwordHash.js";
 
 async function getDefaultTrialDays(): Promise<number> {
@@ -158,9 +158,8 @@ async function main() {
   await seedBuiltinPackages(tenant.id);
   await seedBuiltinFrames(tenant.id);
 
-  const rawKioskKey = crypto.randomBytes(32).toString("hex");
-  const keyHash = crypto.createHash("sha256").update(rawKioskKey).digest("hex");
-  await db.insert(kioskKeys).values({ tenantId: tenant.id, label: "Default kiosk", keyHash, rawKey: rawKioskKey });
+  // Booth licences are per key: the first key is a trial that locks by itself when it ends.
+  const { rawKey: rawKioskKey } = await issueKioskKey(tenant.id, { label: "Default kiosk", kind: "trial", days: trialDays });
 
   console.log("\nTenant berhasil dibuat.");
   console.log(`  Tenant ID     : ${tenant.id}`);

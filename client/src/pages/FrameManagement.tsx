@@ -323,31 +323,52 @@ export default function FrameManagement() {
   // past every group before it. Resets to "Semua" if the active filter's
   // category no longer has any frames (e.g. its last frame was deleted).
   const [categoryFilter, setCategoryFilter] = useState("__all__");
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<"frames" | "stopmotion" | "stickers" | "output">("frames");
   useEffect(() => {
     if (categoryFilter !== "__all__" && !groupedTemplates.some((group) => group.key === categoryFilter)) {
       setCategoryFilter("__all__");
     }
   }, [categoryFilter, groupedTemplates]);
-  const visibleGroups = categoryFilter === "__all__" ? groupedTemplates : groupedTemplates.filter((group) => group.key === categoryFilter);
+  const searchTerm = search.trim().toLowerCase();
+  const visibleTemplates = useMemo(() => {
+    const pool = categoryFilter === "__all__" ? publishedTemplates : (groupedTemplates.find((group) => group.key === categoryFilter)?.items ?? []);
+    if (!searchTerm) return pool;
+    return pool.filter((template) => `${template.name} ${template.style} ${template.category}`.toLowerCase().includes(searchTerm));
+  }, [publishedTemplates, groupedTemplates, categoryFilter, searchTerm]);
+  const TABS = [
+    { id: "frames", label: "Frame", count: publishedTemplates.length },
+    { id: "stopmotion", label: "Stop Motion" },
+    { id: "stickers", label: "Stiker", count: stickers.length },
+    { id: "output", label: "Output & Layout" },
+  ] as const;
 
   return (
     <div className="h-full overflow-y-auto bg-[var(--kiosk-background)] px-5 py-8 text-[var(--kiosk-text)] md:px-10">
-      <header className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
         <div>
           <Link href="/admin" className="text-sm text-fg/45 hover:text-fg">← Admin OS</Link>
-          <p className="eyebrow mt-6">ADMIN / FRAME STUDIO</p>
-          <h1 className="mt-2 font-display text-4xl font-bold md:text-6xl">Manajemen Frame</h1>
-          <p className="mt-2 max-w-2xl text-[var(--kiosk-muted)]">
-            Upload banyak PNG sekaligus, atur kategori, warna style, ukuran output, dan sesuaikan lubang foto langsung di preview.
-          </p>
+          <h1 className="mt-2 font-display text-3xl font-bold md:text-4xl">Manajemen Frame</h1>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--kiosk-muted)]">Kelola frame, stop motion, stiker, dan output strip dalam satu tempat.</p>
         </div>
         <label className="cursor-pointer rounded-2xl bg-accent px-5 py-3 font-semibold shadow-lg shadow-accent/20">
-          Upload batch PNG
-          <input type="file" accept="image/png" multiple className="hidden" onChange={(event) => readFiles(event.target.files)} />
+          + Upload batch PNG
+          <input type="file" accept="image/png" multiple className="hidden" onChange={(event) => { setTab("frames"); readFiles(event.target.files); event.target.value = ""; }} />
         </label>
       </header>
 
-      {drafts.length > 0 && (
+      <nav className="sticky top-0 z-20 -mx-5 mt-5 border-b border-fg/10 bg-[var(--kiosk-background)]/90 px-5 backdrop-blur md:-mx-10 md:px-10">
+        <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto">
+          {TABS.map((item) => (
+            <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`relative shrink-0 px-4 py-3 text-sm font-semibold transition ${tab === item.id ? "text-fg" : "text-fg/50 hover:text-fg"}`}>
+              {item.label}{"count" in item && <span className="ml-1.5 rounded-full bg-fg/10 px-2 py-0.5 text-[11px] font-medium text-fg/60">{item.count}</span>}
+              {tab === item.id && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent" />}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {tab === "frames" && drafts.length > 0 && (
         <section className={`mx-auto mt-8 max-w-7xl ${panelAccent} md:p-7`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -402,7 +423,8 @@ export default function FrameManagement() {
       )}
 
       {editingTemplate && (
-        <section className={`mx-auto mt-8 max-w-7xl ${panelAccent} md:p-7`}>
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-8">
+        <section className={`w-full max-w-6xl ${panelAccent} !bg-[var(--kiosk-background)] md:p-7`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="eyebrow">EDIT FRAME</p><h2 className="font-display text-2xl font-semibold">Edit {editingTemplate.name}</h2></div>
             <div className="flex gap-2"><button onClick={() => setEditingTemplate(null)} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60">Batal</button><button onClick={saveEditedTemplate} disabled={savingEdit} className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{savingEdit && <Spinner size="sm" />}{savingEdit ? "Menyimpan…" : "Simpan perubahan"}</button></div>
@@ -418,9 +440,10 @@ export default function FrameManagement() {
             </div>
           </div>
         </section>
+        </div>
       )}
 
-      <section className="mx-auto mt-8 max-w-7xl">
+      {tab === "frames" && <section className="mx-auto mt-6 max-w-7xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="eyebrow">PUBLISHED LIBRARY</p>
@@ -428,78 +451,66 @@ export default function FrameManagement() {
           </div>
           <span className="rounded-full border border-fg/15 px-3 py-1 text-sm text-fg/45">{publishedTemplates.length} frame</span>
         </div>
-        {groupedTemplates.length > 0 && (
-          <div className="mb-6 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("__all__")}
-              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === "__all__" ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55 hover:border-fg/35 hover:text-fg"}`}
-            >
-              Semua <span className="text-fg/40">({publishedTemplates.length})</span>
-            </button>
-            {groupedTemplates.map((group) => (
-              <button
-                key={group.key}
-                type="button"
-                onClick={() => setCategoryFilter(group.key)}
-                className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${categoryFilter === group.key ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55 hover:border-fg/35 hover:text-fg"}`}
-              >
-                {group.label} <span className="text-fg/40">({group.items.length})</span>
-              </button>
-            ))}
+        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          {/* Category rail: stays beside the grid instead of stacking above it, so other tabs/sections are never pushed off-screen. */}
+          <aside className="lg:sticky lg:top-16 lg:self-start">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari frame…" className="mb-3 w-full rounded-xl border border-fg/15 bg-fg/[0.05] px-3 py-2 text-sm outline-none focus:border-accent" />
+            <div className="flex gap-1.5 overflow-x-auto pb-1 lg:max-h-[calc(100vh-190px)] lg:flex-col lg:overflow-y-auto lg:overflow-x-visible">
+              {[{ key: "__all__", label: "Semua", count: publishedTemplates.length }, ...groupedTemplates.map((group) => ({ key: group.key, label: group.label, count: group.items.length }))].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setCategoryFilter(item.key)}
+                  className={`flex shrink-0 items-center justify-between gap-3 rounded-xl border px-3.5 py-2 text-left text-sm font-medium transition ${categoryFilter === item.key ? "border-accent bg-accent/15 text-fg" : "border-transparent text-fg/55 hover:bg-fg/[0.06] hover:text-fg"}`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  <span className="text-xs text-fg/40">{item.count}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+          <div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              {visibleTemplates.map((template) => (
+                <article key={template.id} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] transition hover:border-fg/25">
+                  <div className="relative aspect-[3/4] overflow-hidden bg-black/30">
+                    <img src={template.frameDataUrl} alt={template.name} loading="lazy" decoding="async" className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
+                    <div className="absolute inset-0 flex items-end justify-end gap-2 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                      <button onClick={() => setEditingTemplate(template)} className="rounded-xl border border-accent/40 bg-accent/25 px-3 py-1.5 text-xs font-semibold text-accent backdrop-blur-sm hover:bg-accent/50">Edit</button>
+                      <button
+                        onClick={() => deleteTemplate(template.id)}
+                        disabled={deletingId === template.id}
+                        className="flex items-center gap-1.5 rounded-xl border border-red-400/40 bg-red-500/25 px-3 py-1.5 text-xs font-semibold text-red-200 backdrop-blur-sm hover:bg-red-500/50 disabled:opacity-50"
+                      >
+                        {deletingId === template.id && <Spinner size="sm" />}
+                        {deletingId === template.id ? "Menghapus…" : "Hapus"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h3 className="truncate text-sm font-semibold">{template.name}</h3>
+                    <p className="mt-0.5 truncate text-xs text-fg/45">{template.style}</p>
+                    <p className="mt-0.5 text-[11px] text-fg/30">{template.orientation} · {template.outputPreset?.toUpperCase()} · {template.slots.length} slot</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {visibleTemplates.length === 0 && (
+              <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-fg/15 py-20 text-center">
+                <span className="text-6xl opacity-20">🖼</span>
+                <div>
+                  <p className="font-semibold text-fg/50">{publishedTemplates.length === 0 ? "Belum ada frame" : "Tidak ada frame yang cocok"}</p>
+                  <p className="mt-1 text-sm text-fg/30">{publishedTemplates.length === 0 ? "Upload batch PNG di kanan atas untuk mulai menambah frame kiosk." : "Coba kategori lain atau ubah kata pencarian."}</p>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        <div className="space-y-8">
-          {visibleGroups.map((group) => (
-            <div key={group.key}>
-              <div className="mb-3 flex items-center gap-2">
-                <h3 className="font-display text-lg font-semibold">{group.label}</h3>
-                <span className="rounded-full border border-fg/10 px-2 py-0.5 text-xs text-fg/40">{group.items.length}</span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {group.items.map((template) => (
-                  <article key={template.id} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] transition hover:border-fg/25">
-                    <div className="relative h-56 overflow-hidden bg-black/30">
-                      <img src={template.frameDataUrl} alt={template.name} className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
-                      <div className="absolute inset-0 flex items-end justify-end bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
-                        <button onClick={() => setEditingTemplate(template)} className="mr-2 rounded-xl border border-accent/40 bg-accent/25 px-3 py-1.5 text-xs font-semibold text-accent backdrop-blur-sm hover:bg-accent/50">
-                          Edit frame
-                        </button>
-                        <button
-                          onClick={() => deleteTemplate(template.id)}
-                          disabled={deletingId === template.id}
-                          className="flex items-center gap-1.5 rounded-xl border border-red-400/40 bg-red-500/25 px-3 py-1.5 text-xs font-semibold text-red-200 backdrop-blur-sm hover:bg-red-500/50 disabled:opacity-50"
-                        >
-                          {deletingId === template.id && <Spinner size="sm" />}
-                          {deletingId === template.id ? "Menghapus…" : "🗑 Hapus frame"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold">{template.name}</h3>
-                      <p className="mt-1 text-xs text-fg/45">{template.category} · {template.style}</p>
-                      <p className="mt-0.5 text-xs text-fg/25">{template.orientation} · {template.outputPreset?.toUpperCase()} · {template.slots.length} slot</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          ))}
-          {publishedTemplates.length === 0 && (
-            <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border border-dashed border-fg/15 py-20 text-center">
-              <span className="text-6xl opacity-20">🖼</span>
-              <div>
-                <p className="font-semibold text-fg/50">Belum ada frame</p>
-                <p className="mt-1 text-sm text-fg/30">Upload batch PNG di atas untuk mulai menambah frame kiosk.</p>
-              </div>
-            </div>
-          )}
         </div>
-      </section>
+      </section>}
 
-      <StopMotionFramePanel />
+      {tab === "stopmotion" && <StopMotionFramePanel />}
 
-      <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
+      {tab === "stickers" && <section className={`mx-auto mt-6 max-w-7xl ${panel} md:p-7`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="eyebrow">STIKER KHUSUS BOOTH</p><h2 className="font-display text-3xl font-semibold">Stiker milik booth</h2><p className="mt-1 text-sm text-fg/55">Paket emoji, lencana teks, dan bentuk sudah otomatis ada di editor foto kiosk. Di sini kamu bisa menambah stiker sendiri (logo, maskot, PNG transparan) yang muncul di kategori “Milik booth”.</p></div>
           <label className="k-btn k-btn-accent cursor-pointer !min-h-0 !py-2.5 !text-sm">Upload stiker<input type="file" accept="image/*" multiple className="hidden" onChange={(event) => Array.from(event.target.files ?? []).forEach(uploadSticker)} /></label>
@@ -508,9 +519,10 @@ export default function FrameManagement() {
           {stickers.map((sticker) => <div key={sticker.id} className="group relative rounded-xl border border-fg/10 bg-fg/5 p-2"><img src={sticker.dataUrl} alt={sticker.name} className="h-20 w-full object-contain" /><button type="button" onClick={() => removeSticker(sticker.id)} className="absolute right-1 top-1 rounded bg-red-500/80 px-1.5 py-1 text-[10px] opacity-0 transition group-hover:opacity-100">Hapus</button><p className="mt-1 truncate text-center text-[10px] text-fg/50">{sticker.name}</p></div>)}
           {stickers.length === 0 && <p className="col-span-full py-8 text-center text-sm text-fg/40">Belum ada stiker khusus. Upload PNG transparan jika ingin menambah logo atau maskot booth.</p>}
         </div>
-      </section>
+      </section>}
 
-      <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
+      {tab === "output" && <>
+      <section className={`mx-auto mt-6 max-w-7xl ${panel} md:p-7`}>
         <p className="eyebrow">CAPTURE OUTPUT</p>
         <h2 className="font-display text-2xl font-semibold">Output & Capture</h2>
         <div className="mt-4 space-y-4">
@@ -549,6 +561,7 @@ export default function FrameManagement() {
           </div>
         </div>
       </section>
+      </>}
     </div>
   );
 }

@@ -65,6 +65,20 @@ export async function testMidtrans(cfg: MidtransCfg): Promise<{ ok: boolean; mes
   }
 }
 
+/** Asks Midtrans for an order's current state (same shape as a notification, minus the signature). Null = no such order yet. */
+export async function fetchMidtransStatus(cfg: MidtransCfg, orderId: string): Promise<MidtransNotification | null> {
+  const res = await fetch(`${coreBase(cfg)}/v2/${encodeURIComponent(orderId)}/status`, {
+    headers: { Accept: "application/json", Authorization: basicAuth(cfg) },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as MidtransNotification & { status_message?: string };
+  const code = Number(body.status_code ?? res.status);
+  if (code === 404) return null; // the customer never opened the payment page
+  if (code === 401) throw new Error("Midtrans menolak Server Key (periksa kunci dan mode sandbox/produksi)");
+  if (!body.transaction_status) throw new Error(body.status_message || `Respons tak terduga dari Midtrans (HTTP ${res.status})`);
+  return body;
+}
+
 export type MidtransNotification = {
   order_id?: string;
   status_code?: string;

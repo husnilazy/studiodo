@@ -20,6 +20,10 @@ import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
 import { publicContentRouter } from "./routes/siteContent.js";
 import { portalRouter, billingWebhookRouter } from "./routes/portal.js";
+import { crmRouter } from "./routes/crm.js";
+import { accountEmailRouter } from "./routes/accountEmail.js";
+import { notificationsTenantRouter } from "./routes/notifications.js";
+import { liveRouter } from "./routes/live.js";
 import { publicBlogRouter } from "./routes/blog.js";
 import { publicMarketplaceRouter, marketplaceTenantRouter } from "./routes/marketplace.js";
 import { publicCreatorsRouter } from "./routes/creators.js";
@@ -27,6 +31,8 @@ import { publicDirectoryRouter, directoryTenantRouter } from "./routes/directory
 import { publicAssetsRouter } from "./routes/siteAssets.js";
 import { creatorPortalRouter } from "./routes/creatorPortal.js";
 import { client } from "./db/client.js";
+import { runNotificationRules } from "./lib/notificationRules.js";
+import { pruneEmailLog } from "./lib/emailLog.js";
 import { logEvent } from "./lib/platformEvents.js";
 
 // Without these, an error thrown outside an Express route handler (e.g. the
@@ -57,7 +63,18 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(cors());
-app.use(express.json({ limit: "30mb" }));
+// rawBody is kept for gateways that sign the exact bytes they send (DOKU notifications).
+const keepRawBody = (req: unknown, _res: unknown, buf: Buffer) => { (req as { rawBody?: string }).rawBody = buf.toString("utf8"); };
+// Only the routes that really receive images as base64 (package photos, frames, branding, CMS assets) may carry a huge JSON
+// body. Everything else — including every public, unauthenticated endpoint — is capped small, so a stranger can't make the
+// server buffer 30 MB per request.
+const largeJson = express.json({ limit: "30mb", verify: keepRawBody });
+const smallJson = express.json({ limit: "512kb", verify: keepRawBody });
+const LARGE_JSON_PREFIXES = ["/api/packages", "/api/frames", "/api/config", "/api/superadmin", "/api/creator"];
+app.use((req, res, next) => {
+  const large = LARGE_JSON_PREFIXES.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`));
+  (large ? largeJson : smallJson)(req, res, next);
+});
 app.use("/storage", express.static(path.join(process.cwd(), "storage")));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "studiodo-server" }));
@@ -77,14 +94,18 @@ app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);
 app.use("/api/public", publicPlansRouter);
 app.use("/api/public", publicContentRouter);
+app.use("/api/public", accountEmailRouter);
 app.use("/api/public", publicBlogRouter);
 app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
 app.use("/api/public", publicAssetsRouter);
 app.use("/api/creator", creatorPortalRouter);
+app.use("/api/portal/notifications", notificationsTenantRouter);
 app.use("/api/portal/directory", directoryTenantRouter);
 app.use("/api/portal/marketplace", marketplaceTenantRouter);
+app.use("/api/crm", crmRouter);
+app.use("/api/live", liveRouter);
 app.use("/api/portal", portalRouter);
 app.use("/api/billing", billingWebhookRouter);
 
@@ -132,7 +153,10 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
     res.status(413).json({ error: "Ukuran file terlalu besar untuk disimpan. Gunakan gambar dengan resolusi lebih kecil." });
     return;
   }
-  res.status(err?.status ?? 500).json({ error: err?.message ?? "Terjadi kesalahan di server" });
+  const status = Number(err?.status) >= 400 && Number(err?.status) < 600 ? Number(err.status) : 500;
+  // Server-side failures are logged above and in the activity log; their raw message (often a database error with the SQL
+  // and its parameters) is not for the client.
+  res.status(status).json({ error: status >= 500 ? "Terjadi kesalahan di server. Coba lagi, atau hubungi admin STUDIODO bila berulang." : err?.message ?? "Permintaan tidak valid" });
 });
 
 async function checkDatabase() {
@@ -161,8 +185,16 @@ function startKeepDbWarm() {
   }, intervalMs);
 }
 
+// Automatic notifications (booth licence ending / locked / offline). Idempotent, so a restart or overlap is harmless.
+function startNotificationRules() {
+  const run = () => { void pruneEmailLog(); return runNotificationRules().catch((error: any) => console.error("[STUDIODO] aturan notifikasi gagal:", error?.message ?? error)); };
+  setTimeout(run, 60_000);
+  setInterval(run, 30 * 60 * 1000);
+}
+
 app.listen(PORT, () => {
   console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
   checkDatabase();
   startKeepDbWarm();
+  startNotificationRules();
 });

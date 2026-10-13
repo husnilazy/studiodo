@@ -1,4 +1,6 @@
+import { tracked } from "./netActivity";
 import { clearKioskPairing, getApiBaseUrl, getDeviceId, getKioskKey } from "./apiConfig";
+import { videoExtension } from "@/lib/videoMime";
 import type { LayoutElement, ScreenOrientation } from "./screenBuilder/types";
 
 const ADMIN_TOKEN_KEY = "studiodo-admin-token";
@@ -79,7 +81,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS);
   try {
-    res = await fetch(`${getApiBaseUrl()}${path}`, {
+    res = await tracked(() => fetch(`${getApiBaseUrl()}${path}`, {
       ...options,
       // Express sends an ETag on JSON responses but no Cache-Control, which left
       // the browser free to reuse a stale cached GET (confirmed live: after
@@ -94,7 +96,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
         ...(kioskKey ? { "x-kiosk-key": kioskKey, "x-device-id": getDeviceId() } : {}),
         ...(options?.headers ?? {}),
       },
-    });
+    }));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError(0, "Server tidak merespon. Periksa koneksi internet atau coba lagi.");
@@ -132,6 +134,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   if (res.status === 403 && body?.code === "kiosk_device_mismatch") {
     window.dispatchEvent(new Event("studiodo-kiosk-device-mismatch"));
   }
+  // The booth's licence ran out: show the lock screen right away instead of waiting for the next heartbeat.
+  if (res.status === 403 && body?.code === "subscription_locked" && kioskKey) {
+    window.dispatchEvent(new CustomEvent("studiodo-subscription-locked", { detail: { reason: body.reason ?? null, message: body.error ?? null } }));
+  }
   // Recovery path for the screen above — once any kiosk-authenticated request
   // succeeds again (e.g. an admin reset the device lock and the next periodic
   // heartbeat got through), clear it. Without this, a kiosk that got unlocked
@@ -150,7 +156,44 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   return body as T;
 }
 
+export type CrmCustomer = {
+  key: string; name: string | null; whatsapp: string | null; email: string | null; sessions: number; paidSessions: number; totalSpend: number;
+  firstSeen: string; lastSeen: string; consent: boolean; lastFeedback: string | null; lastShareUrl: string | null;
+  notes: string | null; tags: string[]; marketingOptOut: boolean;
+};
+export type CrmQuery = { q?: string; filter?: string; tag?: string; sort?: string; limit?: number; offset?: number };
+export type CrmSession = {
+  id: string; createdAt: string; completedAt: string | null; paymentStatus: string; paymentMethod: string; totalAmount: number; voucherCode: string | null;
+  shareUrl: string | null; feedback: string | null; publishConsent: boolean; packageName: string | null; boothLabel: string | null; photoCount: number;
+};
+export type LiveBooth = {
+  id: string; label: string; state: "locked" | "offline" | "payment" | "capture" | "review" | "idle"; paired: boolean; lastUsedAt: string | null;
+  appVersion: string | null; diagnostics: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null;
+  licenseType: "trial" | "paid" | "unpaid"; lockReason: string | null; daysRemaining: number | null;
+  current: { sessionId: string; stage: "payment" | "capture" | "review"; packageName: string | null; photoCount: number; photoTarget: number | null; amount: number; startedAt: string } | null;
+  waiting: number; today: { sessions: number; paid: number; revenue: number; photos: number }; lastSessionAt: string | null;
+};
+export type LiveData = {
+  now: string;
+  summary: { booths: number; online: number; inSession: number; waitingPayment: number; offline: number; locked: number; sessionsToday: number; paidToday: number; revenueToday: number };
+  booths: LiveBooth[];
+  recent: { id: string; at: string; booth: string; packageName: string | null; amount: number; paymentStatus: string; done: boolean; hasContact: boolean }[];
+};
+
+function crmQs(params: CrmQuery) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+  return qs.toString();
+}
+
 export const api = {
+  getCrmCustomers: (params: CrmQuery = {}) =>
+    request<{ items: CrmCustomer[]; total: number; limit: number; offset: number; summary: { customers: number; withWhatsapp: number; consent: number; returning: number; new30d: number; lifetimeSpend: number }; tags: string[] }>(`/crm/customers?${crmQs(params)}`),
+  getCrmCustomer: (key: string) => request<{ customer: CrmCustomer; sessions: CrmSession[] }>(`/crm/customer?key=${encodeURIComponent(key)}`),
+  saveCrmCustomer: (body: { key: string; name?: string; notes?: string; tags?: string[]; marketingOptOut?: boolean }) =>
+    request<{ ok: boolean }>("/crm/customer", { method: "PUT", body: JSON.stringify(body) }),
+  getCrmExport: (params: CrmQuery = {}) => request<{ items: CrmCustomer[] }>(`/crm/export?${crmQs(params)}`),
+  getLive: () => request<LiveData>("/live"),
   loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logoutAdmin: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   getMe: () => request<{
@@ -162,6 +205,9 @@ export const api = {
     renewalWhatsapp: string | null;
     renewalCheckoutUrl: string | null;
     gracePeriodDays: number;
+    portalUrl?: string;
+    /** Per-booth licence summary of the whole account (older servers don't send it). */
+    licenses?: { activeKeys: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number; nearestEndsAt: string | null };
   }>("/auth/me"),
   getStorageConfig: () => request<any>("/config/storage"),
   updateStorageConfig: (body: Record<string, unknown>) => request<{ ok: boolean }>("/config/storage", { method: "PATCH", body: JSON.stringify(body) }),
@@ -182,7 +228,7 @@ export const api = {
     request<{ elements: LayoutElement[]; updatedAt: string | null }>(`/config/screen-layout?screenKey=${screenKey}&orientation=${orientation}`),
   updateScreenLayout: (screenKey: string, orientation: ScreenOrientation, elements: LayoutElement[]) =>
     request<{ ok: boolean; elements: LayoutElement[] }>("/config/screen-layout", { method: "PATCH", body: JSON.stringify({ screenKey, orientation, elements }) }),
-  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null; autoUpdateEnabled?: boolean }[]>("/kiosk-keys"),
+  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null; autoUpdateEnabled?: boolean; licenseType?: "trial" | "paid" | "unpaid"; licenseEndsAt?: string | null; locked?: boolean; lockReason?: string | null; daysRemaining?: number | null; graceDaysRemaining?: number | null }[]>("/kiosk-keys"),
   createKioskKey: (label: string) => request<{ id: string; label: string | null; createdAt: string; key: string }>("/kiosk-keys", { method: "POST", body: JSON.stringify({ label }) }),
   resetKioskKeyDevice: (id: string) => request<{ ok: boolean; id: string }>(`/kiosk-keys/${id}/reset-device`, { method: "POST" }),
   revealKioskKey: (id: string) => request<{ key: string }>(`/kiosk-keys/${id}/reveal`),
@@ -193,7 +239,19 @@ export const api = {
     request<{
       ok: boolean;
       autoUpdateEnabled: boolean;
-      subscription: { locked: boolean; graceDaysRemaining: number | null; renewalWhatsapp: string | null; renewalCheckoutUrl: string | null };
+      subscription: {
+        locked: boolean;
+        reason?: "suspended" | "unpaid" | "trial_expired" | "expired" | null;
+        message?: string | null;
+        licenseType?: "trial" | "paid" | "unpaid" | null;
+        licenseEndsAt?: string | null;
+        lockAt?: string | null;
+        daysRemaining?: number | null;
+        graceDaysRemaining: number | null;
+        renewalWhatsapp: string | null;
+        renewalCheckoutUrl: string | null;
+        portalUrl?: string | null;
+      };
     }>("/kiosk-keys/heartbeat", { method: "POST", body: JSON.stringify(body) }),
   // Fire-and-forget from client/src/main.tsx's console.error override — a
   // failure here must never throw back into the console override itself
@@ -221,9 +279,20 @@ export const api = {
     }
     return res.json();
   },
+  // Admin: send a branding video (.mp4/.mov) to the server, which converts it; returns its hosted URL.
+  uploadBrandingVideo: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const res = await fetch(`${getApiBaseUrl()}/config/branding-video`, { method: "POST", body: form, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as { error?: string }));
+      throw new Error(body.error || `Upload video gagal (${res.status})`);
+    }
+    return (await res.json()) as { url: string; sizeBytes: number; converted: boolean };
+  },
   uploadMedia: async (sessionId: string, kind: "gif" | "video" | "stopmotion", blob: Blob) => {
     const form = new FormData();
-    form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : "webm"}`);
+    form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);
     form.append("kind", kind);
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
@@ -234,7 +303,7 @@ export const api = {
   // opposed to uploadMedia above which is the combined all-slots-at-once clip.
   uploadSlotMedia: async (sessionId: string, slotIndex: number, kind: "gif" | "video", blob: Blob) => {
     const form = new FormData();
-    form.append("media", blob, `slot-${slotIndex}.${kind === "gif" ? "gif" : "webm"}`);
+    form.append("media", blob, `slot-${slotIndex}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);
     form.append("slotIndex", String(slotIndex));
     form.append("kind", kind);
     const kioskKey = getKioskKey();
@@ -261,8 +330,10 @@ export const api = {
       `/sessions?limit=${params?.limit ?? 100}&offset=${params?.offset ?? 0}`,
     ),
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
+  getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
+  markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
   startQris: (sessionId: string) =>
-    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
+    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
   startAdditionalPrint: (sessionId: string, quantity: number) => request<{ demo: boolean; qrString: string; amount: number; expiresInSeconds?: number }>("/payment/additional-print", { method: "POST", body: JSON.stringify({ sessionId, quantity }) }),
   redeemAdditionalPrintVoucher: (sessionId: string, code: string, quantity: number) =>
@@ -271,8 +342,8 @@ export const api = {
   updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
     request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
-  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean }>("/config/payment"),
-  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string }) =>
+  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>("/config/payment"),
+  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production" }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
   updateCashPaymentConfig: (enabled: boolean) => request<{ enabled: boolean }>("/config/cash-payment", { method: "PATCH", body: JSON.stringify({ enabled }) }),
   createCashVoucher: (body: { amount: number; customerName?: string }) => request<any>("/vouchers/cash", { method: "POST", body: JSON.stringify(body) }),
@@ -323,3 +394,14 @@ export const api = {
   deletePackage: (id: string) => request<{ ok: boolean; deleted: boolean; softDeleted: boolean; id: string }>(`/packages/${id}`, { method: "DELETE" }),
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
+
+export interface AdminNotification {
+  id: string;
+  kind: string;
+  severity: "info" | "success" | "warning" | "critical" | string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  createdAt: string;
+  read: boolean;
+}

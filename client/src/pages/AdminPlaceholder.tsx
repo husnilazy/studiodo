@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
@@ -89,7 +90,7 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
           type="button"
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
-          className={`flex flex-col items-center gap-3 rounded-2xl border p-3.5 transition ${value === option.value ? "border-accent bg-accent/[0.08] ring-2 ring-accent/20" : "border-fg/10 hover:border-fg/30"}`}
+          className={`flex flex-col items-center gap-3 rounded-2xl border p-3.5 transition ${value === option.value ? "border-accent bg-accent/[0.08]" : "border-fg/10 hover:border-fg/30"}`}
         >
           {option.preview && <span className="flex h-12 items-center justify-center">{option.preview}</span>}
           <span className="text-sm font-semibold">{option.label}</span>
@@ -120,15 +121,11 @@ function MediaPicker({ label, hint, value, kind = "image", accept = "image/*", a
     if (!file) return;
     setBusy(true);
     try {
-      if (file.type.startsWith("video/")) {
-        if (file.size > 8 * 1024 * 1024) throw new Error("Video maksimal 8 MB. Kompres dulu atau pakai gambar.");
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(file);
-        });
-        onPick(dataUrl, "video");
+      if (file.type.startsWith("video/") || /\.(mp4|mov|m4v)$/i.test(file.name)) {
+        if (file.size > 120 * 1024 * 1024) throw new Error("Video maksimal 120 MB.");
+        // Uploaded to the server, which converts MOV/HEVC to a web-safe MP4 — never kept as a giant data: URI in the browser.
+        const { url } = await api.uploadBrandingVideo(file);
+        onPick(url, "video");
       } else {
         onPick(await imageFileToDataUrl(file, { maxDimension, keepAlpha: alpha }), "image");
       }
@@ -262,7 +259,8 @@ export default function AdminPlaceholder() {
                 <Card title="Latar & banner">
                   <div className="space-y-5">
                     <div className="grid gap-5 md:grid-cols-2">
-                      <MediaPicker label="Cover layar awal (gambar atau video)" hint="Menggantikan latar warna. Video maksimal 8 MB, diputar tanpa suara." value={config.idleCoverUrl} kind={config.idleCoverType} accept="image/*,video/*" onPick={(dataUrl, type) => { update({ idleCoverUrl: dataUrl, idleCoverType: type }); }} onClear={() => set("idleCoverUrl", null)} />
+                      <MediaPicker label="Cover layar awal (gambar atau video)" hint="Menggantikan latar warna. Video .mp4 / .mov maks 120 MB — otomatis dikompres & diputar tanpa suara." value={config.idleCoverUrl} kind={config.idleCoverType} accept="image/*,video/mp4,video/quicktime,.mp4,.mov" onPick={(dataUrl, type) => { update({ idleCoverUrl: dataUrl, idleCoverType: type }); }} onClear={() => set("idleCoverUrl", null)} />
+                      <MediaPicker label="Video logo / branding (animasi)" hint="Klip pendek berulang yang tampil menggantikan logo di layar awal. .mp4 / .mov, diputar tanpa suara." value={config.idleLogoVideoUrl} kind="video" accept="video/mp4,video/quicktime,.mp4,.mov" onPick={(url) => set("idleLogoVideoUrl", url)} onClear={() => set("idleLogoVideoUrl", null)} />
                       <MediaPicker label="Banner promo" hint="Gambar kecil di pojok kanan bawah." value={config.idleBannerUrl} accept="image/*" alpha maxDimension={900} onPick={(dataUrl) => set("idleBannerUrl", dataUrl)} onClear={() => set("idleBannerUrl", null)} />
                     </div>
                     <div className="grid gap-2.5 md:grid-cols-2">
@@ -295,7 +293,7 @@ export default function AdminPlaceholder() {
                 <Card title="Warna aksen" description="Warna tombol utama, penanda langkah, dan sorotan di seluruh kiosk.">
                   <div className="flex flex-wrap items-center gap-2.5">
                     {ACCENT_SWATCHES.map((color) => (
-                      <button key={color} type="button" onClick={() => set("accentColor", color)} aria-label={`Aksen ${color}`} className={`h-10 w-10 rounded-full border-2 transition hover:scale-110 ${config.accentColor.toUpperCase() === color ? "border-fg ring-2 ring-offset-2 ring-offset-surface" : "border-transparent"}`} style={{ background: color, ["--tw-ring-color" as string]: color }} />
+                      <button key={color} type="button" onClick={() => set("accentColor", color)} aria-label={`Aksen ${color}`} className={`h-10 w-10 rounded-full border-2 transition hover:scale-110 ${config.accentColor.toUpperCase() === color ? "border-fg scale-110" : "border-transparent"}`} style={{ background: color, ["--tw-ring-color" as string]: color }} />
                     ))}
                   </div>
                   <div className="mt-4 max-w-xs"><ColorField label="Warna kustom" value={config.accentColor} onChange={(value) => set("accentColor", value)} /></div>
@@ -330,7 +328,7 @@ export default function AdminPlaceholder() {
                 <Card title="Huruf" description="Pasangan font untuk judul dan teks biasa.">
                   <div className="grid gap-2.5 sm:grid-cols-2">
                     {Object.entries(FONT_PAIRINGS).map(([key, definition]) => (
-                      <button key={key} type="button" onClick={() => set("fontPairing", key as BoothConfig["fontPairing"])} aria-pressed={config.fontPairing === key} className={`rounded-2xl border p-4 text-left transition ${config.fontPairing === key ? "border-accent bg-accent/[0.08] ring-2 ring-accent/20" : "border-fg/10 hover:border-fg/30"}`}>
+                      <button key={key} type="button" onClick={() => set("fontPairing", key as BoothConfig["fontPairing"])} aria-pressed={config.fontPairing === key} className={`rounded-2xl border p-4 text-left transition ${config.fontPairing === key ? "border-accent bg-accent/[0.08]" : "border-fg/10 hover:border-fg/30"}`}>
                         <span className="block text-2xl font-semibold leading-tight" style={{ fontFamily: `${definition.display}, sans-serif` }}>Abadikan momen</span>
                         <span className="mt-1 block text-sm text-fg/60" style={{ fontFamily: `${definition.body}, sans-serif` }}>Bagikan senyum bersama kami.</span>
                         <span className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-fg/40">{definition.label}</span>

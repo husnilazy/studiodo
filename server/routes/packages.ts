@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { db } from "../db/client.js";
 import { packages, sessions } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
@@ -8,6 +9,7 @@ import { saveUploadedFile } from "../storage.js";
 import { getTenantPlanFeatures } from "../lib/planFeatures.js";
 
 export const packagesRouter = Router();
+packagesRouter.param("id", validateUuidParam("Paket tidak ditemukan"));
 
 // The admin UI reads the thumbnail file into a data: URI client-side (simplest
 // upload UX — no separate multipart step) and sends that string as-is. Storing
@@ -81,7 +83,12 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
 
 // PATCH /api/packages/:id — admin: edit paket
 packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
-  const patch = { ...req.body };
+  // Only these fields can be edited. The body used to be spread straight into the UPDATE, which let a client overwrite
+  // columns it has no business touching (id, createdAt, …).
+  const patch: Record<string, any> = {};
+  for (const key of ["name", "price", "photoCount", "hasGif", "hasVideo", "hasStopMotion", "extraPrints", "active", "sortOrder", "thumbnailUrl", "description"]) {
+    if (req.body?.[key] !== undefined) patch[key] = req.body[key];
+  }
 
   if (patch.name !== undefined) patch.name = String(patch.name).trim();
   if (patch.price !== undefined) {
@@ -106,7 +113,7 @@ packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
   if (patch.active !== undefined) patch.active = Boolean(patch.active);
   if (patch.thumbnailUrl !== undefined) patch.thumbnailUrl = await resolveThumbnailUrl(req.tenantId!, patch.thumbnailUrl);
   if (patch.description !== undefined) patch.description = patch.description ? String(patch.description) : null;
-  delete patch.tenantId;
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
 
   const id = String(req.params.id);
   const [row] = await db

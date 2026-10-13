@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { creatorSubmissions, creatorTemplates, creators, marketplaceTemplates, superadmins } from "../db/schema.js";
 import crypto from "node:crypto";
@@ -7,6 +7,12 @@ import { hashPassword } from "../lib/passwordHash.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { platformEvents } from "../db/schema.js";
+import { REJECTION_PRESETS, reviewChecks } from "../lib/moderation.js";
+import { sendMail, templateReviewedMail } from "../lib/mailer.js";
+import { creatorSignupMail, deliver, resetLink, SETUP_TTL_MS, templateHiddenMail, verifyLink, welcomeCreatorMail } from "../lib/emails.js";
+
+const PORTAL_URL = "https://www.studiodo.id/kreator/portal";
 
 // --- Public: the website's /kreator form ---------------------------------------------
 
@@ -38,6 +44,7 @@ publicCreatorsRouter.post("/creator-submissions", async (req, res) => {
 
   const [row] = await db.insert(creatorSubmissions).values({ name, email, whatsapp, portfolioUrl, description }).returning({ id: creatorSubmissions.id });
   logEvent({ category: "tenant", action: "creator.submitted", message: `Pendaftaran kreator baru: ${name} (${email})`, actorType: "system" });
+  void deliver(email, creatorSignupMail({ name, verifyUrl: verifyLink("creator", row.id, email) }), { what: "pendaftaran kreator" });
   res.status(201).json({ ok: true, id: row.id });
 });
 
@@ -92,9 +99,11 @@ creatorsAdminRouter.post("/accounts", async (req, res) => {
   if (dup) return res.status(409).json({ error: "Email ini sudah punya akun kreator" });
 
   const password = newPassword();
-  const [row] = await db.insert(creators).values({ name, email, whatsapp, passwordHash: hashPassword(password), submissionId }).returning({ id: creators.id, name: creators.name, email: creators.email });
+  const passwordHash = hashPassword(password);
+  const [row] = await db.insert(creators).values({ name, email, whatsapp, passwordHash, submissionId }).returning({ id: creators.id, name: creators.name, email: creators.email });
   if (submissionId) await db.update(creatorSubmissions).set({ status: "accepted", reviewedBy: (await actor(req)) ?? null, reviewedAt: new Date() }).where(eq(creatorSubmissions.id, submissionId));
   logEvent({ category: "system", action: "creator.account_created", message: `Akun kreator dibuat: ${name} (${email})`, actorType: "superadmin", actorLabel: await actor(req) });
+  void deliver(email, welcomeCreatorMail({ name, email, setupUrl: resetLink("creator", row.id, passwordHash, SETUP_TTL_MS) }), { what: "selamat datang kreator" });
   res.status(201).json({ creator: row, password });
 });
 
@@ -102,9 +111,17 @@ creatorsAdminRouter.patch("/accounts/:id", async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: "Akun tidak ditemukan" });
   const status = req.body?.status;
   if (status !== "active" && status !== "suspended") return res.status(400).json({ error: "Status tidak valid" });
-  const [row] = await db.update(creators).set({ status }).where(eq(creators.id, req.params.id)).returning({ id: creators.id });
+  const [row] = await db.update(creators).set({ status }).where(eq(creators.id, req.params.id)).returning({ id: creators.id, name: creators.name });
   if (!row) return res.status(404).json({ error: "Akun tidak ditemukan" });
-  res.json({ ok: true });
+  // Optionally pull the creator's published templates out of the catalog too (tenants who already installed keep their copies).
+  let hidden = 0;
+  if (status === "suspended" && req.body?.hidePublished === true) {
+    const linked = await db.select({ mid: creatorTemplates.marketplaceTemplateId }).from(creatorTemplates).where(eq(creatorTemplates.creatorId, row.id));
+    const ids = linked.map((l) => l.mid).filter((v): v is string => Boolean(v));
+    if (ids.length) hidden = (await db.update(marketplaceTemplates).set({ active: false, updatedAt: new Date() }).where(inArray(marketplaceTemplates.id, ids)).returning({ id: marketplaceTemplates.id })).length;
+  }
+  logEvent({ category: "system", action: `creator.${status === "suspended" ? "suspended" : "reactivated"}`, message: `Akun kreator ${row.name} ${status === "suspended" ? `ditangguhkan${hidden ? `, ${hidden} template disembunyikan dari katalog` : ""}` : "diaktifkan kembali"}`, actorType: "superadmin", actorLabel: await actor(req) });
+  res.json({ ok: true, hidden });
 });
 
 creatorsAdminRouter.post("/accounts/:id/reset-password", async (req, res) => {
@@ -123,11 +140,43 @@ creatorsAdminRouter.get("/templates", async (req, res) => {
   }).from(creatorTemplates).innerJoin(creators, eq(creators.id, creatorTemplates.creatorId))
     .where(["draft", "pending", "approved", "rejected"].includes(status) ? eq(creatorTemplates.status, status) : undefined)
     .orderBy(desc(creatorTemplates.submittedAt), desc(creatorTemplates.updatedAt)).limit(200);
-  res.json(rows.map(({ t, creatorName, creatorEmail }) => ({
+  // Context for the reviewer: how this creator has fared before, and the names already in the catalog.
+  const history = await db.select({ creatorId: creatorTemplates.creatorId, status: creatorTemplates.status, n: count() }).from(creatorTemplates).groupBy(creatorTemplates.creatorId, creatorTemplates.status);
+  const statsOf = (id: string) => {
+    const mine = history.filter((h) => h.creatorId === id);
+    const num = (s: string) => Number(mine.find((h) => h.status === s)?.n ?? 0);
+    return { approved: num("approved"), rejected: num("rejected"), total: mine.reduce((a, h) => a + Number(h.n), 0) };
+  };
+  const catalogNames = (await db.select({ name: marketplaceTemplates.name }).from(marketplaceTemplates)).map((r) => r.name);
+  const whatsappRows = await db.select({ id: creators.id, whatsapp: creators.whatsapp }).from(creators);
+  const whatsappOf = new Map(whatsappRows.map((r) => [r.id, r.whatsapp]));
+  const now = Date.now();
+  const mapped = rows.map(({ t, creatorName, creatorEmail }) => ({
     id: t.id, name: t.name, description: t.description, category: t.category, orientation: t.orientation, outputPreset: t.outputPreset,
     canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, slots: t.slots, frameUrl: t.frameAssetId ? `/api/public/assets/${t.frameAssetId}` : null,
     status: t.status, reviewNote: t.reviewNote, submittedAt: t.submittedAt, reviewedAt: t.reviewedAt, creatorName, creatorEmail,
-  })));
+    creatorId: t.creatorId, creatorWhatsapp: whatsappOf.get(t.creatorId) ?? null, creatorStats: statsOf(t.creatorId),
+    waitingDays: t.status === "pending" && t.submittedAt ? Math.floor((now - new Date(t.submittedAt).getTime()) / 86_400_000) : null,
+    checks: t.status === "pending" ? reviewChecks({ name: t.name, description: t.description, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, slots: t.slots, hasFrame: Boolean(t.frameAssetId) }, catalogNames) : [],
+  }));
+  // The review queue is first-come-first-served: oldest submission first.
+  if (status === "pending") mapped.sort((a, b) => new Date(a.submittedAt ?? 0).getTime() - new Date(b.submittedAt ?? 0).getTime());
+  res.json(mapped);
+});
+
+// GET /api/superadmin/creators/templates/summary — queue size and oldest wait (sidebar badge + panel header).
+creatorsAdminRouter.get("/templates/summary", async (_req, res) => {
+  const pending = await db.select({ submittedAt: creatorTemplates.submittedAt }).from(creatorTemplates).where(eq(creatorTemplates.status, "pending"));
+  const oldest = pending.reduce<number | null>((m, p) => (p.submittedAt && (m === null || new Date(p.submittedAt).getTime() < m) ? new Date(p.submittedAt).getTime() : m), null);
+  res.json({ pending: pending.length, oldestWaitingDays: oldest === null ? null : Math.floor((Date.now() - oldest) / 86_400_000), rejectionPresets: REJECTION_PRESETS });
+});
+
+// GET /api/superadmin/creators/moderation-log — who approved / rejected / hid what, newest first.
+creatorsAdminRouter.get("/moderation-log", async (_req, res) => {
+  const actions = ["creator_template.approved", "creator_template.rejected", "creator_template.submitted", "creator.suspended", "creator.reactivated", "marketplace.published", "marketplace.updated", "marketplace.removed"];
+  const rows = await db.select({ id: platformEvents.id, createdAt: platformEvents.createdAt, action: platformEvents.action, message: platformEvents.message, actorLabel: platformEvents.actorLabel })
+    .from(platformEvents).where(inArray(platformEvents.action, actions)).orderBy(desc(platformEvents.createdAt)).limit(40);
+  res.json(rows);
 });
 
 // POST /api/superadmin/creators/templates/:id/approve — publishes a copy into the curated marketplace.
@@ -147,6 +196,8 @@ creatorsAdminRouter.post("/templates/:id/approve", async (req, res) => {
   }).returning({ id: marketplaceTemplates.id });
   await db.update(creatorTemplates).set({ status: "approved", marketplaceTemplateId: m.id, reviewNote: null, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(creatorTemplates.id, t.id));
   logEvent({ category: "system", action: "creator_template.approved", message: `Template "${t.name}" oleh ${row.creatorName} disetujui dan terbit di marketplace`, actorType: "superadmin", actorLabel: await actor(req) });
+  const [creator] = await db.select({ email: creators.email, name: creators.name }).from(creators).where(eq(creators.id, t.creatorId));
+  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: true, portalUrl: PORTAL_URL }) }, { kind: "template disetujui" });
   res.json({ ok: true, marketplaceTemplateId: m.id });
 });
 
@@ -160,6 +211,8 @@ creatorsAdminRouter.post("/templates/:id/reject", async (req, res) => {
   if (t.status !== "pending") return res.status(409).json({ error: "Hanya template yang sedang ditinjau yang bisa ditolak" });
   await db.update(creatorTemplates).set({ status: "rejected", reviewNote: note, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(creatorTemplates.id, t.id));
   logEvent({ category: "system", action: "creator_template.rejected", message: `Template "${t.name}" ditolak: ${note}`, actorType: "superadmin", actorLabel: await actor(req) });
+  const [creator] = await db.select({ email: creators.email, name: creators.name }).from(creators).where(eq(creators.id, t.creatorId));
+  if (creator) void sendMail({ to: creator.email, ...templateReviewedMail({ creatorName: creator.name, templateName: t.name, approved: false, note, portalUrl: PORTAL_URL }) }, { kind: "template ditolak" });
   res.json({ ok: true });
 });
 
