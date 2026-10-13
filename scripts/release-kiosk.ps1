@@ -50,5 +50,5 @@ if ($Publish) {
   Write-Host "Kiosk yang sudah terpasang akan menemukan update ini dalam 4 jam (atau lewat tombol 'Cek update sekarang' di Admin -> Kiosk)." -ForegroundColor Green
 } else {
   Write-Host ""
-  Write-Host "Installer ada di folder dist-installer (atau folder 'release'). Coba pasang di satu PC dulu sebelum -Publish." -ForegroundColor Green
+  Write-Host "Installer ada di folder dist (STUDIODO-Setup-$version.exe). Coba pasang di satu PC dulu sebelum -Publish." -ForegroundColor Green
 }
