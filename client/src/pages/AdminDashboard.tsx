@@ -11,6 +11,8 @@ import Spinner from "@/components/Spinner";
 import TrendChart from "@/components/TrendChart";
 import WithdrawalPanel from "@/components/WithdrawalPanel";
 import AdminPlaceholder from "./AdminPlaceholder";
+import CrmPanel from "@/components/CrmPanel";
+import LiveMonitorPanel from "@/components/LiveMonitorPanel";
 import GalleryProfile from "./GalleryProfile";
 import KioskKeys from "./KioskKeys";
 import KioskFlowSettings from "./KioskFlowSettings";
@@ -23,14 +25,15 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
-type Section = "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
+type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
 const sections: { id: Section; label: string; icon: string; group: string; hint: string }[] = [
+  { id: "monitor", label: "Monitor Booth", icon: "dashboard", group: "Operasional", hint: "Semua booth dalam satu layar: siapa yang sedang sesi, menunggu bayar, atau offline." },
   { id: "control", label: "Kustomisasi Kiosk", icon: "sliders", group: "Tampilan", hint: "Logo, warna, tombol, dan teks kiosk — lihat hasilnya langsung di pratinjau kiosk asli." },
   { id: "gallery", label: "Profil Gallery", icon: "sparkles", group: "Tampilan", hint: "Profil dan tampilan galeri publik hasil foto." },
   { id: "kiosk", label: "Kiosk", icon: "monitor", group: "Operasional", hint: "Kunci kiosk, kamera, dan printer di PC booth." },
   { id: "flow", label: "Flow Kiosk", icon: "shuffle", group: "Operasional", hint: "Urutan layar yang dilalui pelanggan." },
   { id: "finance", label: "Finance", icon: "wallet", group: "Bisnis", hint: "Pendapatan, paket, harga, dan voucher." },
-  { id: "crm", label: "Database / CRM", icon: "users", group: "Bisnis", hint: "Data pelanggan yang ikut sesi foto." },
+  { id: "crm", label: "Pelanggan / CRM", icon: "users", group: "Bisnis", hint: "Semua pelanggan di satu tempat: hubungi lewat WhatsApp, catatan, label, dan riwayat sesi." },
   { id: "traffic", label: "Traffic", icon: "activity", group: "Bisnis", hint: "Jumlah sesi dan performa booth per hari." },
   { id: "media", label: "Database Foto & Video", icon: "folder", group: "Bisnis", hint: "Semua foto, GIF, dan video dari setiap sesi." },
 ];
@@ -69,7 +72,15 @@ function OverviewSkeleton() {
   );
 }
 
-type MeInfo = { subscriptionEndsAt: string | null; status: string | null; gracePeriodDays: number; renewalWhatsapp: string | null; renewalCheckoutUrl: string | null } | null;
+type MeInfo = {
+  subscriptionEndsAt: string | null;
+  status: string | null;
+  gracePeriodDays: number;
+  renewalWhatsapp: string | null;
+  renewalCheckoutUrl: string | null;
+  portalUrl?: string;
+  licenses?: { activeKeys: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number; nearestEndsAt: string | null };
+} | null;
 
 // Only shown once subscriptionEndsAt is within 14 days (or already past) — Fase 6
 // made this grace-period-aware and tied to real enforcement (see
@@ -80,6 +91,31 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
   const [dismissed, setDismissed] = useState(false);
   if (!me) return null;
   const suspended = me.status === "suspended";
+  const lic = me.licenses;
+  // Newer servers report per-booth licences: say how many booths need attention rather than one account-wide countdown.
+  if (lic && !suspended) {
+    const needAttention = lic.locked + lic.expiringSoon;
+    if (needAttention === 0 && lic.unpaid === 0) return null;
+    if (dismissed && lic.locked === 0) return null;
+    const parts = [
+      lic.locked > 0 ? `${lic.locked} booth terkunci` : null,
+      lic.expiringSoon > 0 ? `${lic.expiringSoon} booth berakhir dalam 7 hari` : null,
+      lic.trial > 0 ? `${lic.trial} booth masih trial` : null,
+    ].filter(Boolean);
+    const urgent = lic.locked > 0;
+    return (
+      <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4 ${urgent ? "border-red-400/30 bg-red-500/10" : "border-amber-400/30 bg-amber-500/10"}`}>
+        <div>
+          <p className={`text-sm font-semibold ${urgent ? "text-red-200" : "text-amber-200"}`}>{parts.join(" · ") || "Ada booth yang belum berlangganan"}</p>
+          <p className="mt-1 text-xs text-fg/50">Satu booth = satu langganan. Kelola dan bayar semua booth sekaligus di dashboard web (ada potongan harga untuk banyak booth).</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={me.portalUrl ?? "https://www.studiodo.id/portal/booth"} target="_blank" rel="noreferrer" className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold">Kelola langganan</a>
+          {!urgent && <button type="button" onClick={() => setDismissed(true)} className="text-sm text-fg/40 hover:text-fg/70">Tutup</button>}
+        </div>
+      </div>
+    );
+  }
   if (!me.subscriptionEndsAt && !suspended) return null;
 
   const daysLeft = me.subscriptionEndsAt ? Math.ceil((new Date(me.subscriptionEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : 0;
@@ -557,7 +593,7 @@ function AppVersionFooter() {
 }
 
 export default function AdminDashboard() {
-  const [section, setSection] = useState<Section>("control");
+  const [section, setSection] = useState<Section>("monitor");
   const [kioskSubtab, setKioskSubtab] = useState<KioskSubtab>("keys");
   const [financeSubtab, setFinanceSubtab] = useState<FinanceSubtab>("packages");
   const [overview, setOverview] = useState<any>({ sessions: [], metrics: {}, traffic: [] });
@@ -738,7 +774,6 @@ export default function AdminDashboard() {
           <div>
             <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">Konten</p>
             <Link href="/admin/frames" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="frame" className="h-[18px] w-[18px] shrink-0" />Kelola Frame</Link>
-            <Link href="/admin/customers" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-fg/60 transition hover:bg-fg/[0.06] hover:text-fg"><Icon name="user" className="h-[18px] w-[18px] shrink-0" />CRM detail</Link>
           </div>
         </nav>
         <div className="mt-auto space-y-2 pt-6">
@@ -801,6 +836,7 @@ export default function AdminDashboard() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
             >
+          {section === "monitor" && <LiveMonitorPanel />}
           {section === "control" && <AdminPlaceholder />}
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
@@ -844,7 +880,7 @@ export default function AdminDashboard() {
               {financeSubtab === "withdraw" && <WithdrawalPanel />}
             </div>
           )}
-          {section === "crm" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-3"><Metric icon="users" label="Total clients" value={String(metrics.customers ?? 0)} /><Metric icon="phone" label="With WhatsApp" value={String(sessions.filter((item: any) => item.customerWhatsapp).length)} /><Metric icon="shield" label="Consent publikasi" value={String(sessions.filter((item: any) => item.publishConsent).length)} /></div><section className={panel}><h3 className="font-display text-2xl font-semibold">Client database</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Tanggal</th><th className="p-3">WhatsApp</th><th className="p-3">Email</th><th className="p-3">Status</th><th className="p-3">Gallery</th></tr></thead><tbody>{sessions.filter((item: any) => item.customerWhatsapp || item.customerEmail).map((item: any) => <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleDateString("id-ID")}</td><td className="p-3">{item.customerWhatsapp || "-"}</td><td className="p-3">{item.customerEmail || "-"}</td><td className="p-3">{item.paymentStatus}</td><td className="p-3">{item.shareUrl ? <a className="text-accent" href={item.shareUrl} target="_blank">Buka</a> : "-"}</td></tr>)}</tbody></table></div></section></div>}
+          {section === "crm" && <CrmPanel />}
           {section === "traffic" && <TrafficMonitor sessions={sessions} traffic={overview.traffic} metrics={metrics} />}
           {section === "media" && <MediaLibrary sessions={sessions} metrics={metrics} downloadAsset={downloadAsset} printAsset={printAsset} downloadingKeys={downloadingKeys} />}
             </motion.div>

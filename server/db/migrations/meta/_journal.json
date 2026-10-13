@@ -204,6 +204,20 @@
       "when": 1791825529768,
       "tag": "0028_absent_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791863672965,
+      "tag": "0029_booth_licenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791885317289,
+      "tag": "0030_crm_and_session_booth",
+      "breakpoints": true
     }
   ]
 }

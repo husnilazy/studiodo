@@ -1,15 +1,19 @@
 import { Router } from "express";
+import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import crypto from "node:crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { kioskKeys, platformSettings } from "../db/schema.js";
+import { kioskKeys, platformSettings, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth, clearKioskAuthCache } from "../middleware/kioskAuth.js";
-import { getSubscriptionStatus } from "../lib/subscription.js";
-import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { clearLicenseCache, computeKeyLock, getGracePeriodDays, getKeyLock, hashKioskKey, lockMessage } from "../lib/license.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { portalBaseUrl } from "../lib/urls.js";
 
 export const kioskKeysRouter = Router();
+kioskKeysRouter.param("id", validateUuidParam("Kiosk key tidak ditemukan"));
+
+const MAX_ACTIVE_KEYS = 100;
 
 // POST /api/kiosk-keys/heartbeat — kiosk lapor status dirinya sendiri secara berkala
 // (versi app + ringkasan diagnostik), dipakai admin dashboard untuk fleet visibility
@@ -32,11 +36,11 @@ kioskKeysRouter.post("/heartbeat", requireKioskAuth, async (req, res) => {
     .where(eq(kioskKeys.id, req.kioskKeyId!))
     .returning({ autoUpdateEnabled: kioskKeys.autoUpdateEnabled });
 
-  // Fase 6 — piggyback subscription-lock status onto this already-periodic (every
-  // 5 min) heartbeat instead of adding a separate polling endpoint. Never rejects:
-  // this route's job is to REPORT lock state, not enforce it (see
-  // requireActiveSubscription for the actual gate).
-  const subscription = await getSubscriptionStatus(req.tenantId!);
+  // Piggyback THIS booth's licence state onto the already-periodic (every 5 min) heartbeat instead of adding a
+  // separate polling endpoint. Never rejects: this route's job is to REPORT lock state, not enforce it (see
+  // requireActiveSubscription for the actual gate). `lockAt` lets the kiosk lock itself at the right moment even if it
+  // goes offline before the licence runs out.
+  const lock = await getKeyLock(req.kioskKeyId!);
   const [settings] = await db.select({
     renewalWhatsapp: platformSettings.renewalWhatsapp,
     renewalCheckoutUrl: platformSettings.renewalCheckoutUrl,
@@ -44,16 +48,23 @@ kioskKeysRouter.post("/heartbeat", requireKioskAuth, async (req, res) => {
 
   res.json({
     ok: true,
-    // Piggybacked the same way as subscription lock above — this is how
+    // Piggybacked the same way as the licence above — this is how
     // electron/main.cjs's setupAutoUpdater() learns whether THIS specific
     // kiosk key has been opted out of auto-update by its tenant admin
     // (KioskKeys.tsx's per-row toggle), without a separate polling endpoint.
     autoUpdateEnabled: updated?.autoUpdateEnabled ?? true,
     subscription: {
-      locked: subscription.locked,
-      graceDaysRemaining: subscription.graceDaysRemaining,
+      locked: lock.locked,
+      reason: lock.reason,
+      message: lockMessage(lock.reason),
+      licenseType: lock.licenseType,
+      licenseEndsAt: lock.licenseEndsAt,
+      lockAt: lock.lockAt,
+      daysRemaining: lock.daysRemaining,
+      graceDaysRemaining: lock.graceDaysRemaining,
       renewalWhatsapp: settings?.renewalWhatsapp ?? null,
       renewalCheckoutUrl: settings?.renewalCheckoutUrl ?? null,
+      portalUrl: `${portalBaseUrl()}/portal/booth`,
     },
   });
 });
@@ -90,10 +101,6 @@ kioskKeysRouter.post("/report-error", requireKioskAuth, async (req, res) => {
 
 kioskKeysRouter.use(requireAdminAuth);
 
-function hashKey(rawKey: string) {
-  return crypto.createHash("sha256").update(rawKey).digest("hex");
-}
-
 // GET /api/kiosk-keys — list this tenant's kiosk keys (never returns the raw key or its hash)
 kioskKeysRouter.get("/", async (req, res) => {
   const rows = await db
@@ -108,48 +115,61 @@ kioskKeysRouter.get("/", async (req, res) => {
       boundDeviceId: kioskKeys.boundDeviceId,
       boundAt: kioskKeys.boundAt,
       autoUpdateEnabled: kioskKeys.autoUpdateEnabled,
+      licenseType: kioskKeys.licenseType,
+      licenseEndsAt: kioskKeys.licenseEndsAt,
+      licensePlanSlug: kioskKeys.licensePlanSlug,
     })
     .from(kioskKeys)
     .where(eq(kioskKeys.tenantId, req.tenantId!))
     .orderBy(desc(kioskKeys.createdAt));
-  res.json(rows);
+  const [[tenant], grace] = await Promise.all([
+    db.select({ status: tenants.status }).from(tenants).where(eq(tenants.id, req.tenantId!)),
+    getGracePeriodDays(),
+  ]);
+  res.json(rows.map((row) => {
+    const lock = computeKeyLock(tenant?.status ?? "active", row, grace);
+    return { ...row, locked: lock.locked, lockReason: lock.reason, daysRemaining: lock.daysRemaining, graceDaysRemaining: lock.graceDaysRemaining };
+  }));
 });
 
-// PATCH /api/kiosk-keys/:id — currently only the auto-update opt-out toggle
-// (KioskKeys.tsx). Advisory only, same as the column comment in schema.ts:
-// the kiosk reads this off its own heartbeat and decides for itself whether
-// to call checkForUpdates(), the server never pushes or enforces anything.
+// PATCH /api/kiosk-keys/:id — rename the booth and/or toggle its auto-update opt-out (KioskKeys.tsx). Auto-update is
+// advisory only, same as the column comment in schema.ts: the kiosk reads it off its own heartbeat and decides for
+// itself whether to call checkForUpdates(), the server never pushes or enforces anything.
 kioskKeysRouter.patch("/:id", async (req, res) => {
-  if (req.body?.autoUpdateEnabled === undefined) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
+  const patch: { autoUpdateEnabled?: boolean; label?: string | null } = {};
+  if (req.body?.autoUpdateEnabled !== undefined) patch.autoUpdateEnabled = Boolean(req.body.autoUpdateEnabled);
+  if (req.body?.label !== undefined) patch.label = String(req.body.label ?? "").trim().slice(0, 80) || null;
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
   const [row] = await db
     .update(kioskKeys)
-    .set({ autoUpdateEnabled: Boolean(req.body.autoUpdateEnabled) })
+    .set(patch)
     .where(and(eq(kioskKeys.id, req.params.id), eq(kioskKeys.tenantId, req.tenantId!)))
-    .returning({ id: kioskKeys.id, autoUpdateEnabled: kioskKeys.autoUpdateEnabled });
+    .returning({ id: kioskKeys.id, autoUpdateEnabled: kioskKeys.autoUpdateEnabled, label: kioskKeys.label });
   if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
   res.json(row);
 });
 
-// POST /api/kiosk-keys — generate a new kiosk key
+// POST /api/kiosk-keys — add a booth. The new key can be paired right away but stays locked ("unpaid") until the booth
+// is subscribed to from the website (Booth & langganan) — one key is one booth is one subscription.
 kioskKeysRouter.post("/", async (req, res) => {
-  const { kioskLimit } = await getTenantPlanFeatures(req.tenantId!);
-  if (kioskLimit != null) {
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(kioskKeys)
-      .where(and(eq(kioskKeys.tenantId, req.tenantId!), isNull(kioskKeys.revokedAt)));
-    if (count >= kioskLimit) {
-      return res.status(403).json({ error: `Paket kamu maksimal ${kioskLimit} kiosk aktif. Revoke kiosk lain atau upgrade paket untuk menambah.` });
-    }
+  // How many booths a tenant may have is decided by what it pays for (one subscription per booth), not by its plan, so
+  // only a sanity cap applies here.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(kioskKeys)
+    .where(and(eq(kioskKeys.tenantId, req.tenantId!), isNull(kioskKeys.revokedAt)));
+  if (count >= MAX_ACTIVE_KEYS) {
+    return res.status(403).json({ error: `Maksimal ${MAX_ACTIVE_KEYS} booth aktif per akun. Hubungi admin STUDIODO bila butuh lebih.` });
   }
 
   const label = String(req.body?.label ?? "").trim().slice(0, 80) || null;
   const rawKey = crypto.randomBytes(32).toString("hex");
   const [row] = await db
     .insert(kioskKeys)
-    .values({ tenantId: req.tenantId!, label, keyHash: hashKey(rawKey), rawKey })
+    .values({ tenantId: req.tenantId!, label, keyHash: hashKioskKey(rawKey), rawKey, licenseType: "unpaid" })
     .returning({ id: kioskKeys.id, label: kioskKeys.label, createdAt: kioskKeys.createdAt });
-  res.status(201).json({ ...row, key: rawKey });
+  logEvent({ tenantId: req.tenantId!, category: "kiosk", action: "kiosk_key.created", message: `Booth baru "${label ?? "tanpa nama"}" dibuat (belum berlangganan)`, actorType: "tenant_admin" });
+  res.status(201).json({ ...row, key: rawKey, licenseType: "unpaid" });
 });
 
 // GET /api/kiosk-keys/:id/reveal — look up a previously-created key's raw
@@ -180,6 +200,7 @@ kioskKeysRouter.post("/:id/reset-device", async (req, res) => {
     .returning({ id: kioskKeys.id });
   if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
   clearKioskAuthCache();
+  clearLicenseCache();
   res.json({ ok: true, id: row.id });
 });
 
@@ -192,5 +213,6 @@ kioskKeysRouter.delete("/:id", async (req, res) => {
     .returning({ id: kioskKeys.id });
   if (!row) return res.status(404).json({ error: "Kiosk key tidak ditemukan" });
   clearKioskAuthCache();
+  clearLicenseCache();
   res.json({ ok: true, id: row.id });
 });

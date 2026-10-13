@@ -168,7 +168,42 @@ export interface SuperadminTenant extends TenantProfileFields {
   revenue: number;
   locked: boolean;
   expiringSoon: boolean;
+  /** Per-booth licence picture of this tenant. */
+  licenses?: LicenseSummary;
+  boothDiscountPercent?: number;
+  boothDiscountNote?: string | null;
 }
+
+export interface LicenseSummary {
+  activeKeys: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number; nearestEndsAt: string | null;
+}
+
+export type LicenseType = "trial" | "paid" | "unpaid";
+
+/** One booth (kiosk key) with its licence, across all tenants. */
+export interface LicenseRow {
+  id: string;
+  label: string | null;
+  tenantId: string;
+  tenantName: string;
+  tenantStatus: string;
+  licenseType: LicenseType;
+  licenseEndsAt: string | null;
+  licensePlanSlug: string | null;
+  trialStartedAt: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  appVersion: string | null;
+  revokedAt: string | null;
+  paired: boolean;
+  locked: boolean;
+  lockReason: "suspended" | "unpaid" | "trial_expired" | "expired" | null;
+  daysRemaining: number | null;
+  graceDaysRemaining: number | null;
+  expiringSoon: boolean;
+}
+
+export interface VolumeTier { minBooths: number; percent: number }
 
 export interface PlatformSettings {
   id: string;
@@ -179,6 +214,7 @@ export interface PlatformSettings {
   qrisFeePercent: string;
   withdrawalMinAmount: number;
   withdrawalFlatFee: number;
+  volumeDiscounts: VolumeTier[];
   updatedAt: string;
 }
 
@@ -219,6 +255,7 @@ export interface TenantQrisBalance {
 
 export interface PlatformOverview {
   tenants: { total: number; byStatus: Record<string, number>; expiringSoon: number; expired: number; locked: number };
+  booths?: { total: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number };
   kiosks: { total: number; online: number };
   sessions: { total: number; paid: number; revenue: number };
   subscriptions: { revenue30d: number; payments30d: number; pendingOrders: number };
@@ -227,6 +264,7 @@ export interface PlatformOverview {
 export interface BillingOrderRow {
   orderId: string; provider: string; tenantId: string; tenantName: string; planName: string; amount: number; periodDays: number;
   status: "pending" | "paid" | "failed" | "expired"; paymentType: string | null; createdAt: string; paidAt: string | null;
+  boothCount?: number; discountPercent?: number;
 }
 
 export interface CreatorAccount {
@@ -349,7 +387,7 @@ export interface FleetAlertKiosk {
 
 export interface TenantDetail extends SuperadminTenant {
   admins: { id: string; email: string; createdAt: string }[];
-  kioskKeys: { id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; boundDeviceId: string | null; boundAt: string | null; appVersion: string | null; lastDiagnostics: KioskDiagnostics | null }[];
+  kioskKeys: { id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; boundDeviceId: string | null; boundAt: string | null; appVersion: string | null; lastDiagnostics: KioskDiagnostics | null; licenseType: LicenseType; licenseEndsAt: string | null; locked: boolean; lockReason: string | null; daysRemaining: number | null }[];
   payments: TenantPayment[];
   recentEvents: PlatformEvent[];
 }
@@ -360,16 +398,33 @@ export const superadminApi = {
   getMe: () => request<{ email: string }>("/me"),
   getTenants: () => request<SuperadminTenant[]>("/tenants"),
   getTenant: (id: string) => request<TenantDetail>(`/tenants/${id}`),
+  recheckBillingOrder: (orderId: string) => request<{ ok: boolean; status: string; result: string }>(`/billing/orders/${encodeURIComponent(orderId)}/check`, { method: "POST" }),
+
+  // --- Per-booth licences & trial keys ---
+  getLicenses: (filters: { type?: string; state?: string; tenantId?: string; q?: string } = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+    return request<LicenseRow[]>(`/licenses${params.toString() ? `?${params.toString()}` : ""}`);
+  },
+  issueLicenseKey: (tenantId: string, body: { kind: LicenseType; days?: number; label?: string; planSlug?: string }) =>
+    request<{ id: string; label: string | null; licenseType: LicenseType; licenseEndsAt: string | null; key: string }>(`/licenses/tenants/${tenantId}/keys`, { method: "POST", body: JSON.stringify(body) }),
+  updateLicense: (id: string, body: { label?: string; licenseType?: LicenseType; licenseEndsAt?: string | null; extendDays?: number; planSlug?: string | null }) =>
+    request<unknown>(`/licenses/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  resetLicenseDevice: (id: string) => request<{ ok: boolean }>(`/licenses/${id}/reset-device`, { method: "POST" }),
+  revokeLicense: (id: string) => request<{ ok: boolean }>(`/licenses/${id}/revoke`, { method: "POST" }),
+  restoreLicense: (id: string) => request<{ ok: boolean }>(`/licenses/${id}/restore`, { method: "POST" }),
+  revealLicenseKey: (id: string) => request<{ key: string }>(`/licenses/${id}/key`),
+
   getBillingOrders: (status = "") => request<BillingOrderRow[]>(`/billing/orders${status ? `?status=${status}` : ""}`),
   getOverview: () => request<PlatformOverview>("/overview"),
   getOverviewTimeseries: (days = 30) => request<OverviewTimeseriesPoint[]>(`/overview/timeseries?days=${days}`),
-  createTenant: (body: { name: string; slug: string; email: string; password: string; plan?: string } & Partial<TenantProfileFields>) =>
+  createTenant: (body: { name: string; slug: string; email: string; password: string; plan?: string; trialDays?: number } & Partial<TenantProfileFields>) =>
     request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>("/tenants", { method: "POST", body: JSON.stringify(body) }),
-  updateTenant: (id: string, body: { plan?: string; status?: string; subscriptionEndsAt?: string | null; qrisSettlement?: "direct" | "platform" } & Partial<TenantProfileFields>) =>
+  updateTenant: (id: string, body: { plan?: string; status?: string; subscriptionEndsAt?: string | null; qrisSettlement?: "direct" | "platform"; boothDiscountPercent?: number; boothDiscountNote?: string | null } & Partial<TenantProfileFields>) =>
     request<SuperadminTenant>(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  extendTenant: (id: string, days: number) => request<SuperadminTenant>(`/tenants/${id}/extend`, { method: "POST", body: JSON.stringify({ days }) }),
+  extendTenant: (id: string, days: number, keyIds?: string[]) => request<SuperadminTenant>(`/tenants/${id}/extend`, { method: "POST", body: JSON.stringify({ days, keyIds }) }),
   getSettings: () => request<PlatformSettings>("/settings"),
-  updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number }) =>
+  updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number; volumeDiscounts?: VolumeTier[] }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   getWithdrawals: (status = "open") => request<WithdrawalAdminList>(`/withdrawals?status=${status}`),
   updateWithdrawal: (id: string, body: { status: "processing" | "paid" | "rejected"; adminNote?: string; transferReference?: string }) =>
@@ -382,7 +437,7 @@ export const superadminApi = {
     request<Plan>(`/plans/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deletePlan: (id: string) => request<{ ok: boolean; deleted?: boolean; deactivated?: boolean }>(`/plans/${id}`, { method: "DELETE" }),
   getTenantPayments: (id: string) => request<TenantPayment[]>(`/tenants/${id}/payments`),
-  recordPayment: (id: string, body: { amount: number; periodDays: number; method: string; note?: string; planId?: string | null }) =>
+  recordPayment: (id: string, body: { amount: number; periodDays: number; method: string; note?: string; planId?: string | null; keyIds?: string[] }) =>
     request<{ tenant: SuperadminTenant; payment: TenantPayment }>(`/tenants/${id}/payments`, { method: "POST", body: JSON.stringify(body) }),
 
   getEvents: (filters: { level?: string; category?: string; tenantId?: string; before?: string; limit?: number } = {}) => {
@@ -436,6 +491,6 @@ export const superadminApi = {
 
   getTenantApplications: (status: "pending" | "all" = "pending") => request<TenantApplication[]>(`/tenant-applications?status=${status}`),
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
-  convertApplication: (id: string, body: { slug: string; password: string }) =>
+  convertApplication: (id: string, body: { slug: string; password: string; trialDays?: number }) =>
     request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
 };

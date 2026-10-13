@@ -133,6 +133,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   if (res.status === 403 && body?.code === "kiosk_device_mismatch") {
     window.dispatchEvent(new Event("studiodo-kiosk-device-mismatch"));
   }
+  // The booth's licence ran out: show the lock screen right away instead of waiting for the next heartbeat.
+  if (res.status === 403 && body?.code === "subscription_locked" && kioskKey) {
+    window.dispatchEvent(new CustomEvent("studiodo-subscription-locked", { detail: { reason: body.reason ?? null, message: body.error ?? null } }));
+  }
   // Recovery path for the screen above — once any kiosk-authenticated request
   // succeeds again (e.g. an admin reset the device lock and the next periodic
   // heartbeat got through), clear it. Without this, a kiosk that got unlocked
@@ -151,7 +155,44 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   return body as T;
 }
 
+export type CrmCustomer = {
+  key: string; name: string | null; whatsapp: string | null; email: string | null; sessions: number; paidSessions: number; totalSpend: number;
+  firstSeen: string; lastSeen: string; consent: boolean; lastFeedback: string | null; lastShareUrl: string | null;
+  notes: string | null; tags: string[]; marketingOptOut: boolean;
+};
+export type CrmQuery = { q?: string; filter?: string; tag?: string; sort?: string; limit?: number; offset?: number };
+export type CrmSession = {
+  id: string; createdAt: string; completedAt: string | null; paymentStatus: string; paymentMethod: string; totalAmount: number; voucherCode: string | null;
+  shareUrl: string | null; feedback: string | null; publishConsent: boolean; packageName: string | null; boothLabel: string | null; photoCount: number;
+};
+export type LiveBooth = {
+  id: string; label: string; state: "locked" | "offline" | "payment" | "capture" | "review" | "idle"; paired: boolean; lastUsedAt: string | null;
+  appVersion: string | null; diagnostics: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null;
+  licenseType: "trial" | "paid" | "unpaid"; lockReason: string | null; daysRemaining: number | null;
+  current: { sessionId: string; stage: "payment" | "capture" | "review"; packageName: string | null; photoCount: number; photoTarget: number | null; amount: number; startedAt: string } | null;
+  waiting: number; today: { sessions: number; paid: number; revenue: number; photos: number }; lastSessionAt: string | null;
+};
+export type LiveData = {
+  now: string;
+  summary: { booths: number; online: number; inSession: number; waitingPayment: number; offline: number; locked: number; sessionsToday: number; paidToday: number; revenueToday: number };
+  booths: LiveBooth[];
+  recent: { id: string; at: string; booth: string; packageName: string | null; amount: number; paymentStatus: string; done: boolean; hasContact: boolean }[];
+};
+
+function crmQs(params: CrmQuery) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+  return qs.toString();
+}
+
 export const api = {
+  getCrmCustomers: (params: CrmQuery = {}) =>
+    request<{ items: CrmCustomer[]; total: number; limit: number; offset: number; summary: { customers: number; withWhatsapp: number; consent: number; returning: number; new30d: number; lifetimeSpend: number }; tags: string[] }>(`/crm/customers?${crmQs(params)}`),
+  getCrmCustomer: (key: string) => request<{ customer: CrmCustomer; sessions: CrmSession[] }>(`/crm/customer?key=${encodeURIComponent(key)}`),
+  saveCrmCustomer: (body: { key: string; name?: string; notes?: string; tags?: string[]; marketingOptOut?: boolean }) =>
+    request<{ ok: boolean }>("/crm/customer", { method: "PUT", body: JSON.stringify(body) }),
+  getCrmExport: (params: CrmQuery = {}) => request<{ items: CrmCustomer[] }>(`/crm/export?${crmQs(params)}`),
+  getLive: () => request<LiveData>("/live"),
   loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logoutAdmin: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   getMe: () => request<{
@@ -163,6 +204,9 @@ export const api = {
     renewalWhatsapp: string | null;
     renewalCheckoutUrl: string | null;
     gracePeriodDays: number;
+    portalUrl?: string;
+    /** Per-booth licence summary of the whole account (older servers don't send it). */
+    licenses?: { activeKeys: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number; nearestEndsAt: string | null };
   }>("/auth/me"),
   getStorageConfig: () => request<any>("/config/storage"),
   updateStorageConfig: (body: Record<string, unknown>) => request<{ ok: boolean }>("/config/storage", { method: "PATCH", body: JSON.stringify(body) }),
@@ -183,7 +227,7 @@ export const api = {
     request<{ elements: LayoutElement[]; updatedAt: string | null }>(`/config/screen-layout?screenKey=${screenKey}&orientation=${orientation}`),
   updateScreenLayout: (screenKey: string, orientation: ScreenOrientation, elements: LayoutElement[]) =>
     request<{ ok: boolean; elements: LayoutElement[] }>("/config/screen-layout", { method: "PATCH", body: JSON.stringify({ screenKey, orientation, elements }) }),
-  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null; autoUpdateEnabled?: boolean }[]>("/kiosk-keys"),
+  getKioskKeys: () => request<{ id: string; label: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; appVersion?: string | null; lastDiagnostics?: { cameraOk: boolean; printerOk: boolean; networkOk: boolean; checkedAt: string } | null; boundDeviceId?: string | null; boundAt?: string | null; autoUpdateEnabled?: boolean; licenseType?: "trial" | "paid" | "unpaid"; licenseEndsAt?: string | null; locked?: boolean; lockReason?: string | null; daysRemaining?: number | null; graceDaysRemaining?: number | null }[]>("/kiosk-keys"),
   createKioskKey: (label: string) => request<{ id: string; label: string | null; createdAt: string; key: string }>("/kiosk-keys", { method: "POST", body: JSON.stringify({ label }) }),
   resetKioskKeyDevice: (id: string) => request<{ ok: boolean; id: string }>(`/kiosk-keys/${id}/reset-device`, { method: "POST" }),
   revealKioskKey: (id: string) => request<{ key: string }>(`/kiosk-keys/${id}/reveal`),
@@ -194,7 +238,19 @@ export const api = {
     request<{
       ok: boolean;
       autoUpdateEnabled: boolean;
-      subscription: { locked: boolean; graceDaysRemaining: number | null; renewalWhatsapp: string | null; renewalCheckoutUrl: string | null };
+      subscription: {
+        locked: boolean;
+        reason?: "suspended" | "unpaid" | "trial_expired" | "expired" | null;
+        message?: string | null;
+        licenseType?: "trial" | "paid" | "unpaid" | null;
+        licenseEndsAt?: string | null;
+        lockAt?: string | null;
+        daysRemaining?: number | null;
+        graceDaysRemaining: number | null;
+        renewalWhatsapp: string | null;
+        renewalCheckoutUrl: string | null;
+        portalUrl?: string | null;
+      };
     }>("/kiosk-keys/heartbeat", { method: "POST", body: JSON.stringify(body) }),
   // Fire-and-forget from client/src/main.tsx's console.error override — a
   // failure here must never throw back into the console override itself

@@ -15,6 +15,12 @@ type KioskKey = {
   boundDeviceId?: string | null;
   boundAt?: string | null;
   autoUpdateEnabled?: boolean;
+  licenseType?: "trial" | "paid" | "unpaid";
+  licenseEndsAt?: string | null;
+  locked?: boolean;
+  lockReason?: string | null;
+  daysRemaining?: number | null;
+  graceDaysRemaining?: number | null;
 };
 
 const ONLINE_THRESHOLD_MS = 10 * 60 * 1000; // heartbeat/request tiap ~5 menit — 10 menit tanpa kabar = offline
@@ -28,6 +34,23 @@ function formatDate(value: string | null) {
 function isRecentlyActive(lastUsedAt: string | null) {
   if (!lastUsedAt) return false;
   return Date.now() - new Date(lastUsedAt).getTime() < ONLINE_THRESHOLD_MS;
+}
+
+// One booth = one subscription. Shows where this key stands: trial (counting down), paid, never subscribed, or locked.
+function LicenseBadge({ item }: { item: KioskKey }) {
+  if (item.revokedAt) return <span className="text-fg/30">—</span>;
+  const date = item.licenseEndsAt ? new Date(item.licenseEndsAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : null;
+  if (item.licenseType === "unpaid") return <span className="rounded-full border border-red-400/30 px-2 py-0.5 text-[11px] text-red-300">Belum berlangganan</span>;
+  if (item.locked) {
+    return <span className="rounded-full border border-red-400/30 px-2 py-0.5 text-[11px] text-red-300">{item.licenseType === "trial" ? "Trial habis" : "Terkunci"}{date ? ` · ${date}` : ""}</span>;
+  }
+  if (item.licenseType === "trial") {
+    return <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-[11px] text-amber-300">Trial · {Math.max(0, item.daysRemaining ?? 0)} hari lagi</span>;
+  }
+  if (item.graceDaysRemaining !== null && item.graceDaysRemaining !== undefined) {
+    return <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-[11px] text-amber-300">Masa tenggang · {item.graceDaysRemaining} hari</span>;
+  }
+  return <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-[11px] text-emerald-300">{date ? `Aktif s/d ${date}` : "Aktif"}</span>;
 }
 
 function DiagnosticsSummary({ diagnostics }: { diagnostics?: KioskDiagnostics }) {
@@ -56,8 +79,7 @@ export default function KioskKeys() {
   const [newKey, setNewKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [kioskLimit, setKioskLimit] = useState<number | null>(null);
-  const [planName, setPlanName] = useState<string | null>(null);
+  const [portalUrl, setPortalUrl] = useState("https://www.studiodo.id/portal/booth");
 
   const refresh = () => {
     setLoading(true);
@@ -65,11 +87,7 @@ export default function KioskKeys() {
   };
 
   useEffect(() => {
-    api.getPlanFeatures().then((result) => {
-      if (!result) return;
-      setKioskLimit(result.kioskLimit);
-      setPlanName(result.planName);
-    }).catch(() => undefined);
+    api.getMe().then((me) => { if (me?.portalUrl) setPortalUrl(me.portalUrl); }).catch(() => undefined);
     refresh();
     // Quiet poll (no loading flicker) so online/offline + diagnostics stay
     // roughly live while this page is open, without the admin manually refreshing.
@@ -181,7 +199,6 @@ export default function KioskKeys() {
   };
 
   const activeKeyCount = keys.filter((key) => !key.revokedAt).length;
-  const atLimit = kioskLimit != null && activeKeyCount >= kioskLimit;
 
   // History table used to render every kiosk key ever created (including old
   // test/revoked ones) in one long scroll — same "load more" pattern as
@@ -201,9 +218,14 @@ export default function KioskKeys() {
           aktif di satu komputer — kalau ganti hardware, pakai "Reset device" di bawah,
           bukan membuat key baru.
         </p>
+        <p className="mt-2 max-w-xl text-sm text-fg/45">
+          Satu key = satu booth = satu langganan. Key baru bisa dipasangkan, tetapi kiosknya terkunci sampai booth itu
+          berlangganan di <a href={portalUrl} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-4">dashboard web STUDIODO</a>{" "}
+          (Booth &amp; langganan) — di sana kamu juga bisa membayar banyak booth sekaligus dan dapat potongan harga.
+        </p>
         <p className="mt-2 text-xs text-fg/40">
-          {activeKeyCount} / {kioskLimit ?? "∞"} kiosk aktif{planName ? ` — paket ${planName}` : ""}
-          {atLimit && <span className="ml-2 text-amber-300">Sudah mencapai batas paket kamu. Cabut kiosk lain atau upgrade paket untuk menambah.</span>}
+          {activeKeyCount} booth aktif · {keys.filter((key) => !key.revokedAt && key.licenseType === "paid" && !key.locked).length} berlangganan
+          {keys.some((key) => !key.revokedAt && key.licenseType === "unpaid") && <span className="ml-2 text-amber-300">Ada booth yang belum berlangganan — kiosknya terkunci.</span>}
         </p>
 
         {newKey && (
@@ -227,11 +249,10 @@ export default function KioskKeys() {
           <button
             type="button"
             onClick={create}
-            disabled={creating || atLimit}
-            title={atLimit ? "Sudah mencapai batas kiosk paket kamu" : undefined}
+            disabled={creating}
             className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold shadow-lg shadow-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {creating ? "Membuat…" : atLimit ? "Batas kiosk tercapai" : "Buat kiosk key baru"}
+            {creating ? "Membuat…" : "Buat kiosk key baru"}
           </button>
         </div>
         {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
@@ -246,6 +267,7 @@ export default function KioskKeys() {
                 <th className="p-3">Versi app</th>
                 <th className="p-3">Diagnostik terakhir</th>
                 <th className="p-3">Terakhir dipakai</th>
+                <th className="p-3">Langganan</th>
                 <th className="p-3">Status key</th>
                 <th className="p-3">Auto-update</th>
                 <th className="p-3"></th>
@@ -275,6 +297,7 @@ export default function KioskKeys() {
                   <td className="p-3 text-fg/60">{key.appVersion || "-"}</td>
                   <td className="p-3"><DiagnosticsSummary diagnostics={key.lastDiagnostics} /></td>
                   <td className="p-3 text-fg/60">{formatDate(key.lastUsedAt)}</td>
+                  <td className="p-3"><LicenseBadge item={key} /></td>
                   <td className="p-3">
                     {key.revokedAt ? <span className="text-red-300">Dicabut</span> : <span className="text-emerald-300">Aktif</span>}
                   </td>
@@ -293,6 +316,11 @@ export default function KioskKeys() {
                   </td>
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-1.5">
+                    {!key.revokedAt && (key.licenseType !== "paid" || key.locked || (key.daysRemaining ?? 99) <= 14) && (
+                      <a href={portalUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">
+                        {key.licenseType === "paid" && !key.locked ? "Perpanjang" : "Berlangganan"}
+                      </a>
+                    )}
                     {!key.revokedAt && (
                       <button type="button" disabled={revealingId === key.id} onClick={() => toggleReveal(key.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg disabled:opacity-50">
                         {revealingId === key.id ? "Memuat…" : revealed[key.id] ? "Sembunyikan" : "Lihat key"}
@@ -314,7 +342,7 @@ export default function KioskKeys() {
               ))}
               {visibleKeys.map((key) => (revealed[key.id] || revealError[key.id]) && (
                 <tr key={`${key.id}-reveal`} className="border-t border-fg/5 bg-fg/5">
-                  <td colSpan={8} className="p-3">
+                  <td colSpan={9} className="p-3">
                     {revealed[key.id] ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-fg/40">{key.label || "Kiosk key"}:</span>
@@ -330,10 +358,10 @@ export default function KioskKeys() {
                 </tr>
               ))}
               {loading && keys.length === 0 && (
-                <tr><td colSpan={8} className="p-6 text-center text-fg/40">Memuat…</td></tr>
+                <tr><td colSpan={9} className="p-6 text-center text-fg/40">Memuat…</td></tr>
               )}
               {!loading && keys.length === 0 && (
-                <tr><td colSpan={8} className="p-6 text-center text-fg/40">Belum ada kiosk key. Buat satu untuk mulai pairing kiosk.</td></tr>
+                <tr><td colSpan={9} className="p-6 text-center text-fg/40">Belum ada kiosk key. Buat satu untuk mulai pairing kiosk.</td></tr>
               )}
             </tbody>
           </table>

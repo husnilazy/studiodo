@@ -1,7 +1,8 @@
 import { Router } from "express";
+import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { db } from "../db/client.js";
 import { templates, frameOverlays, tenantSettings } from "../db/schema.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
@@ -9,6 +10,7 @@ import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 
 export const framesRouter = Router();
+framesRouter.param("id", validateUuidParam("Frame tidak ditemukan"));
 
 // Frames used only by the stop-motion video are ordinary templates saved under this reserved category. They are kept
 // out of the normal frame picker, and only listed when asked for with ?purpose=stopmotion.
@@ -83,6 +85,28 @@ framesRouter.post("/categories", requireAdminAuth, async (req, res) => {
   const categories = current.some((category) => category.key === key) ? current : [...current, { key, label }];
   await db.update(tenantSettings).set({ frameCategories: categories, updatedAt: new Date() }).where(eq(tenantSettings.tenantId, tenantId));
   res.json({ categories });
+});
+
+// GET /api/frames/manage — admin overview of every frame (active or not) for the web dashboard. Legacy rows that still hold
+// the image as a multi-MB data: URI are returned without it (imageUrl null) instead of dragging megabytes through a list.
+framesRouter.get("/manage", requireAdminAuth, async (req, res) => {
+  const tenantId = req.tenantId!;
+  const [custom, overlays] = await Promise.all([
+    db.select({
+      id: templates.id, name: templates.name, orientation: templates.orientation, category: templates.category, style: templates.style,
+      outputPreset: templates.outputPreset, active: templates.active, createdAt: templates.createdAt,
+      imageUrl: sql<string | null>`case when left(${templates.frameImageUrl}, 5) = 'data:' then null else ${templates.frameImageUrl} end`,
+      slotCount: sql<number>`coalesce(jsonb_array_length(${templates.slots}), 0)::int`,
+    }).from(templates).where(eq(templates.tenantId, tenantId)).orderBy(templates.createdAt),
+    db.select({
+      id: frameOverlays.id, name: frameOverlays.name, orientation: frameOverlays.orientation, active: frameOverlays.active, createdAt: frameOverlays.createdAt,
+      imageUrl: sql<string | null>`case when left(${frameOverlays.imageUrl}, 5) = 'data:' then null else ${frameOverlays.imageUrl} end`,
+    }).from(frameOverlays).where(eq(frameOverlays.tenantId, tenantId)).orderBy(frameOverlays.createdAt),
+  ]);
+  res.json([
+    ...custom.map((t) => ({ ...t, kind: "template" as const, imageUrl: t.imageUrl ? resolveFrameUrl(t.imageUrl) : null, stopMotion: t.category === STOP_MOTION_CATEGORY })),
+    ...overlays.map((o) => ({ ...o, kind: "overlay" as const, imageUrl: o.imageUrl ? resolveFrameUrl(o.imageUrl) : null, category: "overlay", style: "Overlay", outputPreset: "", slotCount: 0, stopMotion: false })),
+  ]);
 });
 
 // GET /api/frames?orientation=portrait — kiosk "Pilih Frame" screen
@@ -191,7 +215,9 @@ framesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
     ...(category !== undefined ? { category: String(category) } : {}),
     ...(style !== undefined ? { style: String(style) } : {}),
     ...(outputPreset !== undefined ? { outputPreset: String(outputPreset) } : {}),
+    ...(req.body.active !== undefined ? { active: Boolean(req.body.active) } : {}),
   };
+  if (Object.keys(values).length === 0) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim" });
   if ("name" in values && !values.name) return res.status(400).json({ error: "Nama frame wajib diisi" });
   // Same fix as POST above — nothing reads frameImageUrl back from this response.
   const [row] = await db.update(templates).set(values).where(and(eq(templates.id, String(req.params.id)), eq(templates.tenantId, req.tenantId!)))

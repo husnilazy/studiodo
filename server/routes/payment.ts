@@ -8,7 +8,7 @@ import { requireActiveSubscription } from "../middleware/requireActiveSubscripti
 import { loadGateway } from "../lib/gateways.js";
 import { expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 import { createDokuCheckout, dokuInvoicePaid, verifyDokuNotification, type DokuCfg } from "../lib/doku.js";
-import { decryptSecret } from "../lib/secretBox.js";
+import { decryptSecret, readStoredSecret } from "../lib/secretBox.js";
 
 export const paymentRouter = Router();
 
@@ -43,10 +43,11 @@ async function getXenditConfig(tenantId: string) {
     .select({ secretKey: tenantSettings.xenditSecretKey, webhookToken: tenantSettings.xenditWebhookToken })
     .from(tenantSettings)
     .where(eq(tenantSettings.tenantId, tenantId));
-  const secretKey = config?.secretKey ?? undefined;
+  // Stored encrypted (older rows may still hold plain text — readStoredSecret handles both).
+  const secretKey = readStoredSecret(config?.secretKey) ?? undefined;
   return {
     secretKey,
-    webhookToken: config?.webhookToken ?? undefined,
+    webhookToken: readStoredSecret(config?.webhookToken) ?? undefined,
     demoMode: process.env.PAYMENT_DEMO_MODE === "true" && !secretKey,
   };
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { setApiBaseUrl, setKioskKey, getApiBaseUrl } from "@/lib/apiConfig";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { ApiError } from "@/lib/api";
+import { sendKioskHeartbeatNow } from "@/lib/kioskHeartbeat";
 
 const inputClass = "k-input";
 
@@ -26,6 +27,8 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
       const ok = await fetch(`${getApiBaseUrl()}/health`).then((r) => r.ok).catch(() => false);
       if (!ok) throw new Error("Server tidak bisa dijangkau. Cek URL server dan koneksi internet.");
       await syncBoothConfigFromServer();
+      // Learn this key's licence (trial / unpaid / locked) straight away rather than at the next 5-minute heartbeat.
+      void sendKioskHeartbeatNow();
       onPaired();
     } catch (err) {
       setApiBaseUrl(previousApiBaseUrl === "/api" ? null : previousApiBaseUrl);
@@ -39,7 +42,9 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
       // the server still remembers as bound to the old one). Naming the
       // situation explicitly here, instead of just relaying the server text,
       // is what the user actually needs to know what to do next.
-      if (err instanceof ApiError && err.status === 403) {
+      if (err instanceof ApiError && err.status === 403 && /trial/i.test(err.message)) {
+        setError("Komputer ini sudah pernah memakai key trial. Gunakan key langganan, atau hubungi admin STUDIODO untuk membukanya.");
+      } else if (err instanceof ApiError && err.status === 403) {
         setError("API key ini sudah dipakai di device lain (atau device ini dianggap baru, misalnya setelah install ulang). Minta admin buka dashboard Kiosk → pilih \"Reset device\" pada key ini, atau pakai kiosk key lain untuk booth ini.");
       } else if (err instanceof ApiError && err.status === 401) {
         setError("API key salah, atau sudah dicabut/di-revoke. Cek lagi key-nya di dashboard Admin → Kiosk.");
@@ -57,7 +62,8 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
         <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
         <h1 className="mt-2 font-display text-2xl font-bold">Setup kiosk ini</h1>
         <p className="mt-2 text-sm text-fg/45">
-          Tempel kiosk API key dari dashboard admin (Admin → Kiosk) untuk menghubungkan kiosk ini ke tenant kamu.
+          Tempel kiosk API key dari dashboard admin (Admin → Kiosk, atau studiodo.id → Booth) untuk menghubungkan kiosk ini ke tenant kamu.
+          Belum punya? Minta <strong>key trial</strong> ke tim STUDIODO untuk mencoba dulu — setelah masa trial habis, kiosk terkunci sampai kamu berlangganan.
         </p>
 
         <div className="mt-6 space-y-3">

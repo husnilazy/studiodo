@@ -35,6 +35,18 @@ export function decryptSecret(stored: string | null | undefined): string | null 
   }
 }
 
+/** True for a value produced by encryptSecret. */
+export const isEncryptedSecret = (stored: string | null | undefined): boolean => !!stored && stored.startsWith("v1:");
+
+/**
+ * Reads a stored secret that may have been saved before encryption existed (plain text) or after (encrypted).
+ * An encrypted value that can no longer be decrypted (key rotated, tampered) is null — never returned as garbage.
+ */
+export function readStoredSecret(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  return isEncryptedSecret(stored) ? decryptSecret(stored) : stored;
+}
+
 /** "••••abcd" style hint — never enough to reconstruct the secret. */
 export function maskedTail(secret: string): string {
   return secret.length <= 4 ? "••••" : secret.slice(-4);

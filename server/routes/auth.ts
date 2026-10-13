@@ -6,6 +6,8 @@ import { admins, platformSettings, tenants } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signAdminToken } from "../lib/jwt.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
+import { getTenantLicenseSummary } from "../lib/license.js";
+import { portalBaseUrl } from "../lib/urls.js";
 
 export const authRouter = Router();
 
@@ -80,13 +82,18 @@ authRouter.get("/me", requireAdminAuth, async (req, res) => {
     renewalCheckoutUrl: platformSettings.renewalCheckoutUrl,
     gracePeriodDays: platformSettings.gracePeriodDays,
   }).from(platformSettings).limit(1);
+  const licenses = await getTenantLicenseSummary(req.tenantId!);
 
   res.json({
     tenantId: req.tenantId,
     email: admin?.email,
     plan: tenant?.plan ?? null,
     status: tenant?.status ?? null,
-    subscriptionEndsAt: tenant?.subscriptionEndsAt ?? null,
+    // Per-booth licences now: this is the soonest end date among the booths that are still running, which is what the
+    // dashboard banner counts down. `licenses` carries the full picture (how many booths are paid / trial / unpaid / locked).
+    subscriptionEndsAt: licenses.nearestEndsAt ?? tenant?.subscriptionEndsAt ?? null,
+    licenses,
+    portalUrl: `${portalBaseUrl()}/portal/booth`,
     renewalWhatsapp: settings?.renewalWhatsapp ?? null,
     renewalCheckoutUrl: settings?.renewalCheckoutUrl ?? null,
     gracePeriodDays: settings?.gracePeriodDays ?? 3,

@@ -28,3 +28,19 @@ Ide dan temuan yang ditampung untuk rencana ke depan. Belum dikerjakan. Urutan d
 - `.env` punya `STORAGE_DRIVER` ganda (r2 di baris 17, gdrive di baris 25; yang terakhir menang). Rapikan, dan periksa juga environment service NSSM.
 - Penanganan konflik Git credential manager: push dari PC ini pernah macet saat butuh login GitHub interaktif.
 - Perbarui README dengan cara rilis, struktur admin, dan catatan `&` pada path yang merusak `npx`.
+
+## Langganan per booth & audit (Oktober 2026)
+- **Harga paket sekarang dihitung per booth.** Periksa harga di Superadmin → Plans: angka lama (mis. Starter/Pro/Business dengan batas 1/3/10 kiosk) tadinya harga paket bundel, sekarang dianggap harga satu booth. "Batas kiosk" pada plan hanya tampilan, tidak lagi membatasi.
+- Gateway langganan baru mendukung Midtrans dan Xendit. DOKU belum tersedia untuk bayar langganan (hanya untuk QRIS kiosk milik tenant).
+- Tes koneksi Xendit milik tenant (cek izin QR code) dan fungsi "Cek ulang" status order ke Midtrans/Xendit belum diuji dengan kunci sungguhan; bentuk respons API-nya diasumsikan dari dokumentasi.
+- Kredensial R2 dan Google Drive per tenant masih tersimpan polos di database (kunci Xendit/DOKU sudah terenkripsi). Enkripsi dengan `lib/secretBox.ts` dan jalankan `server/scripts/encryptTenantSecrets.ts --apply` untuk kunci Xendit lama.
+- Token login admin (JWT 12 jam) tidak bisa dicabut dari server; ganti password belum membatalkan sesi yang sudah ada. Pembatasan percobaan login memakai memori satu proses.
+- Dashboard web belum mencakup Screen Builder, pengaturan alur kiosk, CRM pelanggan, dan penyimpanan cloud (R2/Drive); semuanya masih di aplikasi kiosk.
+- Notifikasi otomatis (email/WhatsApp) saat trial atau langganan booth hampir habis belum ada; sekarang hanya banner di dashboard dan layar kunci.
+
+## CRM & monitor booth (Oktober 2026)
+- "Antrian" di Monitor Booth berarti sesi yang menunggu pembayaran. Server tidak tahu antrean fisik di depan booth; antrean sungguhan butuh fitur nomor antrean di kiosk.
+- Tahap sesi (bayar / foto / preview) disimpulkan dari data sesi, bukan dilaporkan layar kiosk, jadi bisa tertinggal beberapa detik. Untuk akurasi penuh, kiosk bisa mengirim "layar saat ini" ke server.
+- Sesi lama (sebelum kolom `kiosk_key_id`) tidak diketahui asal boothnya, jadi riwayat per booth di CRM kosong untuk sesi lama.
+- Pelanggan digabung per nomor WhatsApp (format 08…/+62…/62… dianggap sama), lalu email. Orang yang memakai nomor dan email berbeda di kunjungan berbeda tercatat sebagai dua pelanggan.
+- Kirim promo massal lewat WhatsApp sengaja belum ada (risiko pemblokiran nomor); sekarang satu per satu lewat tombol WhatsApp.

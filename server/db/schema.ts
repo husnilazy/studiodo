@@ -51,6 +51,10 @@ export const tenants = pgTable("tenants", {
   // balance (see `withdrawals`). `qrisPlatformSince` marks when that began: only QRIS payments after it count.
   qrisSettlement: text("qris_settlement").notNull().default("direct"), // 'direct' | 'platform'
   qrisPlatformSince: timestamp("qris_platform_since"),
+  // Negotiated discount (0-90 %) a superadmin grants this tenant on every booth subscription it buys, on top of the
+  // platform-wide volume tiers (platform_settings.volume_discounts). The better of the two applies — they do not stack.
+  boothDiscountPercent: integer("booth_discount_percent").notNull().default(0),
+  boothDiscountNote: text("booth_discount_note"), // superadmin-only reason, e.g. "Paket 12 booth event organizer"
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -173,6 +177,9 @@ export const platformSettings = pgTable("platform_settings", {
   qrisFeePercent: numeric("qris_fee_percent", { precision: 5, scale: 2 }).notNull().default("0.70"),
   withdrawalMinAmount: integer("withdrawal_min_amount").notNull().default(50000),
   withdrawalFlatFee: integer("withdrawal_flat_fee").notNull().default(0),
+  // Volume discount on booth subscriptions: buying `minBooths` or more booths in one order takes `percent` off each of
+  // them. Managed by the superadmin; the default is the "10+ booths" offer advertised on the website.
+  volumeDiscounts: jsonb("volume_discounts").$type<{ minBooths: number; percent: number }[]>().notNull().default([{ minBooths: 10, percent: 10 }]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -261,6 +268,17 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // response and enforced client-side in electron/main.cjs, not by the
   // server refusing anything — this is advisory, not a security boundary.
   autoUpdateEnabled: boolean("auto_update_enabled").notNull().default(true),
+  // Per-booth subscription: ONE key = ONE booth = ONE licence. A tenant that runs five booths pays for five keys, each
+  // with its own end date, so an expired or unpaid booth locks without touching the others.
+  //   'trial'  — free trial issued by a superadmin; locks the moment `licenseEndsAt` passes (no grace period)
+  //   'paid'   — a paying booth; locks `gracePeriodDays` after `licenseEndsAt`. A null end date = unlimited (complimentary)
+  //   'unpaid' — key created but never subscribed to; the kiosk can pair but stays locked until it is paid for
+  licenseType: text("license_type").notNull().default("unpaid"),
+  licenseEndsAt: timestamp("license_ends_at"),
+  licensePlanSlug: text("license_plan_slug"), // plan the booth was last bought on (display only)
+  // Set when the key was issued as a trial. Survives a later trial→paid conversion, so a computer that already used a
+  // trial can't be paired with a second trial key (see requireKioskAuth).
+  trialStartedAt: timestamp("trial_started_at"),
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
 
 // Paket foto (packages)
@@ -329,6 +347,9 @@ export const voucherRedemptions = pgTable("voucher_redemptions", {
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  // Which booth (kiosk key) ran this session — what lets the live monitor say "booth X is mid-session". Null on sessions
+  // from before this column existed, and when the booth's key is later deleted.
+  kioskKeyId: uuid("kiosk_key_id").references(() => kioskKeys.id, { onDelete: "set null" }),
   packageId: uuid("package_id").references(() => packages.id),
   orientation: text("orientation").notNull().default("portrait"), // 'portrait' | 'landscape'
   paymentMethod: text("payment_method").notNull().default("qris"), // 'qris' | 'voucher'
@@ -365,7 +386,25 @@ export const sessions = pgTable("sessions", {
   customerEmail: text("customer_email"),
   publishConsent: boolean("publish_consent").notNull().default(false),
   feedback: text("feedback"),
-}, (table) => [index("sessions_tenant_id_created_at_idx").on(table.tenantId, table.createdAt)]);
+}, (table) => [
+  index("sessions_tenant_id_created_at_idx").on(table.tenantId, table.createdAt),
+  index("sessions_kiosk_key_id_idx").on(table.kioskKeyId, table.createdAt),
+]);
+
+// CRM: a customer is not a row of its own — they are derived from the contact details on their sessions (grouped by
+// WhatsApp number, else email). This table only holds what the tenant adds ON TOP of that: a name, notes, tags, and a
+// "do not message" flag. `contactKey` is "wa:<62…>" or "em:<email>" (see lib/crm.ts).
+export const customerProfiles = pgTable("customer_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  contactKey: text("contact_key").notNull(),
+  name: text("name"),
+  notes: text("notes"),
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  marketingOptOut: boolean("marketing_opt_out").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [unique("customer_profiles_tenant_key_unique").on(table.tenantId, table.contactKey)]);
 
 // Admin-uploaded custom templates (frame PNG + slot positions)
 export const templates = pgTable("templates", {
@@ -515,6 +554,11 @@ export const billingOrders = pgTable("billing_orders", {
   planName: text("plan_name").notNull(), // snapshot
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(), // snapshot — what was actually charged
   periodDays: integer("period_days").notNull(),
+  // Which booths this payment covers: existing keys to renew (`keyId`) and brand-new booths to create once paid
+  // (`keyId` null). Empty on orders made before per-booth licences — those extend every active key of the tenant.
+  items: jsonb("items").$type<{ keyId: string | null; label: string | null }[]>().notNull().default([]),
+  boothCount: integer("booth_count").notNull().default(1),
+  discountPercent: integer("discount_percent").notNull().default(0), // snapshot of the volume/negotiated discount applied
   status: text("status").notNull().default("pending"), // 'pending' | 'paid' | 'failed' | 'expired'
   snapToken: text("snap_token"),
   redirectUrl: text("redirect_url"),

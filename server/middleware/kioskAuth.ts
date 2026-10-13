@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import crypto from "node:crypto";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, isNotNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys } from "../db/schema.js";
 
@@ -12,7 +12,7 @@ function hashKey(rawKey: string) {
 // route even started — against a remote/cold Neon database that alone was a large part of every screen's load time.
 // The lookup result is cached briefly in-process; revoke / reset-device clear it immediately (see kioskKeys.ts), so the
 // short TTL is only the safety net for changes made some other way.
-type KeyRow = { id: string; tenantId: string; boundDeviceId: string | null };
+type KeyRow = { id: string; tenantId: string; boundDeviceId: string | null; trialStartedAt: Date | null; licenseType: string };
 const KEY_CACHE_TTL_MS = 30_000;
 const LAST_USED_WRITE_INTERVAL_MS = 60_000;
 const keyCache = new Map<string, { row: KeyRow; expires: number }>();
@@ -35,7 +35,7 @@ export async function requireKioskAuth(req: Request, res: Response, next: NextFu
     row = cached.row;
   } else {
     [row] = await db
-      .select({ id: kioskKeys.id, tenantId: kioskKeys.tenantId, boundDeviceId: kioskKeys.boundDeviceId })
+      .select({ id: kioskKeys.id, tenantId: kioskKeys.tenantId, boundDeviceId: kioskKeys.boundDeviceId, trialStartedAt: kioskKeys.trialStartedAt, licenseType: kioskKeys.licenseType })
       .from(kioskKeys)
       .where(and(eq(kioskKeys.keyHash, keyHash), isNull(kioskKeys.revokedAt)));
     if (row) keyCache.set(keyHash, { row, expires: Date.now() + KEY_CACHE_TTL_MS });
@@ -53,6 +53,18 @@ export async function requireKioskAuth(req: Request, res: Response, next: NextFu
   const deviceId = String(req.headers["x-device-id"] ?? "").slice(0, 128) || null;
   if (deviceId) {
     if (!row.boundDeviceId) {
+      // One free trial per computer: a PC that already ran a trial key can't be paired with a fresh trial key to start
+      // the clock again. (A superadmin can free the PC by resetting the device on the old key.)
+      if (row.licenseType === "trial" && row.trialStartedAt) {
+        const [previous] = await db.select({ id: kioskKeys.id }).from(kioskKeys)
+          .where(and(eq(kioskKeys.boundDeviceId, deviceId), isNotNull(kioskKeys.trialStartedAt), ne(kioskKeys.id, row.id))).limit(1);
+        if (previous) {
+          return res.status(403).json({
+            error: "Komputer ini sudah pernah memakai key trial. Gunakan key langganan, atau hubungi admin STUDIODO.",
+            code: "trial_already_used",
+          });
+        }
+      }
       await db.update(kioskKeys).set({ boundDeviceId: deviceId, boundAt: new Date() }).where(eq(kioskKeys.id, row.id));
       row.boundDeviceId = deviceId;
     } else if (row.boundDeviceId !== deviceId) {

@@ -33,6 +33,14 @@ export async function createXenditInvoice(
   return { invoiceId: body.id, redirectUrl: body.invoice_url };
 }
 
+/** Asks Xendit for an invoice's current state (same fields as the callback). */
+export async function fetchXenditInvoice(cfg: XenditCfg, invoiceId: string): Promise<XenditInvoiceCallback> {
+  const res = await fetch(`${API}/v2/invoices/${encodeURIComponent(invoiceId)}`, { headers: { Authorization: basicAuth(cfg) }, signal: AbortSignal.timeout(15_000) });
+  const body = (await res.json().catch(() => ({}))) as XenditInvoiceCallback & { message?: string };
+  if (!res.ok) throw new Error(body.message || `Xendit menolak permintaan (HTTP ${res.status})`);
+  return body;
+}
+
 /** Lists one invoice: 200 → key valid, 401 → invalid, 403 → valid key but without invoice permission. */
 export async function testXendit(cfg: XenditCfg): Promise<{ ok: boolean; message: string }> {
   try {
@@ -40,6 +48,22 @@ export async function testXendit(cfg: XenditCfg): Promise<{ ok: boolean; message
     if (res.status === 200) return { ok: true, message: "Kunci valid dan bisa membaca invoice." };
     if (res.status === 401) return { ok: false, message: "Kunci ditolak Xendit. Periksa Secret Key (dan pastikan bukan kunci Public)." };
     if (res.status === 403) return { ok: false, message: "Kunci valid tetapi belum punya izin Invoice. Aktifkan izin Invoices (Write) di Xendit." };
+    return { ok: false, message: `Respons tak terduga dari Xendit (HTTP ${res.status}).` };
+  } catch (e) {
+    return { ok: false, message: `Tidak dapat menghubungi Xendit: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+/**
+ * Checks a TENANT's Xendit key for kiosk QRIS sales (QR code permission, not invoices). Looks up a QR code that cannot
+ * exist: a valid key gets "not found", an invalid one 401, one without the QR permission 403.
+ */
+export async function testXenditQris(secretKey: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(`${API}/qr_codes/studiodo-connection-test`, { headers: { Authorization: basicAuth({ secretKey }) }, signal: AbortSignal.timeout(15_000) });
+    if (res.status === 401) return { ok: false, message: "Kunci ditolak Xendit. Periksa Secret Key (dan pastikan bukan kunci Public)." };
+    if (res.status === 403) return { ok: false, message: "Kunci valid tetapi belum punya izin QR Code. Aktifkan izin \"QR codes\" (Write) di Xendit." };
+    if (res.status === 404 || res.status === 200 || res.status === 400) return { ok: true, message: "Kunci diterima Xendit." };
     return { ok: false, message: `Respons tak terduga dari Xendit (HTTP ${res.status}).` };
   } catch (e) {
     return { ok: false, message: `Tidak dapat menghubungi Xendit: ${e instanceof Error ? e.message : String(e)}` };

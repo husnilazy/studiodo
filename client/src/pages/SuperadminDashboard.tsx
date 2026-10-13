@@ -19,12 +19,14 @@ import {
   type PlatformEvent,
   type TenantApplication,
   type FleetAlertKiosk,
+  type VolumeTier,
 } from "@/lib/superadminApi";
 import { SiteContentPanel } from "@/components/SiteContentPanel";
 import { BlogPanel } from "@/components/BlogPanel";
 import { MarketplacePanel } from "@/components/MarketplacePanel";
 import { CreatorsPanel } from "@/components/CreatorsPanel";
 import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
+import { LicensesPanel } from "@/components/LicensesPanel";
 import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 
@@ -220,7 +222,7 @@ function PlatformOverviewPanel() {
   }, [rangeDays]);
 
   if (!overview) return null;
-  const { tenants, kiosks, sessions } = overview;
+  const { tenants, kiosks, sessions, booths } = overview;
   const activeCount = tenants.byStatus.active ?? 0;
   const trialCount = tenants.byStatus.trial ?? 0;
   const suspendedCount = tenants.byStatus.suspended ?? 0;
@@ -237,6 +239,14 @@ function PlatformOverviewPanel() {
         <StatCard label="Total sesi" value={String(sessions.total)} detail={`${sessions.paid} sesi berhasil bayar`} />
         <StatCard label="Revenue platform" value={money(sessions.revenue)} detail="Semua tenant, sepanjang waktu" />
       </div>
+      {booths && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Booth aktif" value={String(booths.total)} detail={`${booths.paid} berlangganan · ${booths.trial} trial`} />
+          <StatCard label="Booth belum bayar" value={String(booths.unpaid)} detail="Key dibuat tapi belum berlangganan" tone={booths.unpaid > 0 ? "amber" : undefined} />
+          <StatCard label="Booth terkunci" value={String(booths.locked)} detail="Trial/langganan habis atau belum bayar" tone={booths.locked > 0 ? "amber" : undefined} />
+          <StatCard label="Segera habis (7h)" value={String(booths.expiringSoon)} detail="Booth berlangganan/trial" tone={booths.expiringSoon > 0 ? "amber" : undefined} />
+        </div>
+      )}
       {overview.subscriptions && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Pendapatan langganan (30h)" value={money(overview.subscriptions.revenue30d)} detail={`${overview.subscriptions.payments30d} pembayaran dicatat`} />
@@ -429,6 +439,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 function PlatformSettingsPanel() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [draft, setDraft] = useState({ defaultTrialDays: "7", renewalWhatsapp: "", renewalCheckoutUrl: "", gracePeriodDays: "3", qrisFeePercent: "0.7", withdrawalMinAmount: "50000", withdrawalFlatFee: "0" });
+  const [tiers, setTiers] = useState<{ minBooths: string; percent: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -445,6 +456,7 @@ function PlatformSettingsPanel() {
         withdrawalMinAmount: String(result.withdrawalMinAmount),
         withdrawalFlatFee: String(result.withdrawalFlatFee),
       });
+      setTiers((result.volumeDiscounts ?? []).map((t) => ({ minBooths: String(t.minBooths), percent: String(t.percent) })));
     });
   };
   useEffect(() => { load(); }, []);
@@ -461,6 +473,7 @@ function PlatformSettingsPanel() {
         qrisFeePercent: Number(draft.qrisFeePercent) || 0,
         withdrawalMinAmount: Number(draft.withdrawalMinAmount) || 0,
         withdrawalFlatFee: Number(draft.withdrawalFlatFee) || 0,
+        volumeDiscounts: tiers.filter((t) => t.minBooths.trim() && t.percent.trim()).map((t): VolumeTier => ({ minBooths: Number(t.minBooths), percent: Number(t.percent) })),
       });
       if (result) setSettings(result);
       setMessage("Tersimpan.");
@@ -496,7 +509,26 @@ function PlatformSettingsPanel() {
           <input placeholder="https://studiodo.id/pricing" className={inputClass} value={draft.renewalCheckoutUrl} onChange={(e) => setDraft({ ...draft, renewalCheckoutUrl: e.target.value })} />
         </label>
       </div>
-      <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan lewat sebelum kiosk benar-benar terkunci.</p>
+      <p className="mt-3 text-xs text-fg/35">Masa tenggang = berapa hari setelah langganan berbayar lewat sebelum booth benar-benar terkunci. Trial tidak punya masa tenggang: langsung terkunci saat habis.</p>
+      <div className="mt-6 border-t border-fg/10 pt-5">
+        <p className="text-sm font-semibold">Diskon banyak booth</p>
+        <p className="mt-0.5 text-xs text-fg/45">Harga paket dihitung per booth. Tenant yang berlangganan banyak booth sekaligus otomatis dapat potongan dari tier di bawah. Diskon khusus per tenant diatur di detail tenant; yang berlaku adalah yang terbaik (tidak ditumpuk).</p>
+        <div className="mt-3 space-y-2">
+          {tiers.map((tier, index) => (
+            <div key={index} className="flex flex-wrap items-end gap-3">
+              <label className="text-sm text-fg/60">Mulai dari (booth)
+                <input type="number" min={2} max={100} className={`${inputClass} w-32`} value={tier.minBooths} onChange={(e) => setTiers(tiers.map((t, i) => (i === index ? { ...t, minBooths: e.target.value } : t)))} />
+              </label>
+              <label className="text-sm text-fg/60">Diskon (%)
+                <input type="number" min={1} max={90} className={`${inputClass} w-28`} value={tier.percent} onChange={(e) => setTiers(tiers.map((t, i) => (i === index ? { ...t, percent: e.target.value } : t)))} />
+              </label>
+              <button type="button" onClick={() => setTiers(tiers.filter((_, i) => i !== index))} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-red-400 hover:text-red-300">Hapus</button>
+            </div>
+          ))}
+          {tiers.length === 0 && <p className="text-xs text-fg/40">Belum ada tier — tidak ada diskon volume.</p>}
+        </div>
+        <button type="button" onClick={() => setTiers([...tiers, { minBooths: "", percent: "" }])} className="mt-3 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/70 hover:border-accent">+ Tambah tier</button>
+      </div>
       <div className="mt-6 border-t border-fg/10 pt-5">
         <p className="text-sm font-semibold">Penarikan saldo QRIS</p>
         <p className="mt-0.5 text-xs text-fg/45">Hanya untuk tenant yang QRIS-nya ditampung akun STUDIODO.</p>
@@ -799,7 +831,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
               <th className="p-3">Plan</th>
               <th className="p-3">Status</th>
               <th className="p-3">Langganan</th>
-              <th className="p-3">Kiosk</th>
+              <th className="p-3">Booth</th>
               <th className="p-3">Sesi</th>
               <th className="p-3">Revenue</th>
               <th className="p-3">Extend cepat</th>
@@ -850,7 +882,14 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                       <StatusPill subscriptionEndsAt={tenant.subscriptionEndsAt} locked={tenant.locked} />
                     </div>
                   </td>
-                  <td className="p-3 text-fg/60">{tenant.onlineKioskCount}/{tenant.kioskCount}</td>
+                  <td className="p-3 text-fg/60">
+                    {tenant.onlineKioskCount}/{tenant.kioskCount} online
+                    {tenant.licenses && (tenant.licenses.trial > 0 || tenant.licenses.unpaid > 0 || tenant.licenses.locked > 0) && (
+                      <p className="text-[11px] text-fg/40">
+                        {tenant.licenses.paid} bayar{tenant.licenses.trial > 0 ? ` · ${tenant.licenses.trial} trial` : ""}{tenant.licenses.unpaid > 0 ? ` · ${tenant.licenses.unpaid} belum bayar` : ""}{tenant.licenses.locked > 0 ? ` · ${tenant.licenses.locked} terkunci` : ""}
+                      </p>
+                    )}
+                  </td>
                   <td className="p-3 text-fg/60">{tenant.sessionCount}</td>
                   <td className="p-3 text-fg/60">{money(tenant.revenue)}</td>
                   <td className="p-3">
@@ -887,7 +926,7 @@ const EMPTY_PROFILE: Partial<TenantProfileFields> = { ownerName: "", ownerWhatsa
 function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [draft, setDraft] = useState({ name: "", slug: "", email: "", password: "", plan: "" });
+  const [draft, setDraft] = useState({ name: "", slug: "", email: "", password: "", plan: "", trialDays: "" });
   const [profile, setProfile] = useState<Partial<TenantProfileFields>>(EMPTY_PROFILE);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -906,11 +945,12 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
         email: draft.email.trim(),
         password: draft.password,
         plan: draft.plan || undefined,
+        trialDays: draft.trialDays.trim() ? Number(draft.trialDays) : undefined,
         ...profile,
       });
       if (!created) throw new Error("Gagal membuat tenant");
       setResult({ kioskKey: created.kioskKey, adminEmail: created.adminEmail, slug: created.tenant.slug, trialDays: created.trialDays });
-      setDraft({ name: "", slug: "", email: "", password: "", plan: "" });
+      setDraft({ name: "", slug: "", email: "", password: "", plan: "", trialDays: "" });
       setProfile(EMPTY_PROFILE);
       onCreated();
     } catch (err) {
@@ -949,7 +989,7 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
                   {copied ? "Tersalin!" : "Salin"}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-emerald-100/50">Tempel key ini ke layar "Setup / Pair kiosk ini" di aplikasi Electron tenant ini.</p>
+              <p className="mt-2 text-xs text-emerald-100/50">Ini key <b>trial {result.trialDays} hari</b>. Tempel ke layar "Setup kiosk ini" di aplikasi STUDIODO; saat trial habis kiosk terkunci sampai tenant berlangganan.</p>
             </div>
             <button type="button" onClick={() => setResult(null)} className="mt-4 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60">Buat tenant lain</button>
           </div>
@@ -968,7 +1008,10 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
               <label className="text-sm text-fg/60">Password admin
                 <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} autoComplete="new-password" />
               </label>
-              <label className="text-sm text-fg/60 sm:col-span-2">Plan awal (opsional)
+              <label className="text-sm text-fg/60">Lama trial booth pertama (hari)
+                <input className={inputClass} type="number" min={1} max={3650} placeholder="Kosong = default platform" value={draft.trialDays} onChange={(e) => setDraft({ ...draft, trialDays: e.target.value })} />
+              </label>
+              <label className="text-sm text-fg/60">Plan awal (opsional)
                 <select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
                   <option value="">Trial (default)</option>
                   {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
@@ -1009,6 +1052,8 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const liveKeys = tenant.kioskKeys.filter((k) => !k.revokedAt);
+  const [picked, setPicked] = useState<string[]>([]);
 
   const applyPlan = (id: string) => {
     setPlanId(id);
@@ -1027,7 +1072,7 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
     if (!Number.isFinite(daysNum) || daysNum <= 0) return setError("Periode tidak valid");
     setSubmitting(true);
     try {
-      const result = await superadminApi.recordPayment(tenant.id, { amount: amountNum, periodDays: daysNum, method, note: note.trim() || undefined, planId: planId || null });
+      const result = await superadminApi.recordPayment(tenant.id, { amount: amountNum, periodDays: daysNum, method, note: note.trim() || undefined, planId: planId || null, keyIds: picked.length > 0 ? picked : undefined });
       if (!result) throw new Error("Gagal mencatat pembayaran");
       setAmount("");
       setNote("");
@@ -1061,10 +1106,65 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
         </label>
         <label className="text-sm text-fg/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       </div>
+      {liveKeys.length > 0 && (
+        <div className="mt-3">
+          <p className="text-sm text-fg/60">Booth yang dibayar <span className="text-fg/35">(kosong = semua booth berlangganan/trial)</span></p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {liveKeys.map((k) => {
+              const on = picked.includes(k.id);
+              return (
+                <button key={k.id} type="button" onClick={() => setPicked(on ? picked.filter((id) => id !== k.id) : [...picked, k.id])} className={`rounded-full border px-3 py-1 text-xs ${on ? "border-accent bg-accent/15 text-fg" : "border-fg/15 text-fg/55"}`}>
+                  {k.label ?? "(tanpa label)"} · {k.licenseType === "trial" ? "trial" : k.licenseType === "unpaid" ? "belum bayar" : "bayar"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-fg/35">Nominal di atas adalah total untuk semua booth yang dipilih. Booth trial/belum bayar otomatis menjadi berlangganan.</p>
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
       <button type="button" onClick={submit} disabled={submitting || !amount} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">
         {submitting ? "Menyimpan…" : "Catat & perpanjang langganan"}
       </button>
+    </div>
+  );
+}
+
+// Negotiated booth discount for one tenant (e.g. a 12-booth event organiser). Combines with the platform volume tiers by
+// "best of", never stacked — see server/lib/boothPricing.ts.
+function TenantDiscountForm({ tenant, onSaved }: { tenant: TenantDetail; onSaved: () => void }) {
+  const [percent, setPercent] = useState(String(tenant.boothDiscountPercent ?? 0));
+  const [note, setNote] = useState(tenant.boothDiscountNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => { setPercent(String(tenant.boothDiscountPercent ?? 0)); setNote(tenant.boothDiscountNote ?? ""); }, [tenant.id, tenant.boothDiscountPercent, tenant.boothDiscountNote]);
+
+  const save = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await superadminApi.updateTenant(tenant.id, { boothDiscountPercent: Number(percent) || 0, boothDiscountNote: note.trim() || null });
+      setMessage("Tersimpan.");
+      onSaved();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Potongan harga khusus</p>
+      <p className="mt-1 text-xs text-fg/40">Berlaku untuk semua booth yang tenant ini beli. Dibandingkan dengan diskon banyak booth otomatis; yang lebih besar yang dipakai.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-[110px_1fr]">
+        <label className="text-sm text-fg/60">Diskon (%)<input className={inputClass} type="number" min={0} max={90} value={percent} onChange={(e) => setPercent(e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Catatan internal<input className={inputClass} placeholder="mis. Kontrak 12 booth event organizer" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button type="button" onClick={save} disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:opacity-50">{busy ? "Menyimpan…" : "Simpan diskon"}</button>
+        {message && <span className="text-xs text-fg/50">{message}</span>}
+      </div>
     </div>
   );
 }
@@ -1121,6 +1221,13 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
       {tenant && (
         <div className="mt-5 grid gap-5 lg:grid-cols-[1.3fr_1fr]">
           <div className="space-y-5">
+            <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Booth &amp; lisensi</p>
+              <div className="mt-3">
+                <LicensesPanel tenantId={tenantId} onChanged={refreshAll} />
+              </div>
+            </div>
+
             <RecordPaymentForm tenant={tenant} plans={plans} onRecorded={refreshAll} />
 
             <div>
@@ -1185,8 +1292,10 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
               </div>
             </div>
 
+            <TenantDiscountForm tenant={tenant} onSaved={refreshAll} />
+
             <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Kiosk key ({tenant.kioskKeys.length})</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Kiosk key — diagnostik ({tenant.kioskKeys.length})</p>
               <div className="mt-2 space-y-2">
                 {tenant.kioskKeys.map((key) => {
                   const diag = key.lastDiagnostics;
@@ -1215,10 +1324,11 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "settings";
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "settings";
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "overview", label: "Ringkasan", icon: "⌘" },
   { id: "tenants", label: "Tenant", icon: "◎" },
+  { id: "licenses", label: "Lisensi & Trial", icon: "⚿" },
   { id: "applications", label: "Aplikasi Tenant", icon: "✦" },
   { id: "events", label: "Aktivitas & Error", icon: "⌁" },
   { id: "plans", label: "Plans", icon: "▣" },
@@ -1379,6 +1489,8 @@ export default function SuperadminDashboard() {
             <TenantsTable plans={plans} onSelectTenant={selectTenantAndSwitch} reloadRef={tenantsReloadRef} />
           </div>
         )}
+
+        {section === "licenses" && <LicensesPanel tenants={tenants} onChanged={loadTenantsForFilter} />}
 
         {section === "applications" && (
           <TenantApplicationsPanel onConverted={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />

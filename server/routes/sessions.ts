@@ -59,6 +59,7 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
     .insert(sessions)
     .values({
       tenantId,
+      kioskKeyId: req.kioskKeyId,
       packageId,
       orientation,
       selectedExtras: canonicalExtras,

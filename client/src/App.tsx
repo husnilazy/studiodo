@@ -12,7 +12,6 @@ import PilihFrame from "@/pages/PilihFrame";
 import Hasil from "@/pages/Hasil";
 import AdminPlaceholder from "@/pages/AdminPlaceholder";
 import ShareGallery from "@/pages/ShareGallery";
-import CustomerManagement from "@/pages/CustomerManagement";
 import AdminDashboard from "@/pages/AdminDashboard";
 import FrameManagement from "@/pages/FrameManagement";
 import AdminAuthGate from "@/components/AdminAuthGate";
@@ -26,7 +25,7 @@ import { useKioskSession } from "@/lib/sessionStore";
 import { clearKioskPairing, isKioskPaired } from "@/lib/apiConfig";
 import { prefetchFrames } from "@/lib/framesCache";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
-import { useSubscriptionLock } from "@/lib/subscriptionLockStore";
+import { useLicenseLocked } from "@/lib/subscriptionLockStore";
 import SubscriptionLockedScreen from "@/components/SubscriptionLockedScreen";
 import DeviceMismatchScreen from "@/components/DeviceMismatchScreen";
 import KioskBootScreen from "@/components/KioskBootScreen";
@@ -131,7 +130,7 @@ function AnimatedRoutes() {
           <Route path="/frame" component={PilihFrame} />
           <Route path="/hasil" component={Hasil} />
           <Route path="/admin">{() => <AdminAuthGate><AdminDashboard /></AdminAuthGate>}</Route>
-          <Route path="/admin/customers">{() => <AdminAuthGate><CustomerManagement /></AdminAuthGate>}</Route>
+          <Route path="/admin/customers">{() => { window.location.hash = "#/admin"; return null; }}</Route>
           <Route path="/admin/frames">{() => <AdminAuthGate><FrameManagement /></AdminAuthGate>}</Route>
           <Route path="/admin/customizer">{() => { window.location.hash = "#/admin"; return null; }}</Route>
           <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
@@ -161,7 +160,7 @@ export default function App() {
   // mid-session.
   const [checkingPairing, setCheckingPairing] = useState(() => !IS_KIOSK_PREVIEW && isKioskPaired());
   const [location] = useHashLocation();
-  const locked = useSubscriptionLock((s) => s.locked);
+  const locked = useLicenseLocked();
   // /admin*, /superadmin, and /share/* don't need a kiosk pairing (and must stay
   // reachable even when the kiosk is subscription-locked — the tenant still needs to
   // see the banner/renew, and existing public share links shouldn't break): admin

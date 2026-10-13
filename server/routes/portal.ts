@@ -1,17 +1,19 @@
 import { Router } from "express";
 import crypto from "node:crypto";
-import { and, count, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { priceForInterval } from "../lib/planPricing.js";
-import { admins, billingOrders, kioskKeys, packages, plans, sessions, tenantPayments, tenants } from "../db/schema.js";
+import { admins, billingOrders, kioskKeys, packages, plans, platformSettings, sessions, tenantPayments, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
-import { getSubscriptionStatus } from "../lib/subscription.js";
+import { computeKeyLock, getGracePeriodDays, summarizeLicenses } from "../lib/license.js";
+import { MAX_BOOTHS_PER_ORDER, quoteBooths, readVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
 import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
-import { settleOrder } from "../lib/billing.js";
+import { reconcileOrder, settleOrder } from "../lib/billing.js";
+import { portalBaseUrl } from "../lib/urls.js";
 
 // --- Tenant portal API (web dashboard for tenant admins) — tenant-admin JWT, same as /api/auth ---
 
@@ -26,10 +28,10 @@ portalRouter.get("/summary", async (req, res) => {
   const tenantId = req.tenantId!;
   const since = new Date(Date.now() - 30 * DAY_MS);
 
-  const [[tenant], subscription, keys, [stats], payments, [admin]] = await Promise.all([
-    db.select({ name: tenants.name, plan: tenants.plan, status: tenants.status, subscriptionEndsAt: tenants.subscriptionEndsAt }).from(tenants).where(eq(tenants.id, tenantId)),
-    getSubscriptionStatus(tenantId),
-    db.select({ id: kioskKeys.id, label: kioskKeys.label, lastUsedAt: kioskKeys.lastUsedAt, appVersion: kioskKeys.appVersion, boundDeviceId: kioskKeys.boundDeviceId })
+  const [[tenant], grace, keys, [stats], payments, [admin]] = await Promise.all([
+    db.select({ name: tenants.name, plan: tenants.plan, status: tenants.status, subscriptionEndsAt: tenants.subscriptionEndsAt, boothDiscountPercent: tenants.boothDiscountPercent }).from(tenants).where(eq(tenants.id, tenantId)),
+    getGracePeriodDays(),
+    db.select({ id: kioskKeys.id, label: kioskKeys.label, lastUsedAt: kioskKeys.lastUsedAt, appVersion: kioskKeys.appVersion, boundDeviceId: kioskKeys.boundDeviceId, licenseType: kioskKeys.licenseType, licenseEndsAt: kioskKeys.licenseEndsAt, revokedAt: kioskKeys.revokedAt })
       .from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt))),
     db.select({
       sessions: count(),
@@ -53,6 +55,7 @@ portalRouter.get("/summary", async (req, res) => {
 
   const [plan] = await db.select({ name: plans.name, kioskLimit: plans.kioskLimit }).from(plans).where(eq(plans.slug, tenant.plan));
   const now = Date.now();
+  const licenses = summarizeLicenses(tenant.status, keys, grace, now);
 
   res.json({
     email: admin?.email ?? null,
@@ -62,18 +65,31 @@ portalRouter.get("/summary", async (req, res) => {
       planSlug: tenant.plan,
       planName: plan?.name ?? tenant.plan,
       kioskLimit: plan?.kioskLimit ?? null,
+      // Latest paid-through date across booths; each booth also carries its own (kiosks[].licenseEndsAt).
       subscriptionEndsAt: tenant.subscriptionEndsAt,
-      locked: subscription.locked,
-      graceDaysRemaining: subscription.graceDaysRemaining,
+      // "Locked" for the dashboard means no booth can run at all; individual booths are flagged on kiosks[].
+      locked: licenses.activeKeys > 0 && licenses.locked === licenses.activeKeys,
+      graceDaysRemaining: null,
+      boothDiscountPercent: tenant.boothDiscountPercent,
     },
-    kiosks: keys.map((k) => ({
-      id: k.id,
-      label: k.label,
-      appVersion: k.appVersion,
-      paired: !!k.boundDeviceId,
-      lastUsedAt: k.lastUsedAt,
-      online: !!k.lastUsedAt && now - new Date(k.lastUsedAt).getTime() < KIOSK_ONLINE_WINDOW_MS,
-    })),
+    licenses,
+    kiosks: keys.map((k) => {
+      const lock = computeKeyLock(tenant.status, k, grace, now);
+      return {
+        id: k.id,
+        label: k.label,
+        appVersion: k.appVersion,
+        paired: !!k.boundDeviceId,
+        lastUsedAt: k.lastUsedAt,
+        online: !!k.lastUsedAt && now - new Date(k.lastUsedAt).getTime() < KIOSK_ONLINE_WINDOW_MS,
+        licenseType: lock.licenseType,
+        licenseEndsAt: k.licenseEndsAt,
+        locked: lock.locked,
+        lockReason: lock.reason,
+        daysRemaining: lock.daysRemaining,
+        graceDaysRemaining: lock.graceDaysRemaining,
+      };
+    }),
     last30Days: { sessions: Number(stats?.sessions ?? 0), revenue: Number(stats?.revenue ?? 0) },
     daily: [...dailyMap.entries()].map(([date, v]) => ({ date, ...v })),
     recentPayments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
@@ -165,41 +181,107 @@ portalRouter.get("/billing/orders", async (req, res) => {
   const rows = await db.select({
     orderId: billingOrders.orderId, planName: billingOrders.planName, amount: billingOrders.amount,
     periodDays: billingOrders.periodDays, status: billingOrders.status, paymentType: billingOrders.paymentType,
-    createdAt: billingOrders.createdAt, paidAt: billingOrders.paidAt,
+    createdAt: billingOrders.createdAt, paidAt: billingOrders.paidAt, boothCount: billingOrders.boothCount, discountPercent: billingOrders.discountPercent,
   }).from(billingOrders).where(eq(billingOrders.tenantId, req.tenantId!)).orderBy(desc(billingOrders.createdAt)).limit(20);
   res.json(rows.map((r) => ({ ...r, amount: Number(r.amount) })));
 });
 
-// POST /api/portal/billing/checkout — { planSlug } → { redirectUrl } to a gateway's hosted payment page.
-// Tries the enabled gateways in priority order (Superadmin → Pengaturan → Pembayaran langganan): if one is down or
-// rejects the request, the next is used. If none works the tenant is told to contact STUDIODO instead.
+// Everything the "Booth & langganan" page needs to price an order: the plans (per-booth prices), the platform's volume
+// tiers and this tenant's negotiated discount. Shared by the quote preview and the real checkout so both always agree.
+async function loadPricingContext(tenantId: string) {
+  const [[settings], [tenant]] = await Promise.all([
+    db.select({ volumeDiscounts: platformSettings.volumeDiscounts }).from(platformSettings).limit(1),
+    db.select({ boothDiscountPercent: tenants.boothDiscountPercent }).from(tenants).where(eq(tenants.id, tenantId)),
+  ]);
+  return { tiers: readVolumeTiers(settings?.volumeDiscounts ?? [{ minBooths: 10, percent: 10 }]), tenantPercent: tenant?.boothDiscountPercent ?? 0 };
+}
+
+type OrderItem = { keyId: string | null; label: string | null };
+
+/** Validates the requested booths: existing keys must be this tenant's and not revoked; new ones are bounded. */
+async function resolveOrderItems(tenantId: string, body: Record<string, unknown>): Promise<{ items: OrderItem[] } | { error: string }> {
+  const rawIds = Array.isArray(body.keyIds) ? body.keyIds : [];
+  const keyIds = [...new Set(rawIds.map((v) => String(v)))];
+  if (keyIds.length > MAX_BOOTHS_PER_ORDER) return { error: `Maksimal ${MAX_BOOTHS_PER_ORDER} booth per pembayaran` };
+  const newBooths = Math.floor(Number(body.newBooths) || 0);
+  if (newBooths < 0 || newBooths > MAX_BOOTHS_PER_ORDER) return { error: `Booth baru harus antara 0 dan ${MAX_BOOTHS_PER_ORDER}` };
+
+  const items: OrderItem[] = [];
+  if (keyIds.length > 0) {
+    if (!keyIds.every((id) => /^[0-9a-f-]{36}$/i.test(id))) return { error: "Daftar booth tidak valid" };
+    const owned = await db.select({ id: kioskKeys.id, label: kioskKeys.label }).from(kioskKeys)
+      .where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt), inArray(kioskKeys.id, keyIds)));
+    if (owned.length !== keyIds.length) return { error: "Ada booth yang tidak ditemukan atau sudah dicabut. Muat ulang halaman lalu coba lagi." };
+    for (const k of owned) items.push({ keyId: k.id, label: k.label });
+  }
+  if (newBooths > 0) {
+    const [{ n }] = await db.select({ n: count() }).from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt)));
+    if (Number(n) + newBooths > 100) return { error: "Total booth aktif melebihi batas 100 per akun. Hubungi admin STUDIODO." };
+    const names = Array.isArray(body.newLabels) ? body.newLabels : [];
+    for (let i = 0; i < newBooths; i += 1) {
+      const label = typeof names[i] === "string" ? String(names[i]).trim().slice(0, 80) : "";
+      items.push({ keyId: null, label: label || null });
+    }
+  }
+  if (items.length === 0) return { error: "Pilih minimal satu booth untuk diperpanjang atau tambah booth baru." };
+  return { items };
+}
+
+// POST /api/portal/billing/quote — { planSlug, interval, keyIds[], newBooths } → the price breakdown, without charging anything.
+portalRouter.post("/billing/quote", async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const [plan] = await db.select().from(plans).where(and(eq(plans.slug, String(body.planSlug ?? "")), eq(plans.active, true)));
+  if (!plan) return res.status(404).json({ error: "Paket tidak ditemukan atau sudah tidak aktif" });
+  const resolved = await resolveOrderItems(req.tenantId!, body);
+  if ("error" in resolved) return res.status(400).json({ error: resolved.error });
+  const interval = body.interval === "yearly" ? "yearly" : plan.billingInterval === "yearly" ? "yearly" : "monthly";
+  const { tiers, tenantPercent } = await loadPricingContext(req.tenantId!);
+  const quote = quoteBooths(plan, interval, resolved.items.length, tiers, tenantPercent);
+  if (!quote) return res.status(400).json({ error: "Paket ini tidak tersedia untuk periode tersebut" });
+  res.json({ quote, tiers });
+});
+
+// GET /api/portal/billing/tiers — the volume tiers and this tenant's negotiated discount (for the page's explanation).
+portalRouter.get("/billing/tiers", async (req, res) => {
+  res.json(await loadPricingContext(req.tenantId!));
+});
+
+// POST /api/portal/billing/checkout — { planSlug, interval, keyIds[], newBooths } → { redirectUrl } to a gateway's hosted
+// payment page. One payment can renew several booths and/or add new ones; the volume/negotiated discount is applied on
+// the server. Tries the enabled gateways in priority order (Superadmin → Pengaturan → Pembayaran langganan): if one is
+// down or rejects the request, the next is used. If none works the tenant is told to contact STUDIODO instead.
 portalRouter.post("/billing/checkout", async (req, res) => {
   const gateways = await usableGateways();
   if (gateways.length === 0) {
     return res.status(503).json({ error: "Pembayaran online belum diaktifkan. Hubungi admin STUDIODO untuk perpanjang langganan." });
   }
-  const planSlug = String(req.body?.planSlug ?? "");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const planSlug = String(body.planSlug ?? "");
   const [plan] = await db.select().from(plans).where(and(eq(plans.slug, planSlug), eq(plans.active, true)));
   if (!plan) return res.status(404).json({ error: "Paket tidak ditemukan atau sudah tidak aktif" });
 
-  // The interval the tenant picked (monthly/yearly). Charged with the same numbers the website shows, promo included.
-  const interval = req.body?.interval === "yearly" ? "yearly" : plan.billingInterval === "yearly" ? "yearly" : "monthly";
-  const charge = priceForInterval(plan, interval);
-  if (!charge) return res.status(400).json({ error: "Paket ini tidak tersedia untuk periode tersebut" });
-  const amount = Math.round(charge.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Paket ini gratis dan tidak perlu dibayar" });
-  const periodDays = charge.periodDays;
-
   const tenantId = req.tenantId!;
+  const resolved = await resolveOrderItems(tenantId, body);
+  if ("error" in resolved) return res.status(400).json({ error: resolved.error });
+  const items = resolved.items;
+
+  // The interval the tenant picked (monthly/yearly). Charged with the same numbers the website shows, promo included.
+  const interval = body.interval === "yearly" ? "yearly" : plan.billingInterval === "yearly" ? "yearly" : "monthly";
+  const { tiers, tenantPercent } = await loadPricingContext(tenantId);
+  const quote = quoteBooths(plan, interval, items.length, tiers, tenantPercent);
+  if (!quote) return res.status(400).json({ error: "Paket ini tidak tersedia untuk periode tersebut" });
+  const amount = Math.round(quote.total);
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Paket ini gratis dan tidak perlu dibayar" });
+  const periodDays = quote.periodDays;
+
   const [admin] = await db.select({ email: admins.email }).from(admins).where(eq(admins.id, req.adminId!));
   const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
   if (!admin || !tenant) return res.status(404).json({ error: "Akun tidak ditemukan" });
 
   // Where the gateway sends the tenant back after paying. Defaults to the public website so the payer is never
   // left stranded on the gateway's page when PORTAL_BASE_URL was not configured.
-  const portalBase = (process.env.PORTAL_BASE_URL || "https://www.studiodo.id").replace(/\/$/, "");
-  const finishUrl = `${portalBase}/portal/tagihan?status=selesai`;
-  const itemName = `${plan.name} (${periodDays} hari)`;
+  const finishUrl = `${portalBaseUrl()}/portal/tagihan?status=selesai`;
+  const itemName = `${plan.name} · ${items.length} booth (${periodDays} hari)`;
 
   for (const gw of gateways) {
     // A fresh order id per attempt: a gateway that failed mid-way may already have recorded the previous one.
@@ -221,15 +303,33 @@ portalRouter.post("/billing/checkout", async (req, res) => {
       }
       await db.insert(billingOrders).values({
         orderId, provider: gw.provider, providerRef, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
+        items, boothCount: items.length, discountPercent: quote.discountPercent,
         snapToken, redirectUrl,
       });
-      logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, Rp ${amount.toLocaleString("id-ID")}`, actorType: "tenant_admin", actorLabel: admin.email });
+      logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, ${items.length} booth, Rp ${amount.toLocaleString("id-ID")}${quote.discountPercent > 0 ? ` (diskon ${quote.discountPercent}%)` : ""}`, actorType: "tenant_admin", actorLabel: admin.email });
       return res.status(201).json({ redirectUrl, orderId, provider: gw.provider });
     } catch (e) {
       logEvent({ tenantId, level: gateways.indexOf(gw) < gateways.length - 1 ? "warning" : "error", category: "billing", action: "checkout.gateway_failed", message: `Checkout via ${gw.provider} gagal untuk "${tenant.name}": ${e instanceof Error ? e.message : String(e)}${gateways.indexOf(gw) < gateways.length - 1 ? " — mencoba gateway berikutnya" : ""}`, actorType: "system" });
     }
   }
   res.status(502).json({ error: "Gagal membuat pembayaran. Coba lagi beberapa saat lagi, atau hubungi admin STUDIODO." });
+});
+
+// POST /api/portal/billing/orders/:orderId/check — "I paid but nothing changed": asks the gateway directly instead of
+// waiting for a webhook that may have been lost. Only this tenant's own orders; rate-limited per tenant.
+const lastCheck = new Map<string, number>();
+portalRouter.post("/billing/orders/:orderId/check", async (req, res) => {
+  const tenantId = req.tenantId!;
+  if (Date.now() - (lastCheck.get(tenantId) ?? 0) < 5000) return res.status(429).json({ error: "Tunggu beberapa detik sebelum mengecek lagi." });
+  lastCheck.set(tenantId, Date.now());
+  const [order] = await db.select().from(billingOrders).where(and(eq(billingOrders.orderId, req.params.orderId), eq(billingOrders.tenantId, tenantId)));
+  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+  try {
+    const out = await reconcileOrder(order);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : "Gagal mengecek status pembayaran" });
+  }
 });
 
 // --- Gateway webhooks — PUBLIC (the gateways call them), each authenticated by its own mechanism ---

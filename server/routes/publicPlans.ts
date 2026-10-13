@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { plans } from "../db/schema.js";
+import { plans, platformSettings } from "../db/schema.js";
 import { computePlanPricing } from "../lib/planPricing.js";
+import { readVolumeTiers } from "../lib/boothPricing.js";
 
 export const publicPlansRouter = Router();
 
@@ -46,4 +47,12 @@ publicPlansRouter.get("/plans", async (_req, res) => {
       pricing,
     };
   }));
+});
+
+// GET /api/public/volume-discounts — PUBLIC. The "buy more booths, pay less" tiers a superadmin set, for the pricing
+// section ("10+ booth: hemat 10 %") so the website always shows what checkout will actually apply.
+publicPlansRouter.get("/volume-discounts", async (_req, res) => {
+  const [settings] = await db.select({ volumeDiscounts: platformSettings.volumeDiscounts }).from(platformSettings).limit(1);
+  res.set("Cache-Control", "public, max-age=60");
+  res.json({ tiers: readVolumeTiers(settings?.volumeDiscounts ?? [{ minBooths: 10, percent: 10 }]) });
 });

@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates, withdrawals } from "../db/schema.js";
 import { computeQrisBalance } from "../lib/qrisBalance.js";
@@ -13,8 +13,10 @@ import { marketplaceAdminRouter } from "./marketplace.js";
 import { creatorsAdminRouter } from "./creators.js";
 import { siteAssetsAdminRouter } from "./siteAssets.js";
 import { paymentGatewaysAdminRouter } from "./paymentGateways.js";
-import { extendSubscription } from "../lib/subscription.js";
-import { computeLocked } from "../lib/subscription.js";
+import { reconcileOrder } from "../lib/billing.js";
+import { licensesAdminRouter } from "./licenses.js";
+import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
+import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
 
@@ -85,6 +87,7 @@ superadminRouter.use("/marketplace", marketplaceAdminRouter);
 superadminRouter.use("/creators", creatorsAdminRouter);
 superadminRouter.use("/assets", siteAssetsAdminRouter);
 superadminRouter.use("/payment-gateways", paymentGatewaysAdminRouter);
+superadminRouter.use("/licenses", licensesAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of
@@ -105,13 +108,17 @@ const ONLINE_THRESHOLD_MS = 10 * 60 * 1000;
 // needs to scale past a few thousand sessions (see Fase 2b plan notes).
 async function loadCrossTenantAggregates() {
   const [kioskRows, sessionRows] = await Promise.all([
-    db.select({ tenantId: kioskKeys.tenantId, lastUsedAt: kioskKeys.lastUsedAt }).from(kioskKeys).where(isNull(kioskKeys.revokedAt)),
+    db.select({ tenantId: kioskKeys.tenantId, lastUsedAt: kioskKeys.lastUsedAt, licenseType: kioskKeys.licenseType, licenseEndsAt: kioskKeys.licenseEndsAt, revokedAt: kioskKeys.revokedAt }).from(kioskKeys).where(isNull(kioskKeys.revokedAt)),
     db.select({ tenantId: sessions.tenantId, paymentStatus: sessions.paymentStatus, totalAmount: sessions.totalAmount }).from(sessions),
   ]);
 
   const now = Date.now();
   const kiosksByTenant = new Map<string, { total: number; online: number }>();
+  const keysByTenant = new Map<string, { revokedAt: Date | null; licenseType: string; licenseEndsAt: Date | null }[]>();
   for (const row of kioskRows) {
+    const list = keysByTenant.get(row.tenantId) ?? [];
+    list.push(row);
+    keysByTenant.set(row.tenantId, list);
     const entry = kiosksByTenant.get(row.tenantId) ?? { total: 0, online: 0 };
     entry.total += 1;
     if (row.lastUsedAt && now - new Date(row.lastUsedAt).getTime() < ONLINE_THRESHOLD_MS) entry.online += 1;
@@ -129,7 +136,7 @@ async function loadCrossTenantAggregates() {
     sessionsByTenant.set(row.tenantId, entry);
   }
 
-  return { kiosksByTenant, sessionsByTenant };
+  return { kiosksByTenant, sessionsByTenant, keysByTenant };
 }
 
 // GET /api/superadmin/tenants — every tenant on the platform, with primary admin
@@ -152,15 +159,14 @@ superadminRouter.get("/tenants", async (_req, res) => {
     if (!firstAdminByTenant.has(admin.tenantId)) firstAdminByTenant.set(admin.tenantId, admin.email);
   }
 
-  const { kiosksByTenant, sessionsByTenant } = await loadCrossTenantAggregates();
-  const { gracePeriodDays } = await getOrCreatePlatformSettings();
+  const { kiosksByTenant, sessionsByTenant, keysByTenant } = await loadCrossTenantAggregates();
+  const gracePeriodDays = await getGracePeriodDays();
   const now = Date.now();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
   res.json(rows.map((tenant) => {
     const kiosk = kiosksByTenant.get(tenant.id) ?? { total: 0, online: 0 };
     const session = sessionsByTenant.get(tenant.id) ?? { total: 0, paid: 0, revenue: 0 };
-    const endsAt = tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt).getTime() : null;
+    const licenses = summarizeLicenses(tenant.status, keysByTenant.get(tenant.id) ?? [], gracePeriodDays, now);
     return {
       ...tenant,
       adminEmail: firstAdminByTenant.get(tenant.id) ?? null,
@@ -168,37 +174,37 @@ superadminRouter.get("/tenants", async (_req, res) => {
       onlineKioskCount: kiosk.online,
       sessionCount: session.total,
       revenue: session.revenue,
-      locked: computeLocked(tenant.status, tenant.subscriptionEndsAt, gracePeriodDays),
-      // A simple, cheap "at risk" signal for the tenants table — subscription
-      // due within a week (and not already expired/locked, which has its own
-      // more urgent treatment) — not a churn model, just a glance-able flag.
-      expiringSoon: endsAt !== null && endsAt > now && endsAt - now <= sevenDaysMs,
+      licenses,
+      // A tenant counts as locked when it is suspended or none of its booths can run any more.
+      locked: tenant.status === "suspended" || (licenses.activeKeys > 0 && licenses.locked === licenses.activeKeys),
+      // A simple, cheap "at risk" signal for the tenants table — a booth's licence due within a week (and not already
+      // expired/locked, which has its own more urgent treatment) — not a churn model, just a glance-able flag.
+      expiringSoon: licenses.expiringSoon > 0,
     };
   }));
 });
 
 // GET /api/superadmin/overview — platform-wide stat cards for the superadmin dashboard.
 superadminRouter.get("/overview", async (_req, res) => {
-  const rows = await db.select({ status: tenants.status, subscriptionEndsAt: tenants.subscriptionEndsAt }).from(tenants);
-  const { gracePeriodDays } = await getOrCreatePlatformSettings();
+  const rows = await db.select({ id: tenants.id, status: tenants.status }).from(tenants);
+  const gracePeriodDays = await getGracePeriodDays();
   const now = Date.now();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const { kiosksByTenant, sessionsByTenant, keysByTenant } = await loadCrossTenantAggregates();
 
   const byStatus: Record<string, number> = {};
   let expiringSoon = 0;
   let expired = 0;
   let locked = 0;
+  const booths = { total: 0, paid: 0, trial: 0, unpaid: 0, locked: 0, expiringSoon: 0 };
   for (const row of rows) {
     byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
-    if (row.subscriptionEndsAt) {
-      const endsAt = new Date(row.subscriptionEndsAt).getTime();
-      if (endsAt < now) expired += 1;
-      else if (endsAt - now <= sevenDaysMs) expiringSoon += 1;
-    }
-    if (computeLocked(row.status, row.subscriptionEndsAt, gracePeriodDays)) locked += 1;
+    const summary = summarizeLicenses(row.status, keysByTenant.get(row.id) ?? [], gracePeriodDays, now);
+    booths.total += summary.activeKeys; booths.paid += summary.paid; booths.trial += summary.trial; booths.unpaid += summary.unpaid;
+    booths.locked += summary.locked; booths.expiringSoon += summary.expiringSoon;
+    if (summary.expiringSoon > 0) expiringSoon += 1;
+    if (summary.activeKeys > 0 && summary.locked === summary.activeKeys) { locked += 1; expired += 1; }
   }
 
-  const { kiosksByTenant, sessionsByTenant } = await loadCrossTenantAggregates();
   const kiosks = [...kiosksByTenant.values()].reduce((sum, k) => ({ total: sum.total + k.total, online: sum.online + k.online }), { total: 0, online: 0 });
   const sessionsTotal = [...sessionsByTenant.values()].reduce(
     (sum, s) => ({ total: sum.total + s.total, paid: sum.paid + s.paid, revenue: sum.revenue + s.revenue }),
@@ -211,6 +217,7 @@ superadminRouter.get("/overview", async (_req, res) => {
 
   res.json({
     tenants: { total: rows.length, byStatus, expiringSoon, expired, locked },
+    booths,
     kiosks,
     sessions: sessionsTotal,
     subscriptions: {
@@ -229,10 +236,24 @@ superadminRouter.get("/billing/orders", async (req, res) => {
     orderId: billingOrders.orderId, provider: billingOrders.provider, tenantId: billingOrders.tenantId, tenantName: tenants.name,
     planName: billingOrders.planName, amount: billingOrders.amount, periodDays: billingOrders.periodDays, status: billingOrders.status,
     paymentType: billingOrders.paymentType, createdAt: billingOrders.createdAt, paidAt: billingOrders.paidAt,
+    boothCount: billingOrders.boothCount, discountPercent: billingOrders.discountPercent,
   }).from(billingOrders).innerJoin(tenants, eq(tenants.id, billingOrders.tenantId))
     .where(["pending", "paid", "failed", "expired"].includes(status) ? eq(billingOrders.status, status) : undefined)
     .orderBy(desc(billingOrders.createdAt)).limit(200);
   res.json(rows.map((r) => ({ ...r, amount: Number(r.amount) })));
+});
+
+// POST /api/superadmin/billing/orders/:orderId/check — re-check a stuck order against the gateway (lost webhook).
+superadminRouter.post("/billing/orders/:orderId/check", async (req, res) => {
+  const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, req.params.orderId));
+  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+  try {
+    const out = await reconcileOrder(order);
+    logEvent({ tenantId: order.tenantId, category: "billing", action: "order.rechecked", message: `Order ${order.orderId} dicek ulang ke gateway: ${out.result} (status ${out.status})`, actorType: "superadmin", actorLabel: await currentSuperadminEmail(req) });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : "Gagal mengecek status pembayaran" });
+  }
 });
 
 // GET /api/superadmin/overview/timeseries?days=30 — daily session count + revenue
@@ -279,8 +300,22 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
   for (const field of TENANT_PROFILE_FIELDS) {
     if (req.body?.[field] !== undefined) patch[field] = req.body[field] ? String(req.body[field]).trim() : null;
   }
+  // Negotiated discount on every booth this tenant buys (0 = none). Applied on top of the platform volume tiers; the
+  // better of the two wins (see lib/boothPricing.ts).
+  if (req.body?.boothDiscountPercent !== undefined) {
+    const percent = Math.round(Number(req.body.boothDiscountPercent));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 90) return res.status(400).json({ error: "Diskon booth harus antara 0 dan 90 persen" });
+    patch.boothDiscountPercent = percent;
+  }
+  if (req.body?.boothDiscountNote !== undefined) patch.boothDiscountNote = req.body.boothDiscountNote ? String(req.body.boothDiscountNote).trim().slice(0, 300) : null;
+  // The end date is per booth now; a tenant-level date set here is applied to every running booth of the tenant
+  // (trial and paid ones — a booth that was never subscribed stays unpaid) so this keeps working as "set the whole
+  // account to end on X".
+  let tenantEnd: Date | null | undefined;
   if (req.body?.subscriptionEndsAt !== undefined) {
-    patch.subscriptionEndsAt = req.body.subscriptionEndsAt ? new Date(req.body.subscriptionEndsAt) : null;
+    tenantEnd = req.body.subscriptionEndsAt ? new Date(req.body.subscriptionEndsAt) : null;
+    if (tenantEnd && Number.isNaN(tenantEnd.getTime())) return res.status(400).json({ error: "Tanggal berakhir tidak valid" });
+    patch.subscriptionEndsAt = tenantEnd;
   }
   // Where this tenant's kiosk QRIS money lands (see tenants.qrisSettlement). Switching to 'platform' starts the
   // balance from now; payments made before the switch went to the tenant's own account and never count.
@@ -304,6 +339,12 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
 
   const [row] = await db.update(tenants).set(patch).where(eq(tenants.id, req.params.id)).returning();
   if (!row) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  if (tenantEnd !== undefined) {
+    await db.update(kioskKeys).set({ licenseEndsAt: tenantEnd })
+      .where(and(eq(kioskKeys.tenantId, row.id), isNull(kioskKeys.revokedAt), ne(kioskKeys.licenseType, "unpaid")));
+  }
+  // Suspending/reactivating a tenant or changing a date changes what every booth is allowed to do.
+  clearLicenseCache();
   logEvent({
     tenantId: row.id,
     category: "tenant",
@@ -319,24 +360,44 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
   res.json(row);
 });
 
-// POST /api/superadmin/tenants/:id/extend — { days } — quick nudge with no
-// billing record (e.g. a goodwill trial extension). For an actual payment, use
+// Which booths a tenant-level action applies to: the ones the caller picked, otherwise every booth that is not revoked.
+// (A booth that was never subscribed only gets a licence when picked explicitly, so a blanket goodwill extension
+// can't quietly activate a half-set-up key.)
+async function targetKeyIds(tenantId: string, requested: unknown): Promise<string[]> {
+  if (Array.isArray(requested) && requested.length > 0) {
+    const ids = requested.map((v) => String(v));
+    const rows = await db.select({ id: kioskKeys.id }).from(kioskKeys)
+      .where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt), inArray(kioskKeys.id, ids)));
+    return rows.map((r) => r.id);
+  }
+  const rows = await db.select({ id: kioskKeys.id }).from(kioskKeys)
+    .where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt), ne(kioskKeys.licenseType, "unpaid")));
+  return rows.map((r) => r.id);
+}
+
+// POST /api/superadmin/tenants/:id/extend — { days, keyIds? } — quick nudge with no billing record (e.g. a goodwill
+// trial extension). Extends the picked booths (default: every subscribed booth). For an actual payment, use
 // POST /tenants/:id/payments instead, which extends AND keeps an audit trail.
 superadminRouter.post("/tenants/:id/extend", async (req, res) => {
   const days = Number(req.body?.days);
   if (!Number.isFinite(days) || days <= 0) return res.status(400).json({ error: "Jumlah hari tidak valid" });
 
-  const row = await extendSubscription(req.params.id, days);
-  if (!row) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  const [tenant] = await db.select({ id: tenants.id, name: tenants.name }).from(tenants).where(eq(tenants.id, req.params.id));
+  if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  const ids = await targetKeyIds(tenant.id, req.body?.keyIds);
+  if (ids.length === 0) return res.status(400).json({ error: "Tenant ini belum punya booth berlangganan. Pilih booth yang mau diperpanjang, atau buat key trial dulu." });
+  await extendKeys(ids, days);
+  await syncTenantEndsAt(tenant.id);
   logEvent({
-    tenantId: row.id,
+    tenantId: tenant.id,
     category: "billing",
     action: "subscription.extended",
-    message: `Langganan "${row.name}" diperpanjang ${days} hari (tanpa catatan pembayaran)`,
+    message: `${ids.length} booth "${tenant.name}" diperpanjang ${days} hari (tanpa catatan pembayaran)`,
     actorType: "superadmin",
     actorLabel: await currentSuperadminEmail(req),
-    metadata: { days },
+    metadata: { days, keyIds: ids },
   });
+  const [row] = await db.select().from(tenants).where(eq(tenants.id, tenant.id));
   res.json(row);
 });
 
@@ -352,17 +413,24 @@ superadminRouter.get("/tenants/:id", async (req, res) => {
     // (POST /api/kiosk-keys/heartbeat) but never surfaced here — a superadmin
     // previously had no way to see a tenant's fleet camera/printer/network
     // health short of asking the tenant admin to check their own Kiosk page.
-    db.select({ id: kioskKeys.id, label: kioskKeys.label, createdAt: kioskKeys.createdAt, lastUsedAt: kioskKeys.lastUsedAt, revokedAt: kioskKeys.revokedAt, boundDeviceId: kioskKeys.boundDeviceId, boundAt: kioskKeys.boundAt, appVersion: kioskKeys.appVersion, lastDiagnostics: kioskKeys.lastDiagnostics }).from(kioskKeys).where(eq(kioskKeys.tenantId, tenant.id)),
+    db.select({ id: kioskKeys.id, label: kioskKeys.label, createdAt: kioskKeys.createdAt, lastUsedAt: kioskKeys.lastUsedAt, revokedAt: kioskKeys.revokedAt, boundDeviceId: kioskKeys.boundDeviceId, boundAt: kioskKeys.boundAt, appVersion: kioskKeys.appVersion, lastDiagnostics: kioskKeys.lastDiagnostics, licenseType: kioskKeys.licenseType, licenseEndsAt: kioskKeys.licenseEndsAt, licensePlanSlug: kioskKeys.licensePlanSlug, trialStartedAt: kioskKeys.trialStartedAt }).from(kioskKeys).where(eq(kioskKeys.tenantId, tenant.id)).orderBy(desc(kioskKeys.createdAt)),
     db.select().from(tenantPayments).where(eq(tenantPayments.tenantId, tenant.id)).orderBy(desc(tenantPayments.createdAt)),
     db.select().from(platformEvents).where(eq(platformEvents.tenantId, tenant.id)).orderBy(desc(platformEvents.createdAt)).limit(20),
     getOrCreatePlatformSettings(),
   ]);
 
+  const now = Date.now();
+  const keysWithLock = keys.map((key) => {
+    const lock = computeKeyLock(tenant.status, key, gracePeriodDays, now);
+    return { ...key, locked: lock.locked, lockReason: lock.reason, daysRemaining: lock.daysRemaining, graceDaysRemaining: lock.graceDaysRemaining };
+  });
+  const licenses = summarizeLicenses(tenant.status, keys, gracePeriodDays, now);
   res.json({
     ...tenant,
-    locked: computeLocked(tenant.status, tenant.subscriptionEndsAt, gracePeriodDays),
+    locked: tenant.status === "suspended" || (licenses.activeKeys > 0 && licenses.locked === licenses.activeKeys),
+    licenses,
     admins: tenantAdmins,
-    kioskKeys: keys,
+    kioskKeys: keysWithLock,
     payments,
     recentEvents,
   });
@@ -402,8 +470,12 @@ superadminRouter.post("/tenants", async (req, res) => {
   const [existingEmail] = await db.select({ id: admins.id }).from(admins).where(eq(admins.email, email));
   if (existingEmail) return res.status(409).json({ error: "Email admin sudah dipakai" });
 
+  // The first booth key is a trial of `trialDays` (default: the platform setting) — the customer pairs it in the
+  // kiosk app, and the booth locks by itself when the trial ends. Subscribing later happens from the website.
   const { defaultTrialDays } = await getOrCreatePlatformSettings();
-  const subscriptionEndsAt = new Date(Date.now() + defaultTrialDays * 24 * 60 * 60 * 1000);
+  const requestedTrialDays = req.body?.trialDays === undefined || req.body.trialDays === "" ? defaultTrialDays : Math.round(Number(req.body.trialDays));
+  if (!Number.isFinite(requestedTrialDays) || requestedTrialDays < 1 || requestedTrialDays > 3650) return res.status(400).json({ error: "Lama trial harus 1–3650 hari" });
+  const subscriptionEndsAt = new Date(Date.now() + requestedTrialDays * 24 * 60 * 60 * 1000);
 
   const [tenant] = await db.insert(tenants).values({ name, slug, subscriptionEndsAt, plan: planSlug ?? "trial", ...profile }).returning();
   await db.insert(admins).values({ tenantId: tenant.id, email, passwordHash: hashPassword(password) });
@@ -425,9 +497,7 @@ superadminRouter.post("/tenants", async (req, res) => {
     outputPreset: "4r",
   }]);
 
-  const rawKioskKey = crypto.randomBytes(32).toString("hex");
-  const keyHash = crypto.createHash("sha256").update(rawKioskKey).digest("hex");
-  await db.insert(kioskKeys).values({ tenantId: tenant.id, label: "Default kiosk", keyHash, rawKey: rawKioskKey });
+  const { rawKey: rawKioskKey } = await issueKioskKey(tenant.id, { label: "Default kiosk", kind: "trial", days: requestedTrialDays });
 
   logEvent({
     tenantId: tenant.id,
@@ -438,7 +508,7 @@ superadminRouter.post("/tenants", async (req, res) => {
     actorLabel: await currentSuperadminEmail(req),
   });
 
-  res.status(201).json({ tenant, adminEmail: email, kioskKey: rawKioskKey, trialDays: defaultTrialDays });
+  res.status(201).json({ tenant, adminEmail: email, kioskKey: rawKioskKey, trialDays: requestedTrialDays });
 });
 
 // --- Tenant applications (inbound leads) --------------------------------
@@ -488,7 +558,9 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
   if (existingEmail) return res.status(409).json({ error: "Email pemilik sudah dipakai sebagai admin tenant lain" });
 
   const { defaultTrialDays } = await getOrCreatePlatformSettings();
-  const subscriptionEndsAt = new Date(Date.now() + defaultTrialDays * 24 * 60 * 60 * 1000);
+  const trialDays = req.body?.trialDays === undefined || req.body.trialDays === "" ? defaultTrialDays : Math.round(Number(req.body.trialDays));
+  if (!Number.isFinite(trialDays) || trialDays < 1 || trialDays > 3650) return res.status(400).json({ error: "Lama trial harus 1–3650 hari" });
+  const subscriptionEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
 
   const [tenant] = await db.insert(tenants).values({
     name: application.businessName,
@@ -511,9 +583,7 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
     { tenantId: tenant.id, name: "Premium Session", price: "85000", photoCount: 5, hasGif: true, hasVideo: false, extraPrints: [], active: true, sortOrder: 2 },
   ]);
 
-  const rawKioskKey = crypto.randomBytes(32).toString("hex");
-  const keyHash = crypto.createHash("sha256").update(rawKioskKey).digest("hex");
-  await db.insert(kioskKeys).values({ tenantId: tenant.id, label: "Default kiosk", keyHash, rawKey: rawKioskKey });
+  const { rawKey: rawKioskKey } = await issueKioskKey(tenant.id, { label: "Default kiosk", kind: "trial", days: trialDays });
 
   const actorLabel = await currentSuperadminEmail(req);
   await db.update(tenantApplications)
@@ -529,7 +599,7 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
     actorLabel,
   });
 
-  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays: defaultTrialDays });
+  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays });
 });
 
 // --- Activity & error log -------------------------------------------------
@@ -619,10 +689,12 @@ superadminRouter.post("/tenants/:id/payments", async (req, res) => {
   if (!Number.isFinite(periodDays) || periodDays <= 0) return res.status(400).json({ error: "Periode (hari) tidak valid" });
 
   let planName: string | null = null;
+  let planSlugForPayment: string | null | undefined;
   if (planId) {
     const [plan] = await db.select({ name: plans.name, slug: plans.slug }).from(plans).where(eq(plans.id, planId));
     if (plan) {
       planName = plan.name;
+      planSlugForPayment = plan.slug;
       await db.update(tenants).set({ plan: plan.slug }).where(eq(tenants.id, tenantId));
       await syncTenantFeaturesToPlan(tenantId);
     }
@@ -630,8 +702,14 @@ superadminRouter.post("/tenants/:id/payments", async (req, res) => {
 
   const [superadmin] = await db.select({ email: superadmins.email }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
 
-  const tenant = await extendSubscription(tenantId, periodDays);
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
   if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  // A manual payment extends the booths it covers (default: every subscribed booth) and turns trial/unpaid ones into
+  // full subscriptions — it is real money, unlike the goodwill "extend" above.
+  const ids = await targetKeyIds(tenantId, req.body?.keyIds);
+  if (ids.length === 0) return res.status(400).json({ error: "Tidak ada booth untuk diperpanjang. Pilih booth yang dibayar (atau buat booth dulu)." });
+  await extendKeys(ids, periodDays, { planSlug: planSlugForPayment, convertTrial: true });
+  await syncTenantEndsAt(tenantId);
 
   const [payment] = await db.insert(tenantPayments).values({
     tenantId,
@@ -640,7 +718,7 @@ superadminRouter.post("/tenants/:id/payments", async (req, res) => {
     amount: String(amount),
     method,
     periodDays,
-    note,
+    note: note ? `${note} · ${ids.length} booth` : `${ids.length} booth`,
     recordedBy: superadmin?.email ?? null,
   }).returning();
 
@@ -832,9 +910,21 @@ superadminRouter.patch("/settings", async (req, res) => {
     if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "Biaya penarikan tidak valid" });
     patch.withdrawalFlatFee = amount;
   }
+  // Volume discount tiers for booth subscriptions: [{ minBooths, percent }, …]
+  if (req.body?.volumeDiscounts !== undefined) {
+    try {
+      patch.volumeDiscounts = sanitizeVolumeTiers(req.body.volumeDiscounts);
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "Tier diskon tidak valid" });
+    }
+  }
   patch.updatedAt = new Date();
 
   const [row] = await db.update(platformSettings).set(patch).where(eq(platformSettings.id, current.id)).returning();
+  // The grace period decides when booths lock — apply a change immediately instead of after the cache expires.
+  resetGraceCache();
+  clearLicenseCache();
+  logEvent({ category: "billing", action: "settings.updated", message: `Pengaturan platform diubah: ${Object.keys(patch).filter((k) => k !== "updatedAt").join(", ")}`, actorType: "superadmin", actorLabel: await currentSuperadminEmail(req) });
   res.json(row);
 });
 
