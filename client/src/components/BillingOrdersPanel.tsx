@@ -56,10 +56,10 @@ export function BillingOrdersPanel() {
         ))}
         {rows && rows.some((r) => r.status === "paid") && <span className="ml-auto text-fg/50">Lunas di daftar ini: <b className="text-fg">{money(paidTotal)}</b></span>}
       </div>
-      <div className="mt-5 overflow-x-auto">
+      <div className="mt-5 max-h-[62vh] overflow-auto">
         {rows === null ? (error ? null : <p role="status" className="text-sm text-fg/50">Memuat pesanan…</p>) : rows.length === 0 ? <p className="text-sm text-fg/45">Belum ada pesanan.</p> : (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-fg/40"><tr><th className="py-2 pr-4">Waktu</th><th className="pr-4">Tenant</th><th className="pr-4">Paket</th><th className="pr-4">Booth</th><th className="pr-4">Nominal</th><th className="pr-4">Gateway</th><th>Status</th></tr></thead>
+            <thead className="sticky top-0 z-10 bg-surface text-xs uppercase tracking-wider text-fg/40"><tr><th className="py-2 pr-4">Waktu</th><th className="pr-4">Tenant</th><th className="pr-4">Paket</th><th className="pr-4">Booth</th><th className="pr-4">Nominal</th><th className="pr-4">Gateway</th><th>Status</th></tr></thead>
             <tbody className="divide-y divide-fg/5">
               {rows.map((r) => (
                 <tr key={r.orderId}>

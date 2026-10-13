@@ -220,12 +220,12 @@ export function LicensesPanel({ tenantId, tenants = [], onChanged }: { tenantId?
       {rows && !showRevoked && <p className="text-xs text-fg/45">{rows.length} booth · {counts.paid} berlangganan · {counts.trial} trial · {counts.unpaid} belum bayar · {counts.locked} terkunci</p>}
 
       {error && <p role="alert" className="rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-      <div className="overflow-x-auto">
+      <div className="max-h-[62vh] overflow-auto">
         {rows === null ? (error ? null : <p role="status" className="text-sm text-fg/50">Memuat…</p>) : rows.length === 0 ? (
           <p className="text-sm text-fg/45">Tidak ada booth yang cocok.</p>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-fg/40">
+            <thead className="sticky top-0 z-10 bg-surface text-xs uppercase tracking-wider text-fg/40">
               <tr>{!tenantId && <th className="py-2 pr-4">Tenant</th>}<th className="pr-4">Booth</th><th className="pr-4">Jenis</th><th className="pr-4">Berakhir</th><th className="pr-4">Status</th><th className="pr-4">Terakhir aktif</th><th className="text-right">Aksi</th></tr>
             </thead>
             <tbody className="divide-y divide-fg/5">

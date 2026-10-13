@@ -622,7 +622,7 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
         </div>
       </div>
 
-      <div className="mt-5 space-y-2">
+      <div className="mt-5 max-h-[62vh] space-y-2 overflow-y-auto pr-1">
         {events.map((event) => (
           <div key={event.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
             <div className="min-w-0 flex-1">
