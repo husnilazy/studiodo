@@ -57,6 +57,7 @@ export type MarketplaceItem = {
   id: string; name: string; description: string; creatorName: string | null; category: string; orientation: string;
   imageUrl: string; canvasWidth: number; canvasHeight: number; slotCount: number; featured: boolean; installCount: number;
   active: boolean; createdAt: string;
+  ratingAverage?: number | null; ratingCount?: number; openReports?: number;
 };
 export type MarketplaceSource = { id: string; name: string; category: string; orientation: string; imageUrl: string; slotCount: number; publishable: boolean };
 export type MarketplaceMeta = { name?: string; description?: string; creatorName?: string | null; category?: string; featured?: boolean; active?: boolean };
@@ -64,7 +65,7 @@ export type MarketplaceMeta = { name?: string; description?: string; creatorName
 // --- Creator applications ---
 export type CreatorSubmission = {
   id: string; name: string; email: string; whatsapp: string | null; portfolioUrl: string; description: string;
-  status: "new" | "reviewing" | "accepted" | "rejected"; note: string | null; reviewedBy: string | null; reviewedAt: string | null; createdAt: string;
+  emailVerifiedAt?: string | null; status: "new" | "reviewing" | "accepted" | "rejected"; note: string | null; reviewedBy: string | null; reviewedAt: string | null; createdAt: string;
 };
 
 // --- Subscription payment gateways (Midtrans / Xendit) ---
@@ -205,6 +206,29 @@ export interface LicenseRow {
 
 export interface VolumeTier { minBooths: number; percent: number }
 
+export interface SecurityAlert {
+  id: string; createdAt: string; message: string; tenantId: string | null; email: string | null; ip: string | null;
+  lockMinutes: number; lockoutCount: number; tenantName: string | null; ownerName: string | null; ownerWhatsapp: string | null;
+}
+
+export type NotificationSeverity = "info" | "success" | "warning" | "critical";
+export type NotificationKind = "platform" | "customer_message" | "billing" | "booth" | "system";
+export interface SentNotification {
+  id: string;
+  tenantId: string | null;
+  tenantName: string | null;
+  kind: NotificationKind;
+  severity: NotificationSeverity;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  createdBy: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  readCount: number;
+}
+export interface SendNotificationInput { tenantId: string | null; title: string; body?: string; severity: NotificationSeverity; kind?: NotificationKind; linkUrl?: string; expiresInDays?: number }
+
 export interface PlatformSettings {
   id: string;
   defaultTrialDays: number;
@@ -277,7 +301,17 @@ export interface CreatorTemplateReview {
   canvasWidth: number; canvasHeight: number; slots: { x: number; y: number; w: number; h: number; rotation?: number }[];
   frameUrl: string | null; status: "draft" | "pending" | "approved" | "rejected"; reviewNote: string | null;
   submittedAt: string | null; reviewedAt: string | null; creatorName: string; creatorEmail: string;
+  creatorId?: string; creatorWhatsapp?: string | null; creatorStats?: { approved: number; rejected: number; total: number };
+  waitingDays?: number | null; checks?: ReviewCheck[];
 }
+export interface MarketReportRow {
+  id: string; status: "open" | "resolved" | "dismissed"; reason: string; detail: string; resolution: string | null; resolvedBy: string | null; resolvedAt: string | null; createdAt: string;
+  templateId: string; templateName: string; templateActive: boolean; creatorName: string | null; imageUrl: string;
+  tenantId: string; tenantName: string; tenantWhatsapp: string | null; tenantOwner: string | null;
+}
+export interface MarketReviewRow { id: string; rating: number; comment: string; status: "published" | "hidden"; createdAt: string; templateId: string; templateName: string; tenantName: string }
+export interface ReviewCheck { id: string; label: string; status: "ok" | "warn" | "fail"; detail: string }
+export interface ModerationLogEntry { id: string; createdAt: string; action: string; message: string; actorLabel: string | null }
 
 export interface OverviewTimeseriesPoint {
   date: string;
@@ -359,6 +393,7 @@ export interface TenantApplication {
   businessName: string;
   ownerName: string;
   ownerEmail: string;
+  emailVerifiedAt?: string | null;
   ownerWhatsapp: string | null;
   businessType: string | null;
   city: string | null;
@@ -446,6 +481,10 @@ export const superadminApi = {
     const qs = params.toString();
     return request<PlatformEvent[]>(`/events${qs ? `?${qs}` : ""}`);
   },
+  getNotifications: () => request<{ items: SentNotification[]; tenantCount: number }>("/notifications"),
+  sendNotification: (body: SendNotificationInput) => request<SentNotification>("/notifications", { method: "POST", body: JSON.stringify(body) }),
+  deleteNotification: (id: string) => request<{ ok: boolean }>(`/notifications/${id}`, { method: "DELETE" }),
+  getSecurityAlerts: () => request<SecurityAlert[]>("/security-alerts"),
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
 
   getPaymentGateways: () => request<GatewaysOverview>("/payment-gateways"),
@@ -473,8 +512,17 @@ export const superadminApi = {
   getCreatorAccounts: () => request<CreatorAccount[]>("/creators/accounts"),
   createCreatorAccount: (body: { submissionId?: string; name?: string; email?: string; whatsapp?: string }) =>
     request<{ creator: { id: string; name: string; email: string }; password: string }>("/creators/accounts", { method: "POST", body: JSON.stringify(body) }),
-  setCreatorAccountStatus: (id: string, status: "active" | "suspended") =>
-    request<{ ok: boolean }>(`/creators/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  setCreatorAccountStatus: (id: string, status: "active" | "suspended", hidePublished = false) =>
+    request<{ ok: boolean; hidden?: number }>(`/creators/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ status, hidePublished }) }),
+  getMarketReports: (status = "open") => request<{ reasons: { key: string; label: string }[]; items: MarketReportRow[] }>(`/marketplace/reports?status=${status}`),
+  getMarketReportsSummary: () => request<{ open: number }>("/marketplace/reports/summary"),
+  resolveMarketReport: (id: string, action: "hide" | "dismiss" | "resolve", note: string) =>
+    request<{ ok: boolean; closed: number }>(`/marketplace/reports/${id}/resolve`, { method: "POST", body: JSON.stringify({ action, note }) }),
+  getMarketReviews: () => request<MarketReviewRow[]>("/marketplace/reviews"),
+  setMarketReviewStatus: (id: string, status: "published" | "hidden") =>
+    request<{ ok: boolean }>(`/marketplace/reviews/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  getCreatorQueueSummary: () => request<{ pending: number; oldestWaitingDays: number | null; rejectionPresets: string[] }>("/creators/templates/summary"),
+  getModerationLog: () => request<ModerationLogEntry[]>("/creators/moderation-log"),
   resetCreatorPassword: (id: string) => request<{ password: string }>(`/creators/accounts/${id}/reset-password`, { method: "POST" }),
   getCreatorTemplates: (status = "") => request<CreatorTemplateReview[]>(`/creators/templates${status ? `?status=${status}` : ""}`),
   approveCreatorTemplate: (id: string, featured = false) =>

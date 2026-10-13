@@ -1,9 +1,11 @@
-import PlansPanel from "@/components/PlansPanel";
 import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import { Icon } from "@/components/kiosk/Icons";
+import { BrandLogo } from "@/components/BrandLogo";
+import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
+import SecurityAlertsPanel from "@/components/SecurityAlertsPanel";
 import { useAdminThemeScope } from "@/lib/adminTheme";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   superadminApi,
   getSuperadminToken,
@@ -21,13 +23,17 @@ import {
   type FleetAlertKiosk,
   type VolumeTier,
 } from "@/lib/superadminApi";
-import { SiteContentPanel } from "@/components/SiteContentPanel";
-import { BlogPanel } from "@/components/BlogPanel";
-import { MarketplacePanel } from "@/components/MarketplacePanel";
-import { CreatorsPanel } from "@/components/CreatorsPanel";
-import { BillingOrdersPanel } from "@/components/BillingOrdersPanel";
-import { LicensesPanel } from "@/components/LicensesPanel";
-import { PaymentGatewaysPanel } from "@/components/PaymentGatewaysPanel";
+// Heavy panels load on first visit instead of with the dashboard, so the first paint after login is much lighter and
+// switching sections only pays for the panel you open.
+const PlansPanel = lazy(() => import("@/components/PlansPanel"));
+const SiteContentPanel = lazy(() => import("@/components/SiteContentPanel").then((m) => ({ default: m.SiteContentPanel })));
+const BlogPanel = lazy(() => import("@/components/BlogPanel").then((m) => ({ default: m.BlogPanel })));
+const MarketplacePanel = lazy(() => import("@/components/MarketplacePanel").then((m) => ({ default: m.MarketplacePanel })));
+const CreatorsPanel = lazy(() => import("@/components/CreatorsPanel").then((m) => ({ default: m.CreatorsPanel })));
+const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").then((m) => ({ default: m.BillingOrdersPanel })));
+const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
+const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
+const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -419,8 +425,8 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
       </div>
       <form onSubmit={submit} className="relative w-full max-w-sm rounded-[2rem] border border-fg/10 bg-surface p-8 shadow-glass">
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#a78bfa] text-white shadow-lg shadow-accent/30"><Icon name="shield" className="h-6 w-6" /></span>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-        <h1 className="mt-1 font-display text-2xl font-bold">Admin Pusat</h1>
+        <div className="mt-5"><BrandLogo className="h-8" /></div>
+        <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
         <p className="mt-2 text-sm text-fg/50">Panel superadmin — kelola semua tenant, paket harga, dan pembayaran di platform ini.</p>
         <div className="mt-6 space-y-3">
           <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
@@ -716,7 +722,7 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-display text-lg font-semibold">{application.businessName}</p>
-                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""}</p>
+                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""} <span title={application.emailVerifiedAt ? `Terverifikasi ${formatDate(application.emailVerifiedAt)}` : "Pengaju belum mengklik tautan verifikasi di email"} className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${application.emailVerifiedAt ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{application.emailVerifiedAt ? "Email terverifikasi ✓" : "Email belum diverifikasi"}</span></p>
                 <p className="mt-1 text-xs text-fg/35">
                   {[application.businessType, application.city, application.referralSource ? `via ${application.referralSource}` : null].filter(Boolean).join(" · ")}
                 </p>
@@ -724,6 +730,7 @@ function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
                 <p className="mt-1 text-xs text-fg/30">Diajukan {formatDate(application.createdAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <WhatsAppFollowUp phone={application.ownerWhatsapp} context="application" vars={{ owner: application.ownerName, business: application.businessName }} />
                 {application.status !== "pending" ? (
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>
                     {application.status === "converted" ? "Diterima" : "Ditolak"}
@@ -905,6 +912,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                           Simpan
                         </button>
                       )}
+                      <WhatsAppFollowUp phone={tenant.ownerWhatsapp} context={tenant.locked || tenant.expiringSoon ? "expiring" : "tenant"} vars={{ owner: tenant.ownerName, business: tenant.name, days: daysRemaining(tenant.subscriptionEndsAt) }} compact />
                       <button type="button" onClick={() => onSelectTenant(tenant.id)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">Detail</button>
                     </div>
                   </td>
@@ -1324,22 +1332,32 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "settings";
-const SECTIONS: { id: Section; label: string; icon: string }[] = [
-  { id: "overview", label: "Ringkasan", icon: "⌘" },
-  { id: "tenants", label: "Tenant", icon: "◎" },
-  { id: "licenses", label: "Lisensi & Trial", icon: "⚿" },
-  { id: "applications", label: "Aplikasi Tenant", icon: "✦" },
-  { id: "events", label: "Aktivitas & Error", icon: "⌁" },
-  { id: "plans", label: "Plans", icon: "▣" },
-  { id: "website", label: "Konten Website", icon: "❖" },
-  { id: "blog", label: "Blog", icon: "✎" },
-  { id: "marketplace", label: "Marketplace", icon: "❒" },
-  { id: "creators", label: "Kreator", icon: "✧" },
-  { id: "billing", label: "Pembayaran", icon: "₪" },
-  { id: "withdrawals", label: "Penarikan QRIS", icon: "⇩" },
-  { id: "settings", label: "Pengaturan", icon: "⚙" },
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "settings";
+const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
+  { title: "Platform", items: [
+    { id: "overview", label: "Ringkasan", icon: "chart" },
+    { id: "events", label: "Aktivitas & Error", icon: "activity" },
+    { id: "notifications", label: "Notifikasi", icon: "bell" },
+  ] },
+  { title: "Tenant", items: [
+    { id: "tenants", label: "Tenant", icon: "users" },
+    { id: "licenses", label: "Lisensi & Trial", icon: "lock" },
+    { id: "applications", label: "Aplikasi Tenant", icon: "user-plus" },
+  ] },
+  { title: "Keuangan", items: [
+    { id: "billing", label: "Pembayaran", icon: "card" },
+    { id: "withdrawals", label: "Penarikan QRIS", icon: "wallet" },
+    { id: "plans", label: "Plans", icon: "box" },
+  ] },
+  { title: "Konten", items: [
+    { id: "website", label: "Konten Website", icon: "globe" },
+    { id: "blog", label: "Blog", icon: "file" },
+    { id: "marketplace", label: "Marketplace", icon: "image" },
+    { id: "creators", label: "Kreator", icon: "sparkles" },
+  ] },
+  { title: "Sistem", items: [{ id: "settings", label: "Pengaturan", icon: "sliders" }] },
 ];
+const SECTIONS = SECTION_GROUPS.flatMap((g) => g.items);
 
 export default function SuperadminDashboard() {
   useAdminThemeScope();
@@ -1350,6 +1368,8 @@ export default function SuperadminDashboard() {
   const [section, setSection] = useState<Section>("overview");
   const [pendingApplicationCount, setPendingApplicationCount] = useState(0);
   const [openWithdrawalCount, setOpenWithdrawalCount] = useState(0);
+  const [creatorQueueCount, setCreatorQueueCount] = useState(0);
+  const [marketReportCount, setMarketReportCount] = useState(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const tenantsReloadRef = useRef<(() => void) | null>(null);
 
@@ -1378,6 +1398,8 @@ export default function SuperadminDashboard() {
   // a successful login.
   useEffect(() => {
     if (status === "authenticated") {
+      superadminApi.getCreatorQueueSummary().then((x) => setCreatorQueueCount(x?.pending ?? 0)).catch(() => undefined);
+      superadminApi.getMarketReportsSummary().then((x) => setMarketReportCount(x?.open ?? 0)).catch(() => undefined);
       loadPlans();
       loadTenantsForFilter();
       loadPendingApplicationCount();
@@ -1428,48 +1450,74 @@ export default function SuperadminDashboard() {
     setSection("tenants");
   };
 
+  const current = SECTIONS.find((item) => item.id === section);
+  const badgeFor = (id: Section) => (id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
+
   return (
-    <div className="min-h-screen bg-canvas px-6 py-10 text-fg">
+    <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
       <AdminKeyboard />
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+      <aside className="hidden w-[250px] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
+        <div className="mb-5 px-2">
+          <BrandLogo className="h-7" />
+          <h1 className="mt-1.5 font-display text-xl font-bold leading-tight">Admin Pusat</h1>
+        </div>
+        <nav className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2">
+          {SECTION_GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-fg/40">{group.title}</div>
+              <ul className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSection(item.id)}
+                      aria-current={section === item.id ? "page" : undefined}
+                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
+                    >
+                      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {badgeFor(item.id) > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badgeFor(item.id)}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        {email && <p className="mt-3 truncate rounded-2xl bg-fg/[0.05] px-3 py-2.5 text-xs text-fg/55">Masuk sebagai<br /><span className="font-semibold text-fg/80">{email}</span></p>}
+      </aside>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[.25em] text-accent">STUDIODO</p>
-            <h1 className="mt-1 font-display text-3xl font-bold">Admin Pusat</h1>
-            {email && <p className="mt-1 text-sm text-fg/45">Masuk sebagai {email}</p>}
+            <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-accent lg:hidden">Admin Pusat</p>
+            <h2 className="font-display text-2xl font-bold leading-tight">{current?.label}</h2>
           </div>
           <div className="flex items-center gap-2">
             <AdminKeyboardToggle />
             <AdminThemeToggle />
-            <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
+            <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
               <Icon name="logout" className="h-4 w-4" />
               Keluar
             </button>
           </div>
         </header>
 
-        <nav className="flex flex-wrap gap-2 border-b border-fg/10 pb-4">
+        <nav className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 lg:hidden" aria-label="Bagian">
           {SECTIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSection(item.id)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${section === item.id ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}
-            >
-              <span className="opacity-70">{item.icon}</span>
+            <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${section === item.id ? "bg-fg text-canvas" : "bg-surface text-fg/60"}`}>
               {item.label}
-              {item.id === "withdrawals" && openWithdrawalCount > 0 && (
-                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{openWithdrawalCount}</span>
-              )}
-              {item.id === "applications" && pendingApplicationCount > 0 && (
-                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{pendingApplicationCount}</span>
-              )}
+              {badgeFor(item.id) > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{badgeFor(item.id)}</span>}
             </button>
           ))}
         </nav>
 
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+        <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
+        <div className="mx-auto max-w-6xl space-y-6 pb-8">
         {section === "overview" && (
           <div className="space-y-6">
+            <SecurityAlertsPanel />
             <FleetAlertsPanel />
             <PlatformOverviewPanel />
           </div>
@@ -1510,12 +1558,17 @@ export default function SuperadminDashboard() {
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
 
+        {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
+
         {section === "settings" && (
           <div className="grid gap-6">
             <PlatformSettingsPanel />
             <PaymentGatewaysPanel />
           </div>
         )}
+        </div>
+        </Suspense>
+        </main>
       </div>
     </div>
   );

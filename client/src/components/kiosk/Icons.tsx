@@ -60,6 +60,12 @@ const PATHS: Record<string, string> = {
   menu: "M4 7h16 M4 12h16 M4 17h16",
   shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M9 12l2 2 4-4",
   chart: "M4 20V4 M4 20h16 M8 16v-5 M12 16V8 M16 16v-3",
+  bell: "M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7z M10 20a2 2 0 0 0 4 0",
+  card: "M3 6h18v12H3z M3 10h18 M7 15h3",
+  box: "M3 7l9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10",
+  "user-plus": "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M3 21a7 7 0 0 1 14 0 M19 8v6 M16 11h6",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3c3 3 3 15 0 18 M12 3c-3 3-3 15 0 18",
+  file: "M6 3h8l4 4v14H6z M14 3v4h4 M9 12h6 M9 16h6",
 };
 
 export type IconName = keyof typeof PATHS | (string & {});

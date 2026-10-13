@@ -23,6 +23,7 @@ import PrinterSettings from "./PrinterSettings";
 import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
+import AdminNotificationBell from "@/components/AdminNotificationBell";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
@@ -332,18 +333,21 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Foto" value={String(metrics.photos ?? 0)} />
-        <Metric label="Video" value={String(metrics.videos ?? 0)} />
-        <Metric label="GIF" value={String(metrics.gifs ?? 0)} />
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="grid shrink-0 grid-cols-3 gap-3">
+        {[["Foto", metrics.photos], ["Video", metrics.videos], ["GIF", metrics.gifs]].map(([label, value]) => (
+          <div key={String(label)} className="flex items-baseline justify-between gap-3 rounded-2xl border border-fg/10 bg-surface px-5 py-3 shadow-sm">
+            <span className="text-xs font-semibold uppercase tracking-[.14em] text-fg/45">{label}</span>
+            <span className="font-display text-2xl font-semibold">{String(value ?? 0)}</span>
+          </div>
+        ))}
       </div>
 
-      <section className={panel}>
+      <section className={`${panel} shrink-0 !p-4`}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[.16em] text-accent">FILTER</p>
-            <h3 className="mt-2 font-display text-2xl font-semibold">Cari sesi</h3>
+            <h3 className="mt-1 font-display text-xl font-semibold">Cari sesi</h3>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {[{ label: "Hari ini", days: 1 }, { label: "7 hari", days: 7 }, { label: "30 hari", days: 30 }, { label: "90 hari", days: 90 }].map((preset) => (
@@ -377,6 +381,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
 
       {/* One tile per session showing only its finished frame (strip) — the full set of photos/videos/GIFs
           loads only when a tile is opened, so the page never mounts hundreds of heavy media elements at once. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-3xl border border-fg/10 bg-surface p-3 shadow-sm">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {visibleSessions.map((session) => {
           const assets = sessionAssets(session);
@@ -422,6 +427,7 @@ function MediaLibrary({ sessions, metrics, downloadAsset, printAsset, downloadin
           Muat lebih banyak ({filtered.length - visibleCount} sesi lagi)
         </button>
       )}
+      </div>
 
       {openSession && (() => {
         const session = openSession;
@@ -744,13 +750,15 @@ export default function AdminDashboard() {
   };
 
   const currentSection = sections.find((item) => item.id === section)!;
+  // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
+  const fitSection = section === "media" || section === "crm";
   const navButton = (item: (typeof sections)[number]) => (
     <button
       key={item.id}
       type="button"
       onClick={() => setSection(item.id)}
       aria-current={section === item.id ? "page" : undefined}
-      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/60 hover:bg-fg/[0.06] hover:text-fg"}`}
+      className={`group flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.06] hover:text-fg"}`}
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
       {item.label}
@@ -758,8 +766,8 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="flex h-full overflow-hidden bg-[var(--kiosk-background)] text-[var(--kiosk-text)]">
-      <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-fg/10 bg-surface p-4 md:flex">
+    <div className="flex h-full gap-3 overflow-hidden bg-[var(--kiosk-background)] p-0 text-[var(--kiosk-text)] md:p-3 md:gap-4">
+      <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm md:flex">
         <div className="mb-4 px-2 pt-2">
           <BrandLogo className="h-8" />
           <p className="mt-1.5 text-[11px] font-medium text-fg/45">Admin booth</p>
@@ -799,18 +807,19 @@ export default function AdminDashboard() {
           <AppVersionFooter />
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
-        <div className="mx-auto max-w-7xl">
+      <main className="min-w-0 flex-1 overflow-y-auto p-4 md:px-4 md:py-2">
+        <div className={`mx-auto max-w-7xl ${fitSection ? "flex h-full min-h-0 flex-col" : ""}`}>
           <SubscriptionBanner me={me} />
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="mb-5 flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="eyebrow">{currentSection.group}</p>
-              <h2 className="mt-1 font-display text-3xl font-bold tracking-tight md:text-4xl">{currentSection.label}</h2>
+              <h2 className="mt-1 font-display text-2xl font-bold tracking-tight md:text-[32px]">{currentSection.label}</h2>
               <p className="mt-1.5 text-sm text-[var(--kiosk-muted)] md:text-base">{currentSection.hint}</p>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && <span className="hidden text-xs text-fg/40 lg:inline">Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span>}
               <div className="flex items-center gap-2 md:hidden"><AdminKeyboardToggle /><AdminThemeToggle /></div>
+              <AdminNotificationBell />
               <button
                 type="button"
                 onClick={() => loadOverview()}
@@ -830,6 +839,7 @@ export default function AdminDashboard() {
           {initialLoading ? <OverviewSkeleton /> : (
           <AnimatePresence mode="wait">
             <motion.div
+              className={fitSection ? "min-h-0 flex-1" : undefined}
               key={section}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}

@@ -33,10 +33,10 @@ function readTemplate() {
 
 function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className={panel}>
+    <div className={`${panel} !px-4 !py-3`}>
       <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-fg/45">{label}</p>
-      <p className="mt-2 font-display text-3xl font-semibold tracking-tight">{value}</p>
-      {detail && <p className="mt-1 text-xs text-accent">{detail}</p>}
+      <p className="mt-1 font-display text-2xl font-semibold tracking-tight">{value}</p>
+      {detail && <p className="mt-0.5 truncate text-xs text-accent">{detail}</p>}
     </div>
   );
 }
@@ -213,6 +213,7 @@ export default function CrmPanel() {
   const [tag, setTag] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => { const t = window.setTimeout(() => setDebounced(query), 300); return () => window.clearTimeout(t); }, [query]);
 
@@ -235,6 +236,16 @@ export default function CrmPanel() {
   }, [params]);
   useEffect(() => { void load(false, 0); }, [load]);
 
+  // Infinite scroll inside the list panel: fetch the next page when the end marker comes into view.
+  const more = items.length < total;
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !more || loading) return;
+    const io = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) void load(true, items.length); }, { root: el.closest("[data-fit-scroll]"), rootMargin: "0px 0px 240px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [more, loading, items.length, load]);
+
   const exportCsv = async () => {
     setExporting(true);
     try {
@@ -252,8 +263,8 @@ export default function CrmPanel() {
   const chip = (active: boolean) => `min-h-[44px] rounded-full px-4 text-sm font-semibold transition ${active ? "bg-accent text-white shadow-md shadow-accent/25" : "bg-fg/[0.06] text-fg/60 hover:text-fg"}`;
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <Stat label="Pelanggan" value={String(summary?.customers ?? 0)} detail={`${summary?.new30d ?? 0} baru 30 hari terakhir`} />
         <Stat label="Punya WhatsApp" value={String(summary?.withWhatsapp ?? 0)} detail="Bisa dihubungi langsung" />
         <Stat label="Pelanggan setia" value={String(summary?.returning ?? 0)} detail="Datang 2× atau lebih" />
@@ -261,7 +272,8 @@ export default function CrmPanel() {
         <Stat label="Total belanja" value={rupiahShort(summary?.lifetimeSpend ?? 0)} />
       </div>
 
-      <section className={`${panel} space-y-4`}>
+      <section className={`${panel} flex min-h-0 flex-1 flex-col !p-0`}>
+        <div className="flex shrink-0 flex-col gap-3 border-b border-fg/10 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <label className="relative min-w-[240px] flex-1">
             <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fg/35" />
@@ -275,6 +287,8 @@ export default function CrmPanel() {
           {allTags.length > 0 && <span className="mx-1 h-6 w-px bg-fg/15" />}
           {allTags.map((t) => <button key={t} type="button" onClick={() => setTag(tag === t ? "" : t)} className={chip(tag === t)}>#{t}</button>)}
         </div>
+        </div>
+        <div data-fit-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
 
         {error && <p role="alert" className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-500">{error}</p>}
 
@@ -314,9 +328,11 @@ export default function CrmPanel() {
           </ul>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg/50">
+        {more && <div ref={sentinel} className="h-px" aria-hidden="true" />}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-fg/10 px-4 py-3 text-sm text-fg/50">
           <span>{loading ? <span className="inline-flex items-center gap-2"><Spinner /> Memuat…</span> : `Menampilkan ${items.length} dari ${total} pelanggan`}</span>
-          {items.length < total && !loading && <button type="button" onClick={() => void load(true, items.length)} className="min-h-[48px] rounded-xl border border-fg/15 px-6 font-medium text-fg/70 hover:border-accent hover:text-fg">Muat lebih banyak</button>}
+          {items.length < total && !loading && <button type="button" onClick={() => void load(true, items.length)} className="min-h-[44px] rounded-xl border border-fg/15 px-5 font-medium text-fg/70 hover:border-accent hover:text-fg">Muat lebih banyak</button>}
         </div>
       </section>
 

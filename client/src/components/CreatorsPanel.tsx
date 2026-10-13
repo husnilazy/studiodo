@@ -31,7 +31,7 @@ function Row({ item, onChanged }: { item: CreatorSubmission; onChanged: () => vo
     <div className="rounded-2xl border border-fg/10 bg-fg/[0.03] p-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">{item.name} <span className="font-normal text-fg/40">· {item.email}</span></div>
+          <div className="font-semibold">{item.name} <span className="font-normal text-fg/40">· {item.email}</span> <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.emailVerifiedAt ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{item.emailVerifiedAt ? "Email terverifikasi ✓" : "Belum diverifikasi"}</span></div>
           <div className="text-xs text-fg/40">{fmt(item.createdAt)}{item.whatsapp ? ` · WA ${item.whatsapp}` : ""}</div>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[item.status]}`}>{STATUS_LABEL[item.status]}</span>

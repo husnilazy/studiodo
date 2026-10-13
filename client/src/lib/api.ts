@@ -329,6 +329,8 @@ export const api = {
       `/sessions?limit=${params?.limit ?? 100}&offset=${params?.offset ?? 0}`,
     ),
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
+  getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
+  markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
   startQris: (sessionId: string) =>
     request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
@@ -391,3 +393,14 @@ export const api = {
   deletePackage: (id: string) => request<{ ok: boolean; deleted: boolean; softDeleted: boolean; id: string }>(`/packages/${id}`, { method: "DELETE" }),
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
+
+export interface AdminNotification {
+  id: string;
+  kind: string;
+  severity: "info" | "success" | "warning" | "critical" | string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  createdAt: string;
+  read: boolean;
+}
