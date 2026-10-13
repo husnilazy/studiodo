@@ -1,3 +1,4 @@
+import { tracked } from "./netActivity";
 import { clearKioskPairing, getApiBaseUrl, getDeviceId, getKioskKey } from "./apiConfig";
 import { videoExtension } from "@/lib/videoMime";
 import type { LayoutElement, ScreenOrientation } from "./screenBuilder/types";
@@ -80,7 +81,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS);
   try {
-    res = await fetch(`${getApiBaseUrl()}${path}`, {
+    res = await tracked(() => fetch(`${getApiBaseUrl()}${path}`, {
       ...options,
       // Express sends an ETag on JSON responses but no Cache-Control, which left
       // the browser free to reuse a stale cached GET (confirmed live: after
@@ -95,7 +96,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
         ...(kioskKey ? { "x-kiosk-key": kioskKey, "x-device-id": getDeviceId() } : {}),
         ...(options?.headers ?? {}),
       },
-    });
+    }));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError(0, "Server tidak merespon. Periksa koneksi internet atau coba lagi.");

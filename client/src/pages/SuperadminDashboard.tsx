@@ -3,6 +3,7 @@ import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControl
 import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
+import NetProgressBar from "@/components/NetProgressBar";
 import SecurityAlertsPanel from "@/components/SecurityAlertsPanel";
 import { useAdminThemeScope } from "@/lib/adminTheme";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
@@ -830,9 +831,9 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
           <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
         </div>
       </div>
-      <div className="mt-5 overflow-x-auto">
+      <div className="mt-5 max-h-[60vh] overflow-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/45">
+          <thead className="sticky top-0 z-10 bg-surface text-fg/45">
             <tr>
               <th className="p-3">Tenant</th>
               <th className="p-3">Admin</th>
@@ -1457,6 +1458,7 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
+      <NetProgressBar />
       <AdminKeyboard />
       <aside className="hidden w-[250px] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
         <div className="mb-5 px-2">

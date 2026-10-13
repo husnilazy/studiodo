@@ -24,6 +24,7 @@ import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
+import NetProgressBar from "@/components/NetProgressBar";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
@@ -767,6 +768,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex h-full gap-3 overflow-hidden bg-[var(--kiosk-background)] p-0 text-[var(--kiosk-text)] md:p-3 md:gap-4">
+      <NetProgressBar />
       <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm md:flex">
         <div className="mb-4 px-2 pt-2">
           <BrandLogo className="h-8" />

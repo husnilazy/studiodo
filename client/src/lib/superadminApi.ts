@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "./apiConfig";
+import { tracked } from "./netActivity";
 
 // Deliberately separate from client/src/lib/api.ts's adminToken — a tenant-admin
 // session and a superadmin session must never share a token variable, even if
@@ -100,7 +101,7 @@ export class SuperadminApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
-  const res = await fetch(`${getApiBaseUrl()}/superadmin${path}`, {
+  const res = await tracked(() => fetch(`${getApiBaseUrl()}/superadmin${path}`, {
     ...options,
     // See client/src/lib/api.ts's request() for why — same Express ETag-without-
     // Cache-Control gap, same fix.
@@ -110,7 +111,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
       ...(superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {}),
       ...(options?.headers ?? {}),
     },
-  });
+  }));
 
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     if (!res.ok) throw new SuperadminApiError(res.status, `API error ${res.status}`);
