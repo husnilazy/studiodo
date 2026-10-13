@@ -104,13 +104,13 @@ if (-not $healthy) { Fail "Server tidak menjawab /api/health dalam 30 detik. Cek
 Ok "server menjawab"
 
 # the routes added in this release must exist (404 JSON from our API vs. an old build)
-foreach ($path in @("/api/public/marketplace", "/api/public/email-unsubscribe?token=x")) {
+foreach ($path in @("/api/public/marketplace", "/api/public/email-unsubscribe?token=x", "/api/pos/catalog")) {
   try {
     $r = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:$port$path" -TimeoutSec 8 -ErrorAction Stop
     Ok "$path -> $($r.StatusCode)"
   } catch {
     $code = $_.Exception.Response.StatusCode.value__
-    if ($code -eq 400) { Ok "$path -> 400 (rute baru aktif)" } else { Warn "$path -> $code (periksa apakah build terbaru yang berjalan)" }
+    if ($code -eq 400 -or ($code -eq 401 -and $path -like "/api/pos/*")) { Ok "$path -> $code (rute baru aktif)" } else { Warn "$path -> $code (periksa apakah build terbaru yang berjalan)" }
   }
 }
 
