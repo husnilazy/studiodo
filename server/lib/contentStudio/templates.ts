@@ -185,15 +185,16 @@ export type RenderCtx = { index: number; total: number; startSec?: number; scene
 
 function slideHtml(s: Slide, deck: Deck, ctx: RenderCtx): string {
   const tone: Tone = s.tone ?? deck.tone;
-  const logo = wordmark(tone === "dark" || tone === "indigo" ? "white" : "ink");
+  const logo = wordmark(tone === "dark" || tone === "indigo" || s.bgImage ? "white" : "ink");
   const last = ctx.index === ctx.total - 1;
   const pager = ctx.reel ? "" : `<div class="pager">${String(ctx.index + 1).padStart(2, "0")} / ${String(ctx.total).padStart(2, "0")}</div>`;
   const swipe = ctx.reel || last ? "" : `<div class="swipe">Geser ${icon("arrow", 24, 3)}</div>`;
   const sceneAnim = ctx.reel
     ? `animation:sceneIn .5s ease both${last ? "" : ",sceneOut .5s ease forwards"};animation-delay:${ctx.startSec === 0 ? "0s" : `${(ctx.startSec ?? 0) - 0.25}s`}${last ? "" : `,${(ctx.sceneEnd ?? 0) - 0.3}s`};`
     : "";
-  return `<section class="slide t-${tone}" style="--s:${ctx.startSec ?? 0}s;${sceneAnim}">
-    <div class="mesh"><i></i><i></i><i></i></div>
+  const bg = s.bgImage ? `<div class="bgimg" style="background-image:url('${esc(s.bgImage)}')"></div><div class="scrim"></div>` : "";
+  return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s:${ctx.startSec ?? 0}s;${sceneAnim}">
+    <div class="mesh"><i></i><i></i><i></i></div>${bg}
     <div class="hd"><img src="${logo}" alt="STUDIODO">${pager}</div>
     <div class="main k-${s.kind}">${mainFor(s, deck, ctx.reel)}</div>
     <div class="ft"><span class="handle">@${esc(deck.handle)}</span>${swipe}</div>

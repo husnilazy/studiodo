@@ -85,7 +85,12 @@ export async function deleteAsset(name: string): Promise<void> {
 /** Swaps "asset:<file>" references for inline data URLs so the page needs no network or auth. */
 export async function inlineAssets(deck: Deck): Promise<Deck> {
   const slides = await Promise.all(
-    deck.slides.map(async (s) => {
+    deck.slides.map(async (s0) => {
+      let s = s0;
+      if (s.bgImage?.startsWith("asset:")) {
+        const a = await readAsset(s.bgImage.slice(6));
+        s = { ...s, bgImage: a ? `data:${a.mime};base64,${a.buf.toString("base64")}` : undefined };
+      }
       if (!s.images?.length) return s;
       const images = await Promise.all(
         s.images.map(async (ref) => {

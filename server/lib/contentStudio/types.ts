@@ -17,6 +17,7 @@ export type Slide = {
   labelBefore?: string; // compare column headings (default: Tanpa sistem / Dengan STUDIODO)
   labelAfter?: string;
   stat?: { value: number; suffix?: string; prefix?: string; label: string };
+  bgImage?: string; // full-bleed photo behind the slide (asset:<file>)
   images?: string[]; // uploaded asset names (asset:<file>) used by gallery/strip mockups
   seconds?: number; // reel scene length
 };

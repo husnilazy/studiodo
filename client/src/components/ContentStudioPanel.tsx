@@ -35,6 +35,9 @@ export function ContentStudioPanel() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const bgRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const load = useCallback(async () => {
     const [d, i, e] = await Promise.all([contentStudioApi.decks(), contentStudioApi.ideas(), contentStudioApi.status()]);
@@ -106,12 +109,28 @@ export function ContentStudioPanel() {
     setDirty(true); setSel(0); setTab("decks"); setJob(null); setMessage(null);
   };
 
-  const upload = async (file: File) => {
+  const upload = async (file: File, target: "images" | "bg" = "images") => {
     const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(file); });
     try {
       const { name } = (await contentStudioApi.uploadAsset(file.name, dataUrl))!;
-      editSlide((s) => { s.images = [...(s.images ?? []), `asset:${name}`]; });
+      editSlide((s) => { if (target === "bg") s.bgImage = `asset:${name}`; else s.images = [...(s.images ?? []), `asset:${name}`]; });
     } catch (e) { setMessage({ ok: false, text: e instanceof Error ? e.message : "Gagal unggah" }); }
+  };
+
+  // Decks can be pasted in as JSON (e.g. written by Claude in chat): no coding, no rebuild. Always a new, unsaved deck.
+  const importDeck = () => {
+    try {
+      const raw = JSON.parse(importText);
+      const d = raw?.deck ?? raw;
+      if (!d || !Array.isArray(d.slides) || !d.slides.length) throw new Error('JSON harus berisi deck dengan daftar "slides"');
+      setDraft({
+        id: newId(), title: String(d.title ?? "Deck impor"), format: d.format === "reel" ? "reel" : "carousel",
+        tone: (["light", "dark", "indigo", "mint"].includes(d.tone) ? d.tone : "light") as CsTone, handle: String(d.handle ?? "studiodo.id").replace(/^@/, ""),
+        caption: String(d.caption ?? ""), hashtags: Array.isArray(d.hashtags) ? d.hashtags.map(String) : [], slides: d.slides,
+      });
+      setDirty(true); setSel(0); setJob(null); setImportOpen(false); setImportText(""); setTab("decks");
+      setMessage({ ok: true, text: "Deck dimuat. Cek preview, lalu klik Simpan." });
+    } catch (e) { setMessage({ ok: false, text: e instanceof Error ? e.message : "JSON tidak valid" }); }
   };
 
   const slide = draft?.slides[sel];
@@ -151,6 +170,13 @@ export function ContentStudioPanel() {
                 <button onClick={() => addDeck("carousel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Carousel</button>
                 <button onClick={() => addDeck("reel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Reel</button>
               </div>
+              <button onClick={() => setImportOpen((v) => !v)} className="rounded-full border border-dashed border-fg/30 py-2 text-xs font-semibold hover:bg-fg/10">{importOpen ? "Tutup impor" : "Impor deck (JSON)"}</button>
+              {importOpen && (
+                <div className="grid gap-2">
+                  <textarea rows={8} className={inputClass} placeholder="Tempel JSON deck di sini…" value={importText} onChange={(e) => setImportText(e.target.value)} />
+                  <button disabled={!importText.trim()} onClick={importDeck} className="rounded-full bg-fg py-2 text-xs font-bold text-canvas disabled:opacity-40">Muat deck</button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid max-h-[70vh] gap-3 overflow-auto pr-1">
@@ -230,6 +256,7 @@ export function ContentStudioPanel() {
                   <button disabled={busy || !dirty} onClick={save} className="flex-1 rounded-full bg-fg py-2 text-xs font-bold text-canvas disabled:opacity-40">{busy ? "Menyimpan…" : dirty ? "Simpan perubahan" : "Tersimpan"}</button>
                   {(draft.builtin ? draft.updatedAt : decks.some((d) => d.id === draft.id)) && <button onClick={reset} className="rounded-full border border-fg/20 px-4 py-2 text-xs font-semibold hover:bg-fg/10">{draft.builtin ? "Reset" : "Hapus"}</button>}
                 </div>
+                <button onClick={() => copy(JSON.stringify({ ...draft, builtin: undefined, updatedAt: undefined }, null, 2), "JSON deck")} className="rounded-full border border-fg/20 py-1.5 text-xs font-semibold hover:bg-fg/10">Salin sebagai JSON</button>
                 {message && <p className={`text-xs ${message.ok ? "text-emerald-600" : "text-red-500"}`}>{message.text}</p>}
               </div>
 
@@ -268,6 +295,14 @@ export function ContentStudioPanel() {
                   </div>
                 )}
                 {draft.format === "reel" && <Field label="Durasi scene (detik)"><input type="number" step="0.2" min="1.8" className={inputClass} value={slide.seconds ?? 3.4} onChange={(e) => editSlide((s) => { s.seconds = Number(e.target.value); })} /></Field>}
+                <div>
+                  <p className="text-xs font-semibold text-fg/60">Foto latar penuh {slide.bgImage ? "(terpasang)" : "(opsional)"}</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button onClick={() => bgRef.current?.click()} className="rounded-full border border-fg/20 px-3 py-1.5 text-xs font-semibold hover:bg-fg/10">{slide.bgImage ? "Ganti foto" : "+ Unggah foto latar"}</button>
+                    {slide.bgImage && <button onClick={() => editSlide((s) => { s.bgImage = undefined; })} className="rounded-full px-3 py-1.5 text-xs text-red-500">Hapus</button>}
+                    <input ref={bgRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f, "bg"); e.target.value = ""; }} />
+                  </div>
+                </div>
                 {["gallery", "booth", "strip"].includes(slide.mockup ?? "") && (
                   <div>
                     <p className="text-xs font-semibold text-fg/60">Foto asli untuk mockup ({slide.images?.length ?? 0})</p>

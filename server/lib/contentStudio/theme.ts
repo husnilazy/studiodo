@@ -175,6 +175,12 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .bad li span{background:rgba(255,107,107,.18);color:#e5484d}.bad li span.neu{background:var(--soft);color:var(--muted)}.good li span{background:var(--pop);color:#fff}
 .main.k-cta{justify-content:center;gap:40px;padding-top:0}.ctawrap{display:flex;flex-direction:column;align-items:flex-start;gap:22px;margin-top:20px}.ctaurl{font-family:"Sora";font-weight:600;font-size:30px;color:var(--muted)}
 
+/* ---- photo background: dark scrim, light text ---- */
+.bgimg{position:absolute;inset:0;background-size:cover;background-position:center;z-index:0}
+.scrim{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(8,10,22,.78) 0%,rgba(8,10,22,.5) 42%,rgba(8,10,22,.85) 100%)}
+.has-bg{--fg:#fff;--muted:rgba(255,255,255,.84);--accent:#c9ccff;--accent2:#fff;--card:rgba(255,255,255,.16);--cb:rgba(255,255,255,.32);--ink:#fff;--onink:#0b1020;--pop:#5df2b0}
+.has-bg .mesh{display:none}
+.has-bg .win{background:#fff;--fg:#0b1020;--muted:#5b6478;--soft:rgba(11,16,32,.06);--accent:#4f4fe8;--accent2:#9aa6ff}
 /* ---- reel (9:16): bigger type, content centred, mockups scaled up by the fit script ---- */
 .reel .slide{padding:150px 84px 170px}
 .reel h1{font-size:104px}.reel h1.xl{font-size:124px}.reel h1.m{font-size:96px}

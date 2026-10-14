@@ -565,7 +565,7 @@ export type CsTone = "light" | "dark" | "indigo" | "mint";
 export type CsSlide = {
   kind: CsSlideKind; tone?: CsTone; eyebrow?: string; title: string; body?: string; mockup?: CsMockup; note?: string;
   items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
-  images?: string[]; seconds?: number;
+  images?: string[]; bgImage?: string; seconds?: number;
 };
 export type CsDeck = { id: string; title: string; format: "carousel" | "reel"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
