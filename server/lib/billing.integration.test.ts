@@ -225,5 +225,41 @@ describe.skipIf(!PGlite)("settleOrder (per-booth licences, real SQL)", () => {
       expect((await auth(k.rawKey, "device-PC9-zzzz")).res.body).toMatchObject({ code: "kiosk_device_mismatch" });
       expect((await auth(k.rawKey, "")).res.body).toMatchObject({ code: "device_required" }); // omitting the header is no longer a pass
     });
+
+    it("upload routes: apps up to 0.1.19 sent the key alone; that keeps working for ACTIVATED booths only, and never with a wrong device", async () => {
+      const lic = await import("./license.js");
+      const { requireKioskAuthUpload, clearKioskAuthCache } = await import("../middleware/kioskAuth.js");
+      const upload = async (rawKey: string, headers: Record<string, string> = {}) => {
+        clearKioskAuthCache();
+        const req = { headers: { "x-kiosk-key": rawKey, ...headers } } as never;
+        const res = fakeRes();
+        let passed = false;
+        await requireKioskAuthUpload(req, res as never, () => { passed = true; });
+        return { passed, res };
+      };
+      const k = await lic.issueKioskKey(TENANT, { label: "Upload compat", kind: "paid", days: 30 });
+
+      expect((await upload(k.rawKey)).passed).toBe(false); // never activated: a bare key is still useless
+
+      await db.update(schema.kioskKeys).set({ boundDeviceId: "device-UP-1111", activatedAt: new Date() }).where(eq(schema.kioskKeys.id, k.id));
+      expect((await upload(k.rawKey)).passed).toBe(true); // old app: key only
+      expect((await upload(k.rawKey, { "x-device-id": "device-UP-1111" })).passed).toBe(true); // device id alone is fine while no secret exists
+      const wrong = await upload(k.rawKey, { "x-device-id": "device-OTHER-99" });
+      expect(wrong.passed).toBe(false);
+      expect(wrong.res.body).toMatchObject({ code: "kiosk_device_mismatch" }); // a stated identity is always checked
+
+      // after an upgrade (secret issued) the fixed app sends it; a request carrying a WRONG secret is refused, not waved through
+      const { hashDeviceToken } = await import("./deviceLock.js");
+      await db.update(schema.kioskKeys).set({ deviceTokenHash: hashDeviceToken("good-secret") }).where(eq(schema.kioskKeys.id, k.id));
+      expect((await upload(k.rawKey, { "x-device-id": "device-UP-1111", "x-device-token": "good-secret" })).passed).toBe(true);
+      expect((await upload(k.rawKey, { "x-device-id": "device-UP-1111", "x-device-token": "bad" })).passed).toBe(false);
+      expect((await upload(k.rawKey)).passed).toBe(true); // 0.1.19 and older still send no proof on uploads
+
+      process.env.KIOSK_UPLOAD_COMPAT = "off"; // the switch for once the fleet is on 0.1.20+
+      try { expect((await upload(k.rawKey)).passed).toBe(false); } finally { delete process.env.KIOSK_UPLOAD_COMPAT; }
+
+      // the strict middleware is untouched: every other route still demands full proof
+      expect((await auth(k.rawKey, "")).res.body).toMatchObject({ code: "device_required" });
+    });
   });
 });

@@ -75,6 +75,18 @@ export class ApiError extends Error {
 // every request a definite end.
 const DEFAULT_TIMEOUT_MS = 25000;
 
+/**
+ * The credentials every kiosk request must carry: the booth key, this computer's id, and its device secret. Uploads used to build
+ * their own headers with the key alone, which the stricter server (device binding, 0.1.19) no longer accepts, so ALL kiosk
+ * requests go through this one function.
+ */
+export function kioskAuthHeaders(): Record<string, string> {
+  const key = getKioskKey();
+  if (!key) return {};
+  const token = getDeviceToken();
+  return { "x-kiosk-key": key, "x-device-id": getDeviceId(), ...(token ? { "x-device-token": token } : {}) };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
   const kioskKey = getKioskKey();
   let res: Response;
@@ -93,7 +105,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
       headers: {
         "Content-Type": "application/json",
         ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-        ...(kioskKey ? { "x-kiosk-key": kioskKey, "x-device-id": getDeviceId(), ...(getDeviceToken() ? { "x-device-token": getDeviceToken()! } : {}) } : {}),
+        ...kioskAuthHeaders(),
         ...(options?.headers ?? {}),
       },
     }));
@@ -284,7 +296,7 @@ export const api = {
     form.append("photo", blob, `slot-${slotIndex}.jpg`);
     form.append("slotIndex", String(slotIndex));
     const kioskKey = getKioskKey();
-    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/photo`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
+    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/photo`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) {
       const detail = await res.text();
       throw new Error(`Upload gagal (${res.status})${detail ? `: ${detail}` : ""}`);
@@ -307,7 +319,7 @@ export const api = {
     form.append("media", blob, `${kind}-${Date.now()}.${kind === "gif" ? "gif" : videoExtension(blob.type)}`);
     form.append("kind", kind);
     const kioskKey = getKioskKey();
-    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
+    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Media upload gagal: ${res.status}`);
     return res.json();
   },
@@ -319,7 +331,7 @@ export const api = {
     form.append("slotIndex", String(slotIndex));
     form.append("kind", kind);
     const kioskKey = getKioskKey();
-    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/slot-media`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
+    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/slot-media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Slot media upload gagal: ${res.status}`);
     return res.json();
   },
@@ -327,7 +339,7 @@ export const api = {
     const form = new FormData();
     form.append("strip", blob, `strip-${Date.now()}.jpg`);
     const kioskKey = getKioskKey();
-    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/strip`, { method: "POST", body: form, headers: kioskKey ? { "x-kiosk-key": kioskKey } : undefined });
+    const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/strip`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Upload strip gagal: ${res.status}`);
     return res.json();
   },

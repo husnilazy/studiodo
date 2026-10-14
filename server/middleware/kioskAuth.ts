@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys } from "../db/schema.js";
 import { authenticateKiosk, clearKioskAuthCache } from "../lib/kioskAccess.js";
+import { logEvent } from "../lib/platformEvents.js";
 
 export { clearKioskAuthCache };
 
@@ -28,6 +29,29 @@ export async function requireKioskAuth(req: Request, res: Response, next: NextFu
   if (now - (lastUsedWrittenAt.get(row.id) ?? 0) >= LAST_USED_WRITE_INTERVAL_MS) {
     lastUsedWrittenAt.set(row.id, now);
     db.update(kioskKeys).set({ lastUsedAt: new Date() }).where(eq(kioskKeys.id, row.id)).catch(() => undefined);
+  }
+  next();
+}
+
+const compatLogged = new Map<string, number>();
+const COMPAT_LOG_EVERY_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * requireKioskAuth for the four upload routes (photo, media, slot-media, strip) only — see AuthOptions.allowMissingDeviceProof.
+ * Booths that still send no device proof are logged (at most once per 6 hours each) so the fleet's progress is visible.
+ */
+export async function requireKioskAuthUpload(req: Request, res: Response, next: NextFunction) {
+  const result = await authenticateKiosk(req, { allowMissingDeviceProof: true });
+  if (!result.ok) return res.status(result.status).json({ error: result.error, code: result.code });
+  const { row } = result;
+  req.tenantId = row.tenantId;
+  req.kioskKeyId = row.id;
+  if (result.compat) {
+    const last = compatLogged.get(row.id) ?? 0;
+    if (Date.now() - last > COMPAT_LOG_EVERY_MS) {
+      compatLogged.set(row.id, Date.now());
+      logEvent({ tenantId: row.tenantId, level: "warning", category: "kiosk", action: "upload.without_device_proof", message: "Booth mengunggah tanpa bukti perangkat (aplikasi kiosk lama). Minta update ke versi terbaru.", actorType: "kiosk", metadata: { keyId: row.id } });
+    }
   }
   next();
 }

@@ -27,7 +27,20 @@ export function clearKioskAuthCache() {
 
 export const hashKey = (rawKey: string) => crypto.createHash("sha256").update(rawKey).digest("hex");
 
-export async function authenticateKiosk(req: Request): Promise<KioskAccessResult> {
+export interface AuthOptions {
+  /**
+   * Transitional allowance for the four upload routes. Every app version up to 0.1.19 sent those requests with the key ONLY
+   * (no device id, no secret): the old server let that through, the stricter one did not, and photo uploads silently failed in
+   * the field. While the fleet updates, a key that IS activated (bound to a computer) may upload without device proof — but
+   * if the request does carry a device id it is checked in full, and an unactivated key is still refused. Switch it off with
+   * KIOSK_UPLOAD_COMPAT=off once every booth reports 0.1.20 or newer.
+   */
+  allowMissingDeviceProof?: boolean;
+}
+
+const compatEnabled = () => String(process.env.KIOSK_UPLOAD_COMPAT ?? "on").toLowerCase() !== "off";
+
+export async function authenticateKiosk(req: Request, opts: AuthOptions = {}): Promise<KioskAccessResult & { compat?: boolean }> {
   const ip = clientIp(req);
   if (throttle.blocked(ip)) return { ok: false, status: 429, code: "too_many_attempts", error: "Terlalu banyak percobaan gagal. Coba lagi sebentar lagi." };
   const reject = <T extends KioskAccessResult>(r: T): T => { throttle.fail(ip); return r; };
@@ -52,6 +65,9 @@ export async function authenticateKiosk(req: Request): Promise<KioskAccessResult
 
   const deviceId = String(req.headers["x-device-id"] ?? "").slice(0, 128) || null;
   const deviceToken = String(req.headers["x-device-token"] ?? "").slice(0, 200) || null;
+  if (opts.allowMissingDeviceProof && compatEnabled() && !deviceId && !deviceToken && row.boundDeviceId) {
+    return { ok: true, row, compat: true };
+  }
   const verdict = checkDeviceAccess(row, deviceId, deviceToken);
   if (!verdict.ok) return reject({ ok: false, status: verdict.status, code: verdict.code, error: verdict.error });
   return { ok: true, row };

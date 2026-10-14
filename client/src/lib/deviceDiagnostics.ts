@@ -1,3 +1,4 @@
+import { kioskAuthHeaders } from "./api";
 import { checkTetherBridge } from "./camera";
 import { getApiBaseUrl, getKioskKey } from "./apiConfig";
 import type { CameraMode } from "./boothConfigStore";
@@ -12,7 +13,7 @@ export interface DiagnosticResult {
 export async function checkKioskToken(): Promise<DiagnosticResult> {
   if (!getKioskKey()) return { status: "fail", detail: "Kiosk belum di-pairing." };
   try {
-    const res = await fetch(`${getApiBaseUrl()}/packages`, { headers: { "x-kiosk-key": getKioskKey()! } });
+    const res = await fetch(`${getApiBaseUrl()}/packages`, { headers: kioskAuthHeaders() });
     if (res.status === 401) return { status: "fail", detail: "Kiosk key ditolak server — pairing ulang diperlukan." };
     if (!res.ok) return { status: "warn", detail: `Server merespons status ${res.status}.` };
     return { status: "ok", detail: "Kiosk key valid dan diterima server." };
