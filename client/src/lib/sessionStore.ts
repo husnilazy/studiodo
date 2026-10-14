@@ -145,7 +145,14 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
   setPhotoStickers: (photoStickers) => set({ photoStickers }),
   setTemplatePhotoMap: (templatePhotoMap) => set({ templatePhotoMap }),
   setSelectedExtras: (selectedExtras) => set({ selectedExtras }),
-  setMediaUrl: (mediaUrl) => set((state) => ({ mediaUrl, mediaUrls: [...state.mediaUrls, mediaUrl] })),
+  // One GIF and one video at most (the newest wins). Building the result more than once, or swapping the local copy for the
+  // uploaded one, used to stack duplicates, which showed up as a growing row of GIF/Video tabs.
+  setMediaUrl: (mediaUrl) =>
+    set((state) => {
+      const isGif = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif") || /#clip\.gif$/.test(url);
+      const kind = isGif(mediaUrl);
+      return { mediaUrl, mediaUrls: [...state.mediaUrls.filter((url) => url !== mediaUrl && isGif(url) !== kind), mediaUrl] };
+    }),
   setStopMotionUrl: (stopMotionUrl) => set({ stopMotionUrl }),
   setSlotClipUrl: (slot, url) =>
     set((state) => {

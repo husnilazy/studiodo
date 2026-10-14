@@ -573,19 +573,19 @@ export default function Hasil() {
       <main className={`mx-auto grid w-full max-w-[1500px] gap-5 ${wide ? "min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(430px,36%)]" : "grid-cols-1"}`}>
         {/* Result card: only the finished frame, plus the GIF/video when the package has one (tabs). */}
         <section className="glass-panel flex min-h-0 min-w-0 flex-col rounded-[2rem] p-5">
-          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
               <h3 className="font-display text-lg font-semibold">Hasil Fotomu</h3>
             </div>
             {previewCount > 1 && (
-              <div role="tablist" className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
+              <div role="tablist" className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-full border border-fg/10 bg-fg/[0.04] p-1">
                 {Array.from({ length: previewCount }).map((_, index) => {
                   const isStopMotionTab = index === stopMotionIndex;
                   const url = !isStopMotionTab && index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
                   const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
                   return (
-                    <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
+                    <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
                       {isStopMotionTab && stopMotionState === "making" && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
                       {!isStopMotionTab && !url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
                       {label}
