@@ -51,7 +51,7 @@ export default function PilihOrientasi() {
   return (
     <ScreenLayoutBoundary screenKey="orientation">
       <KioskPage step="orientation">
-        <ScreenTitle title={config.orientationHeadline || "Tampilan Kamera"} subtitle="Pilih cara layar menampilkan dirimu saat berfoto." hint="Ketuk salah satu pilihan di bawah" />
+        <ScreenTitle title={config.orientationHeadline || "Tampilan Kamera"} subtitle="Cara layar menampilkan kamera saat berfoto." />
 
         <div className="flex flex-wrap justify-center gap-6">
           {OPTIONS.map((opt, i) => (

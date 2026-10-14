@@ -232,9 +232,9 @@ const SCREEN_TEXTS: { key: keyof BoothConfig; label: string; fallback: string }[
   { key: "orientationHeadline", label: "Tampilan kamera", fallback: "Tampilan Kamera" },
   { key: "paymentHeadline", label: "Pembayaran", fallback: "Pembayaran" },
   { key: "frameHeadline", label: "Pilih frame", fallback: "Pilih Frame" },
-  { key: "captureHeadline", label: "Sesi foto", fallback: "Siap untuk momenmu?" },
-  { key: "previewHeadline", label: "Edit foto", fallback: "Percantik fotomu" },
-  { key: "resultHeadline", label: "Hasil", fallback: "Hasil fotomu sudah siap." },
+  { key: "captureHeadline", label: "Sesi foto", fallback: "Sesi Foto" },
+  { key: "previewHeadline", label: "Edit foto", fallback: "Edit Foto" },
+  { key: "resultHeadline", label: "Hasil", fallback: "Hasil Foto" },
 ];
 
 export default function AdminPlaceholder() {
@@ -374,6 +374,17 @@ export default function AdminPlaceholder() {
                   <div className="grid gap-5 md:grid-cols-2">
                     <MediaPicker label="File logo" hint="PNG / SVG / JPG. Otomatis dikecilkan agar ringan." value={config.logoUrl} accept="image/*" alpha maxDimension={1200} onPick={(dataUrl) => set("logoUrl", dataUrl)} onClear={() => set("logoUrl", null)} />
                     <Slider label="Ukuran logo" value={config.logoScale} min={60} max={180} onChange={(value) => set("logoScale", value)} hint="Berlaku di layar awal." />
+                  </div>
+                </Card>
+                <Card title="Sosial media & kontak" description="Tampil di halaman hasil yang dibuka pelanggan setelah scan QR. Isi link atau cukup username; kosongkan yang tidak dipakai.">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Instagram"><input className={inputClass} placeholder="@studiodo atau https://instagram.com/studiodo" value={config.socialInstagram} onChange={(event) => set("socialInstagram", event.target.value)} /></Field>
+                    <Field label="TikTok"><input className={inputClass} placeholder="@studiodo" value={config.socialTiktok} onChange={(event) => set("socialTiktok", event.target.value)} /></Field>
+                    <Field label="Facebook"><input className={inputClass} placeholder="studiodo" value={config.socialFacebook} onChange={(event) => set("socialFacebook", event.target.value)} /></Field>
+                    <Field label="YouTube"><input className={inputClass} placeholder="@studiodo" value={config.socialYoutube} onChange={(event) => set("socialYoutube", event.target.value)} /></Field>
+                    <Field label="WhatsApp"><input className={inputClass} placeholder="0812xxxxxxx" value={config.contactWhatsapp} onChange={(event) => set("contactWhatsapp", event.target.value)} /></Field>
+                    <Field label="Website"><input className={inputClass} placeholder="studiodo.id" value={config.websiteUrl} onChange={(event) => set("websiteUrl", event.target.value)} /></Field>
+                    <Field label="Hashtag" hint="Ajakan untuk pelanggan saat membagikan hasil, mis. #studiodo."><input className={inputClass} placeholder="#studiodo" value={config.hashtag} onChange={(event) => set("hashtag", event.target.value)} /></Field>
                   </div>
                 </Card>
                 <Card title="Nama & tagline" description="Dipakai di halaman galeri hasil foto yang dibuka customer lewat QR, dan sebagai teks bawaan bila judul layar awal kosong.">

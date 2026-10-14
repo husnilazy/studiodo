@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-const QUERY = "(orientation: landscape) and (min-width: 1280px)";
+const QUERY = "(orientation: landscape) and (min-width: 900px)";
 
-/** True on a wide landscape screen (a 1920x1080 kiosk) — screens use it to switch to a side-by-side layout. */
+/** True on a wide landscape screen (a 1920x1080 kiosk, or a small 960x540 one) — screens use it to switch to a side-by-side layout. */
 export function useWideLandscape() {
   const [wide, setWide] = useState(() => window.matchMedia(QUERY).matches);
   useEffect(() => {

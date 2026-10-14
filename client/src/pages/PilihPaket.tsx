@@ -20,7 +20,7 @@ function formatIDR(v: string | number) {
 
 function Feature({ icon, label }: { icon: string; label: string }) {
   return (
-    <li className="flex items-center gap-3 text-sm md:text-base">
+    <li className="flex items-center gap-3 text-sm md:text-base landscape:gap-2 landscape:text-sm">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
         <Icon name={icon} className="h-4 w-4" />
       </span>
@@ -46,29 +46,27 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
       className="glass-panel kinetic-card-hover relative flex h-full flex-col overflow-hidden rounded-[2rem] text-left"
     >
       {pkg.thumbnailUrl && (
-        <div className="h-36 shrink-0 overflow-hidden">
+        <div className="h-36 shrink-0 overflow-hidden landscape:h-20">
           <img src={pkg.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         </div>
       )}
-      <div className="flex flex-1 flex-col p-7 md:p-8">
-        <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{pkg.name}</h2>
-        {pkg.description && <p className="mt-1.5 text-sm text-muted md:text-base">{pkg.description}</p>}
+      <div className="flex flex-1 flex-col p-7 md:p-8 landscape:p-4 landscape:md:p-5">
+        <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl landscape:text-xl landscape:md:text-2xl">{pkg.name}</h2>
+        {pkg.description && <p className="mt-1.5 text-sm text-muted md:text-base landscape:mt-0.5 landscape:text-sm">{pkg.description}</p>}
 
-        <p className="mt-5 font-display text-3xl font-semibold tracking-tight text-accent md:text-4xl">{isFree ? "Gratis" : formatIDR(pkg.price)}</p>
-        <p className="mt-1 text-xs text-muted">sekali bayar, semua sudah termasuk</p>
+        <p className="mt-5 font-display text-3xl font-semibold tracking-tight text-accent md:text-4xl landscape:mt-2 landscape:text-2xl landscape:md:text-3xl">{isFree ? "Gratis" : formatIDR(pkg.price)}</p>
 
-        <ul className="mt-6 flex flex-col gap-3">
+        <ul className="mt-6 flex flex-col gap-3 landscape:mt-2 landscape:flex-row landscape:flex-wrap landscape:gap-x-4 landscape:gap-y-1">
           <Feature icon="camera" label={`${pkg.photoCount} foto`} />
           {pkg.hasGif && <Feature icon="gif" label="GIF animasi" />}
           {pkg.hasVideo && <Feature icon="video" label="Video singkat" />}
           {pkg.hasStopMotion && <Feature icon="video" label="Video stop motion" />}
-          <Feature icon="smile" label="Filter & stiker seru" />
           <Feature icon="download" label="Unduh lewat QR code" />
         </ul>
 
         {/* Extras are shown up front (they used to hide behind a collapsed row that customers never opened) */}
         {extras.length > 0 && (
-          <div className="mt-6 rounded-2xl border border-fg/10 bg-fg/5 p-4">
+          <div className="mt-6 rounded-2xl border border-fg/10 bg-fg/5 p-4 landscape:mt-3 landscape:p-3">
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Tambahan (opsional)</p>
             <div className="flex flex-col gap-2">
               {extras.map((extra) => {
@@ -95,7 +93,7 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
           </div>
         )}
 
-        <div className="mt-auto pt-7"><button type="button" onClick={() => onChoose(pkg, selectedExtras)} className="k-btn k-btn-accent k-btn-lg w-full">
+        <div className="mt-auto pt-7 landscape:pt-3"><button type="button" onClick={() => onChoose(pkg, selectedExtras)} className="k-btn k-btn-accent k-btn-lg w-full landscape:!min-h-[3rem] landscape:!py-2">
           Pilih paket ini
           {extrasTotal > 0 && <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm">{formatIDR(total)}</span>}
           <Icon name="arrow-right" className="h-5 w-5" />
@@ -229,7 +227,7 @@ export default function PilihPaket() {
   return (
     <ScreenLayoutBoundary screenKey="packages">
       <KioskPage step="packages">
-        <ScreenTitle title={boothConfig.packageHeadline || "Pilih Paket"} subtitle="Mau berfoto berapa kali hari ini?" hint="Ketuk “Pilih paket ini” pada paket yang kamu mau" />
+        <ScreenTitle title={boothConfig.packageHeadline || "Pilih Paket"} />
 
         {eventActive && (
           <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-5 py-3 text-center text-sm text-emerald-700">

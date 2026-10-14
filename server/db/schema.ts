@@ -555,6 +555,8 @@ export const tenantSettings = pgTable("tenant_settings", {
   socialInstagram: text("social_instagram"),
   socialTiktok: text("social_tiktok"),
   socialFacebook: text("social_facebook"),
+  socialYoutube: text("social_youtube"),
+  hashtag: text("hashtag"),
   websiteUrl: text("website_url"),
   address: text("address"),
   accentColor: text("accent_color").notNull().default("#7C3AED"),

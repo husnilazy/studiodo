@@ -15,7 +15,7 @@ export function ScreenTitle({ title, subtitle, hint, eyebrow, compact = false }:
     <Positionable id="heading" type="text" label="Judul">
       <motion.div className="kinetic-heading text-center" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
         {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h1 className={`font-display font-semibold tracking-tight ${compact ? "text-3xl md:text-4xl" : "text-4xl md:text-6xl"}`}>{title}</h1>
+        <h1 className={`font-display font-semibold tracking-tight ${compact ? "text-3xl md:text-4xl" : "text-4xl md:text-6xl landscape:text-3xl landscape:md:text-4xl"}`}>{title}</h1>
         {subtitle && <p className={`mx-auto max-w-xl text-muted ${compact ? "mt-1 text-sm md:text-base" : "mt-3 text-base md:text-lg"}`}>{subtitle}</p>}
         {hint && !compact && (
           <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full bg-accent/10 px-4 py-2 text-sm font-semibold text-accent">
@@ -49,7 +49,7 @@ export function KioskPage({ children, step, className = "" }: { children: ReactN
     <div className="kinetic-page relative h-full min-h-0 w-full">
       {step && <StepProgress current={step} />}
       <div className="h-full overflow-y-auto overflow-x-hidden">
-        <div className={`flex min-h-full flex-col items-center justify-center gap-8 px-6 pb-8 pt-24 md:px-12 ${className}`}>{children}</div>
+        <div className={`flex min-h-full flex-col items-center justify-center gap-8 px-6 pb-8 pt-24 md:px-12 landscape:gap-4 landscape:pb-4 landscape:pt-[4.25rem] ${className}`}>{children}</div>
       </div>
     </div>
   );

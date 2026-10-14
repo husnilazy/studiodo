@@ -43,6 +43,9 @@ export interface BoothConfig {
   socialTiktok: string;
   socialFacebook: string;
   websiteUrl: string;
+  socialYoutube: string;
+  /** Shown on the customer's result page, e.g. "#studiodo". */
+  hashtag: string;
   address: string;
   logoScale: number;
   accentColor: string;
@@ -155,6 +158,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   socialTiktok: "",
   socialFacebook: "",
   websiteUrl: "",
+  socialYoutube: "",
+  hashtag: "",
   address: "",
   logoScale: 100,
   accentColor: THEME_PRESETS.light.accentColor,
@@ -192,19 +197,19 @@ const DEFAULT_CONFIG: BoothConfig = {
   backgroundGradientEnd: THEME_PRESETS.light.backgroundGradientEnd,
   animationsEnabled: true,
   keyboardScale: 100,
-  promoText: "Promo hari ini: cetak 2x, gratis 1x!",
-  idleStartText: "Sentuh layar untuk mulai",
+  promoText: "",
+  idleStartText: "Sentuh untuk mulai",
   idleHeadline: "STUDIODO",
-  idleSubheadline: "Abadikan momen, bagikan senyum.",
+  idleSubheadline: "",
   idleShowHeadline: true,
   idleShowSubheadline: true,
   packageHeadline: "Pilih Paket",
   orientationHeadline: "Tampilan Kamera",
   paymentHeadline: "Pembayaran",
-  captureHeadline: "Siap untuk momenmu?",
-  previewHeadline: "Momenmu, siap diedit.",
+  captureHeadline: "Sesi Foto",
+  previewHeadline: "Edit Foto",
   frameHeadline: "Pilih Frame",
-  resultHeadline: "Hasil fotomu sudah siap.",
+  resultHeadline: "Hasil Foto",
   idleCoverUrl: null,
   idleCoverType: "image",
   idleLogoVideoUrl: null,
@@ -279,7 +284,24 @@ function upgradeLegacyTheme(config: Partial<BoothConfig> | undefined): Partial<B
   return next;
 }
 
+// Wordy default copy from earlier versions. A tenant who never edited it gets the short, informative text instead;
+// anything they wrote themselves is untouched.
+const OLD_COPY: Partial<Record<keyof BoothConfig, string[]>> = {
+  idleSubheadline: ["Abadikan momen, bagikan senyum."],
+  captureHeadline: ["Siap untuk momenmu?"],
+  previewHeadline: ["Momenmu, siap diedit.", "Percantik fotomu"],
+  resultHeadline: ["Hasil fotomu sudah siap.", "Cantik! Hasilmu sudah jadi."],
+  promoText: ["Promo hari ini: cetak 2x, gratis 1x!"],
+  idleStartText: ["Sentuh layar untuk mulai"],
+};
+
 function mergeConfig(config?: Partial<BoothConfig>): BoothConfig {
+  if (config) {
+    config = { ...config };
+    for (const [key, olds] of Object.entries(OLD_COPY) as [keyof BoothConfig, string[]][]) {
+      if (olds.includes(String(config[key] ?? ""))) (config as Record<string, unknown>)[key] = DEFAULT_CONFIG[key];
+    }
+  }
   const tetherBridgeUrl = config?.tetherBridgeUrl?.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1):5513\/?$/, "$1$2:5510") ?? DEFAULT_CONFIG.tetherBridgeUrl;
   return {
     ...DEFAULT_CONFIG,
@@ -326,7 +348,7 @@ export const useBoothConfig = create<BoothConfigStore>()(
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
 const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "printerName", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
-const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "websiteUrl", "address"] as const;
+const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 
 // True while WE are writing server data into the store, so that write is not mistaken for an admin edit and pushed back.
 let applyingRemote = false;

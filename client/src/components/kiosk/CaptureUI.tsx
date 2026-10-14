@@ -70,21 +70,6 @@ export function CountdownOverlay({ value, total, styleId }: { value: number | nu
   );
 }
 
-/** Hint shown over the live view while a photo is being taken ("Senyum!"): same in every style, tiny. */
-export function SmileHint({ show, styleId }: { show: boolean; styleId: KioskStyleId }) {
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.div className="pointer-events-none absolute inset-x-0 top-[14%] z-30 flex justify-center" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-          <span className={`rounded-full px-5 py-2 text-base font-bold ${styleId === "fun" || styleId === "playful" ? "border-[3px] border-fg bg-surface text-fg shadow-[4px_4px_0_var(--kiosk-text)]" : "bg-black/45 text-white backdrop-blur-md"}`}>
-            {styleId === "fun" ? "Pose terbaikmu! 🎉" : "Tahan pose…"}
-          </span>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 interface SlotFullPopupProps {
   show: boolean;
   /** "frame": the frame's slots are full but the package still allows more shots; "complete": every shot is taken. */
@@ -142,41 +127,56 @@ export function SlotFullPopup({ show, kind, slots, remaining, busy, busyLabel, o
   );
 }
 
-/** The round shutter. Position comes from the wrapper, so pressing it only scales the button in place. */
-export function ShutterButton({ onClick, disabled, countdown, total, focusing, styleId, floating = false }: { onClick: () => void; disabled: boolean; countdown: number | null; total: number; focusing: boolean; styleId: KioskStyleId; floating?: boolean }) {
-  const ring = 276 * (1 - (countdown ?? 0) / Math.max(1, total));
-  const fun = styleId === "fun" || styleId === "playful";
+/** The shutter: a thin ring and a line camera icon, no filled disc. Position comes from the wrapper, so pressing it only
+ *  scales the button in place. While counting down it only dims: the big number on the live view IS the countdown. */
+export function ShutterButton({ onClick, disabled, countdown, focusing, styleId }: { onClick: () => void; disabled: boolean; countdown: number | null; focusing: boolean; styleId: KioskStyleId }) {
+  const bold = styleId === "fun" || styleId === "playful";
+  const counting = countdown !== null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-5 z-30 flex justify-center">
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center">
       <motion.button
         type="button"
         onClick={onClick}
         disabled={disabled}
         whileTap={{ scale: 0.9 }}
-        animate={styleId === "fun" && countdown === null && !disabled ? { y: [0, -8, 0], rotate: [0, -3, 3, 0] } : { y: 0, rotate: 0 }}
-        transition={styleId === "fun" && countdown === null ? { duration: 1.6, repeat: Infinity, repeatDelay: 0.6 } : { duration: 0.2 }}
+        animate={styleId === "fun" && !counting && !disabled ? { y: [0, -6, 0], rotate: [0, -3, 3, 0] } : { y: 0, rotate: 0 }}
+        transition={styleId === "fun" && !counting ? { duration: 1.6, repeat: Infinity, repeatDelay: 0.6 } : { duration: 0.2 }}
         aria-label="Ambil foto"
-        className={`pointer-events-auto relative flex h-24 w-24 items-center justify-center rounded-full sm:h-28 sm:w-28 ${
-          fun ? "border-[5px] border-fg shadow-[5px_5px_0_var(--kiosk-text)]" : floating ? "border-4 border-white/90 shadow-[0_0_0_6px_rgba(0,0,0,0.18)]" : "border-4 border-fg shadow-[0_0_0_4px_rgba(0,0,0,0.35)]"
-        } ${disabled && countdown === null ? "opacity-55" : ""} disabled:cursor-not-allowed`}
+        className={`pointer-events-auto flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity disabled:cursor-not-allowed sm:h-20 sm:w-20 ${
+          bold ? "border-[4px] border-white shadow-[0_4px_0_rgba(0,0,0,0.55)]" : "border-2 border-white/90"
+        } ${counting ? "opacity-30" : disabled ? "opacity-50" : ""} ${focusing ? "animate-pulse" : ""}`}
       >
-        {countdown !== null ? (
-          <>
-            <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
-              <circle cx="50" cy="50" r="44" fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.25)" strokeWidth="4" />
-              <circle cx="50" cy="50" r="44" fill="none" stroke={floating ? "#fff" : "var(--accent)"} strokeWidth="5" strokeLinecap="round" strokeDasharray="276" strokeDashoffset={ring} transform="rotate(-90 50 50)" style={{ transition: "stroke-dashoffset 1s linear" }} />
-            </svg>
-            <span className="relative text-3xl font-bold text-white drop-shadow">{countdown}</span>
-          </>
-        ) : (
-          <span className={`flex h-[84%] w-[84%] items-center justify-center rounded-full shadow-inner transition ${floating ? "bg-white/90" : "bg-white"} ${focusing ? "animate-pulse" : ""}`}>
-            <svg viewBox="0 0 24 24" className="h-9 w-9 text-accent" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
-              <circle cx="12" cy="13" r="3.4" />
-            </svg>
-          </span>
-        )}
+        <svg viewBox="0 0 24 24" className="h-8 w-8 drop-shadow sm:h-9 sm:w-9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
+          <circle cx="12" cy="13" r="3.4" />
+        </svg>
       </motion.button>
+    </div>
+  );
+}
+
+/** Small "Filter" pill that opens a transparent popover over the live view, so the camera keeps all the room. */
+export function FilterControl({ filter, onPick, order, labels, css, open, setOpen, className = "" }: {
+  filter: string; onPick: (key: string) => void; order: readonly string[]; labels: Record<string, string>; css: Record<string, string>;
+  open: boolean; setOpen: (open: boolean) => void; className?: string;
+}) {
+  return (
+    <div className={`pointer-events-none absolute z-40 flex flex-col items-start ${className}`}>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.16 }} className="pointer-events-auto mb-2 flex max-w-[min(92vw,34rem)] gap-1.5 overflow-x-auto rounded-2xl border border-white/20 bg-black/35 p-2 backdrop-blur-xl">
+            {order.map((key) => (
+              <button key={key} type="button" onClick={() => onPick(key)} className={`min-w-[3.6rem] shrink-0 rounded-xl border p-1 text-center text-white transition ${filter === key ? "border-white bg-white/20" : "border-white/15 bg-white/5"}`}>
+                <div className="h-6 rounded-lg bg-white/30" style={{ filter: css[key] }} />
+                <span className="mt-1 block text-[0.5625rem] font-semibold">{labels[key]}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/25 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-md">
+        <Icon name="sparkles" className="h-4 w-4" /> Filter{filter !== "normal" ? ` · ${labels[filter]}` : ""}
+      </button>
     </div>
   );
 }

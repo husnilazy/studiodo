@@ -196,7 +196,7 @@ export default function PilihFrame() {
       <div className="kinetic-page relative flex h-full min-h-0 w-full flex-col">
         <StepProgress current="frame" />
         <div className={`shrink-0 px-6 md:px-10 ${wide ? "pb-2 pt-[112px]" : "pb-3 pt-20"}`}>
-          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
+          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Opsional. Bisa lanjut tanpa frame." />
         </div>
 
         {loading && (
@@ -280,7 +280,7 @@ export default function PilihFrame() {
                     <div className="flex flex-col items-center gap-3 px-6 text-center">
                       <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent/10 text-accent"><Icon name="frame" className="h-8 w-8" /></span>
                       <p className="font-display text-xl font-semibold">{noFrameSelected ? "Tanpa frame" : "Pilih frame di sebelah kiri"}</p>
-                      <p className="text-sm text-muted">{noFrameSelected ? "Fotomu akan dicetak polos tanpa bingkai." : "Ketuk satu frame untuk melihat pratinjau besarnya di sini."}</p>
+                      <p className="text-sm text-muted">{noFrameSelected ? "Tanpa frame." : "Pilih frame untuk melihat pratinjau."}</p>
                     </div>
                   )}
                 </div>

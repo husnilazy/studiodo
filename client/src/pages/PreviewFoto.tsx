@@ -285,7 +285,7 @@ export default function PreviewFoto() {
         <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-[4.5rem] md:px-8">
           <Positionable id="heading" type="text" label="Judul">
             <div>
-              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{config.previewHeadline || "Percantik fotomu"}</h1>
+              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{config.previewHeadline || "Edit Foto"}</h1>
               <p className="mt-0.5 hidden text-sm text-muted sm:block">Tambahkan stiker atau filter, lalu lanjut. Hasilnya langsung terlihat.</p>
             </div>
           </Positionable>
@@ -334,10 +334,10 @@ export default function PreviewFoto() {
                 ))}
               </div>
               <div className="flex items-center justify-between gap-3">
-                <div className="flex shrink-0 items-center gap-2" title="Cermin = sama seperti yang kamu lihat di layar saat berfoto">
+                <div className="flex shrink-0 items-center gap-2" title="Mirror = sama seperti yang terlihat di layar saat berfoto">
                   <span className="hidden text-xs font-semibold text-muted sm:inline">Hasil:</span>
                   <div className="inline-flex rounded-full border border-fg/10 bg-canvas/60 p-1 text-xs font-semibold">
-                    <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                    <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Mirror</button>
                     <button type="button" onClick={() => setOutputMirrored(false)} aria-pressed={!outputMirrored} className={`rounded-full px-3.5 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
                   </div>
                 </div>
@@ -405,10 +405,10 @@ export default function PreviewFoto() {
                   <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 p-3">
                     <div>
                       <p className="text-sm font-semibold">Arah hasil</p>
-                      <p className="text-xs text-muted">Cermin = sama seperti yang kamu lihat di layar saat berfoto.</p>
+                      <p className="text-xs text-muted">Mirror = sama seperti yang terlihat di layar saat berfoto.</p>
                     </div>
                     <div className="inline-flex shrink-0 rounded-full border border-fg/10 bg-canvas/60 p-1 text-sm font-semibold">
-                      <button type="button" onClick={() => setOutputMirrored(true)} className={`rounded-full px-4 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                      <button type="button" onClick={() => setOutputMirrored(true)} className={`rounded-full px-4 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Mirror</button>
                       <button type="button" onClick={() => setOutputMirrored(false)} className={`rounded-full px-4 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
                     </div>
                   </div>

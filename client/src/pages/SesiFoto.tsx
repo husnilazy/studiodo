@@ -20,7 +20,7 @@ import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 import Spinner from "@/components/Spinner";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
-import { CountdownOverlay, ShutterButton, SlotFullPopup, SmileHint } from "@/components/kiosk/CaptureUI";
+import { CountdownOverlay, FilterControl, ShutterButton, SlotFullPopup } from "@/components/kiosk/CaptureUI";
 import { resolveCaptureLayout, resolveKioskStyle } from "@/lib/kioskStyles";
 
 // Sony Imaging Edge Webcam / virtual cam warm-up guard
@@ -1121,7 +1121,6 @@ export default function SesiFoto() {
       )}
       {flash && <div className="pointer-events-none absolute inset-0 z-40 animate-flash bg-white" />}
       <CountdownOverlay value={countdown} total={config.countdownSeconds} styleId={styleId} />
-      <SmileHint show={countdown !== null && countdown <= 1 && styleId !== "minimal"} styleId={styleId} />
       {capturing && (
         <div className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center">
           <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-4 py-2 text-xs text-white/85 backdrop-blur-sm">
@@ -1141,7 +1140,7 @@ export default function SesiFoto() {
       className="flex items-center gap-2 rounded-full border border-white/25 bg-black/40 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
     >
       <Icon name="mirror" className="h-4 w-4" />
-      Cermin {mirrorLiveView ? "aktif" : "mati"}
+      {mirrorLiveView ? "Mirror" : "Mirror off"}
     </button>
   );
 
@@ -1162,7 +1161,7 @@ export default function SesiFoto() {
     const isCurrent = index === currentSlot;
     const isRetaking = retakeTarget === index;
     const justCaptured = capturedSlot === index;
-    const size = variant === "float" ? "h-[4.5rem] w-[3.4rem] sm:h-24 sm:w-[4.5rem]" : "h-24 w-20 landscape:h-full landscape:w-auto";
+    const size = variant === "float" ? "h-[4.25rem] w-[3.25rem] sm:h-24 sm:w-[4.5rem]" : "h-[5.5rem] w-[4.25rem] landscape:h-auto landscape:w-full landscape:aspect-[3/4]";
     return (
       <motion.div
         key={index}
@@ -1189,7 +1188,6 @@ export default function SesiFoto() {
         ) : (
           <span className={`flex h-full flex-1 flex-col items-center justify-center gap-1.5 ${variant === "float" ? "text-white/60" : "text-fg/30"}`}>
             <IconCameraSmall className={variant === "float" ? "h-5 w-5" : "h-6 w-6"} />
-            {variant === "rail" && <span className="text-[0.6875rem]">{isCurrent ? "Berikutnya" : "Menunggu"}</span>}
           </span>
         )}
         <AnimatePresence>
@@ -1275,21 +1273,15 @@ export default function SesiFoto() {
     </>
   );
 
-  const filterChips = (
-    <div className="mt-2 flex justify-center gap-2 overflow-x-auto pb-1">
-      {FILTER_ORDER.map((key) => (
-        <button key={key} onClick={() => setFilter(key)} className={`min-w-[4.25rem] rounded-xl border p-1 text-center transition ${filter === key ? "border-accent bg-accent/15 shadow-lg shadow-accent/20" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}>
-          <div className="h-7 rounded-lg bg-fg/10" style={{ filter: FILTER_CSS[key] }} />
-          <span className="mt-1 block text-[0.5625rem]">{FILTER_LABELS[key]}</span>
-        </button>
-      ))}
-    </div>
-  );
+  const filterControl = (className: string) =>
+    config.features.filters ? (
+      <FilterControl filter={filter} onPick={(key) => setFilter(key as CameraFilter)} order={FILTER_ORDER} labels={FILTER_LABELS} css={FILTER_CSS} open={showFilters} setOpen={setShowFilters} className={className} />
+    ) : null;
 
   const statusChips = (
     <div className="flex flex-wrap items-center gap-2">
-      {config.autoCaptureEnabled && <span className="k-chip k-chip-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Mode otomatis</span>}
-      <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />Foto {Math.min(currentSlot + 1, totalPhotos)} dari {totalPhotos}</span>
+      {config.autoCaptureEnabled && <span className="k-chip k-chip-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Otomatis</span>}
+      <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />{Math.min(currentSlot + 1, totalPhotos)} / {totalPhotos}</span>
       {eventTimerEnabled && (
         <span className={`k-chip !text-sm ${remainingSeconds < 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`}>
           <Icon name="clock" className="h-4 w-4" />
@@ -1301,6 +1293,7 @@ export default function SesiFoto() {
 
   // =================================================================================================================
   // Layar penuh: the live view fills the screen; every control floats on top, transparent.
+  // Photo slots stand in a column on the LEFT edge (never over the picture's middle).
   // =================================================================================================================
   if (fullscreen) {
     return (
@@ -1311,42 +1304,27 @@ export default function SesiFoto() {
               {liveSurface("cover")}
             </motion.div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-44 bg-gradient-to-b from-black/55 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-72 bg-gradient-to-t from-black/65 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-gradient-to-b from-black/50 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-36 bg-gradient-to-t from-black/50 to-transparent" />
           <StepProgress current="capture" />
 
-          <header className="absolute inset-x-3 top-[4.25rem] z-30 flex items-start justify-between gap-2 sm:inset-x-6">
+          <header className="absolute inset-x-3 top-[4.25rem] z-30 flex items-start justify-between gap-2 sm:inset-x-5">
             <div className="min-w-0">{statusChips}</div>
             {mirrorButton}
           </header>
-          <div className="absolute inset-0 z-30 pointer-events-none">{retakeBanner && <div className="pointer-events-auto absolute inset-x-0 top-[7.5rem]">{retakeBanner}</div>}</div>
+          {retakeBanner && <div className="absolute inset-x-0 top-[7.25rem] z-30">{retakeBanner}</div>}
 
-          {/* Photo slots float above the shutter */}
-          <div className="absolute inset-x-0 bottom-[8.5rem] z-30 flex justify-center gap-2 overflow-x-auto px-3 pb-1 sm:bottom-40">
+          {/* Photo slots: left edge, vertical, scrolls if there are many */}
+          <div className="absolute bottom-24 left-3 top-[7.5rem] z-30 flex flex-col items-center justify-center gap-2 overflow-y-auto sm:left-5">
             {Array.from({ length: totalPhotos }).map((_, index) => renderSlot(index, "float"))}
           </div>
 
-          <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} total={config.countdownSeconds} focusing={focusing} styleId={styleId} floating />
+          <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} focusing={focusing} styleId={styleId} />
+          {filterControl("bottom-4 left-3 sm:left-5")}
 
-          {config.features.filters && (
-            <div className="absolute bottom-6 left-3 z-30 sm:left-6">
-              <button type="button" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} className="flex items-center gap-2 rounded-full border border-white/30 bg-black/40 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur-md">
-                <Icon name="sparkles" className="h-4 w-4" /> Filter · {FILTER_LABELS[filter]}
-              </button>
-            </div>
-          )}
-          <AnimatePresence>
-            {config.features.filters && showFilters && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="absolute inset-x-3 bottom-[5.25rem] z-40 rounded-2xl border border-white/20 bg-black/45 p-3 backdrop-blur-xl sm:inset-x-6">
-                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-white/70"><span>Filter warna</span><button type="button" onClick={() => setShowFilters(false)} className="rounded-full bg-white/15 px-3 py-1 text-[0.6875rem] normal-case tracking-normal">Tutup</button></div>
-                {filterChips}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {captureNotice && <p className="absolute inset-x-0 top-[10rem] z-30 text-center text-sm text-amber-300">{captureNotice}</p>}
+          {captureNotice && <p className="absolute inset-x-0 top-[9.5rem] z-30 text-center text-sm text-amber-300">{captureNotice}</p>}
           {slotPopupDismissed && retakeTarget === null && (sessionComplete || canFinishEarly) && (
-            <div className="absolute bottom-6 right-3 z-30 w-[min(44vw,18rem)] sm:right-6">{continueButtons}</div>
+            <div className="absolute bottom-4 right-3 z-30 w-[min(44vw,18rem)] sm:right-5">{continueButtons}</div>
           )}
           {popup}
           {overlays}
@@ -1356,73 +1334,57 @@ export default function SesiFoto() {
   }
 
   // =================================================================================================================
-  // Dengan panel: camera in the middle, shots on the left, the frame on the right.
+  // Dengan panel. Portrait: camera on top, shots in a row below. Landscape: shots in a column on the left, camera
+  // fills the rest, and the frame preview joins on wide screens (xl).
   // =================================================================================================================
   return (
     <ScreenLayoutBoundary screenKey="capture">
-    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8">
+    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8 landscape:pt-14">
       <StepProgress current="capture" />
-      <header className="relative z-10 mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-3">
+      <header className="relative z-10 mx-auto flex w-full max-w-[1800px] shrink-0 flex-wrap items-center justify-between gap-2">
         <Positionable id="heading" type="text" label="Judul">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{config.captureHeadline || "Siap untuk momenmu?"}</h1>
-            <p className="mt-0.5 text-sm text-muted">
-              {countdown !== null ? "Tahan pose… sebentar lagi!" : retakeTarget !== null ? `Mengganti foto ke-${retakeTarget + 1}. Tekan tombol kamera, foto lama diganti setelah kamu menjepret.` : sessionComplete ? "Semua foto sudah diambil." : config.autoCaptureEnabled ? "Mode otomatis: foto berikutnya diambil sendiri." : "Ketuk tombol bulat di layar kamera untuk mulai hitung mundur."}
-            </p>
-          </div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl landscape:text-xl">{config.captureHeadline || "Sesi Foto"}</h1>
         </Positionable>
         {statusChips}
       </header>
 
-      <div className="relative z-10 mx-auto mt-3 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] landscape:lg:grid-cols-[minmax(230px,300px)_minmax(0,1fr)_minmax(280px,340px)] landscape:lg:grid-rows-1 xl:gap-4">
-        <section className="glass-panel order-2 flex min-h-0 flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:order-1 landscape:lg:h-full landscape:lg:p-4">
-          <div className="flex items-center justify-between">
-            <div><h2 className="font-display text-xl font-semibold">Jepretan</h2></div>
-            <span className="k-chip k-chip-accent">{photoUrls.filter(Boolean).length}/{totalPhotos}</span>
-          </div>
-          <p className="mt-2 hidden items-center gap-1.5 text-xs leading-5 text-fg/50 landscape:flex">
-            <IconZoomSmall className="h-3.5 w-3.5 shrink-0 text-fg/40" /> Ketuk foto untuk memperbesar{config.features.retake ? "; tekan “Ganti” untuk memotret ulang foto itu" : ""}.
-          </p>
-          <div className="mt-2 flex gap-2.5 overflow-x-auto portrait:pb-1 landscape:mt-3 landscape:grid landscape:min-h-0 landscape:flex-1 landscape:auto-rows-fr landscape:grid-cols-2 landscape:overflow-visible">
+      <div className="relative z-10 mx-auto mt-2 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] landscape:grid-cols-[minmax(92px,128px)_minmax(0,1fr)] landscape:grid-rows-1 landscape:xl:grid-cols-[minmax(110px,150px)_minmax(0,1fr)_minmax(230px,320px)] xl:gap-4">
+        <section className="glass-panel order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl p-2.5 landscape:order-1">
+          <div className="flex gap-2 overflow-x-auto portrait:pb-0.5 landscape:min-h-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-y-auto landscape:overflow-x-hidden">
             {Array.from({ length: totalPhotos }).map((_, index) => renderSlot(index, "rail"))}
           </div>
         </section>
 
-        <main className="order-1 flex min-h-0 min-w-0 flex-col landscape:lg:order-2">
+        <main className="order-1 flex min-h-0 min-w-0 flex-col landscape:order-2">
           {/* The box's pixel size is computed in JS (ResizeObserver effect above) to match the camera feed's real aspect
               ratio — see previewContainerRef. */}
-          <div ref={previewContainerRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[2rem] bg-[#0b0d16] p-1.5 shadow-2xl ring-1 ring-fg/10">
+          <div ref={previewContainerRef} className="relative flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-3xl bg-[#0b0d16] p-1 shadow-2xl ring-1 ring-fg/10">
             <motion.div
               animate={{ scale: flash ? 1.08 : 1 }}
               transition={{ duration: flash ? 0.18 : 0.4, ease: flash ? "easeOut" : "easeInOut" }}
               style={{ zIndex: flash ? 30 : "auto", width: previewSize?.width, height: previewSize?.height }}
-              className="relative max-h-full max-w-full overflow-hidden rounded-[1.7rem]"
+              className="relative max-h-full max-w-full overflow-hidden rounded-[1.3rem]"
             >
               {liveSurface("contain")}
-              {cameraMode === "tether" && (
-                <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-full border border-emerald-300/40 bg-black/60 px-3 py-1 text-xs text-emerald-200 backdrop-blur-sm">LIVE VIEW</div>
-              )}
               <div className="absolute right-3 top-3 z-30">{mirrorButton}</div>
               {retakeBanner}
-              <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} total={config.countdownSeconds} focusing={focusing} styleId={styleId} />
+              <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} focusing={focusing} styleId={styleId} />
+              {filterControl("bottom-4 left-3")}
               {popup}
             </motion.div>
           </div>
-          {captureNotice && <p className="relative z-10 mt-3 text-center text-sm text-amber-300">{captureNotice}</p>}
+          {captureNotice && <p className="relative z-10 mt-2 text-center text-sm text-amber-300">{captureNotice}</p>}
           {continueButtons}
-          {config.features.filters && (
-            <div className="glass-panel mt-3 rounded-2xl p-3">
-              <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Filter warna</span><span className="font-semibold text-accent">{FILTER_LABELS[filter]}</span></div>
-              {filterChips}
-            </div>
-          )}
         </main>
 
-        <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:flex"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-[var(--kiosk-muted)]">Foto otomatis masuk ke frame pilihan.</p>{template ? (
-          <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-fg/10 bg-fg/[0.04] p-3">
-            <canvas ref={templateCanvasRef} className="h-full w-full rounded-xl object-contain" />
-          </div>
-        ) : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Frame belum dipilih</div>}</section>
+        <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-3xl p-3 landscape:xl:flex">
+          <div className="flex items-center justify-between gap-2"><h2 className="font-display text-lg font-semibold">Frame</h2><span className="max-w-[60%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div>
+          {template ? (
+            <div className="mt-2 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-fg/10 bg-fg/[0.04] p-2">
+              <canvas ref={templateCanvasRef} className="h-full w-full rounded-xl object-contain" />
+            </div>
+          ) : <div className="mt-2 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Tanpa frame</div>}
+        </section>
       </div>
       {overlays}
     </div>

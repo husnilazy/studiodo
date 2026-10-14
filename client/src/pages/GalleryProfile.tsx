@@ -27,6 +27,8 @@ export default function GalleryProfile() {
       socialInstagram: config.socialInstagram,
       socialTiktok: config.socialTiktok,
       socialFacebook: config.socialFacebook,
+      socialYoutube: config.socialYoutube,
+      hashtag: config.hashtag,
       websiteUrl: config.websiteUrl,
       address: config.address,
     });
@@ -49,6 +51,8 @@ export default function GalleryProfile() {
           <Field label="Instagram"><input className={inputClass} placeholder="https://instagram.com/studiodo" value={config.socialInstagram} onChange={(e) => set("socialInstagram", e.target.value)} /></Field>
           <Field label="TikTok"><input className={inputClass} placeholder="https://tiktok.com/@studiodo" value={config.socialTiktok} onChange={(e) => set("socialTiktok", e.target.value)} /></Field>
           <Field label="Facebook"><input className={inputClass} placeholder="https://facebook.com/studiodo" value={config.socialFacebook} onChange={(e) => set("socialFacebook", e.target.value)} /></Field>
+          <Field label="YouTube"><input className={inputClass} placeholder="@studiodo" value={config.socialYoutube} onChange={(e) => set("socialYoutube", e.target.value)} /></Field>
+          <Field label="Hashtag"><input className={inputClass} placeholder="#studiodo" value={config.hashtag} onChange={(e) => set("hashtag", e.target.value)} /></Field>
           <Field label="Website"><input className={inputClass} placeholder="https://studiodo.id" value={config.websiteUrl} onChange={(e) => set("websiteUrl", e.target.value)} /></Field>
           <Field label="Alamat"><input className={inputClass} placeholder="Alamat studio" value={config.address} onChange={(e) => set("address", e.target.value)} /></Field>
         </div>

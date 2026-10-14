@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { socialItems } from "@/lib/socialLinks";
+import { SocialIcon } from "@/components/kiosk/SocialIcons";
 
 /** Simple confetti burst — pure CSS/JS, no dependencies */
 function ConfettiParticle({ x, color, delay }: { x: number; color: string; delay: number }) {
@@ -64,6 +66,7 @@ const videoExt = (url: string) => (/\.webm($|[?#])/i.test(url) ? "webm" : "mp4")
 export default function ShareGallery({ id }: { id: string }) {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<any>({ brandName: "STUDIODO", tagline: "" });
+  const [hashtagCopied, setHashtagCopied] = useState(false);
   const [form, setForm] = useState({ whatsapp: "", email: "", publishConsent: false, feedback: "", rating: 0 });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,6 +142,12 @@ export default function ShareGallery({ id }: { id: string }) {
   const shareLink = window.location.href;
   const waText = encodeURIComponent(`Lihat hasil foto aku di ${profile.brandName || "STUDIODO"}! 📸\n${shareLink}`);
   const profileBrand = profile.brandName || "STUDIODO";
+  const socials = socialItems({
+    socialInstagram: profile.socialInstagram ?? "", socialTiktok: profile.socialTiktok ?? "", socialFacebook: profile.socialFacebook ?? "",
+    socialYoutube: profile.socialYoutube ?? "", contactWhatsapp: profile.contactWhatsapp ?? "", websiteUrl: profile.websiteUrl ?? "",
+  });
+  const hashtagRaw = String(profile.hashtag ?? "").trim();
+  const hashtag = hashtagRaw ? (hashtagRaw.startsWith("#") ? hashtagRaw : `#${hashtagRaw}`) : "";
   const whatsappUrl = profile.contactWhatsapp ? `https://wa.me/${profile.contactWhatsapp.replace(/\D/g, "")}` : null;
 
   const tabs: MediaTab[] = [
@@ -302,6 +311,43 @@ export default function ShareGallery({ id }: { id: string }) {
           </motion.section>
         )}
 
+        {/* Ikuti kami: the tenant's own social/contact lines, as big tappable rows */}
+        {(socials.length > 0 || hashtag) && (
+          <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.21 }} className={`${card} overflow-hidden bg-gradient-to-br from-accent/[0.12] via-accent/[0.04] to-transparent`}>
+            <div className="flex items-center gap-3">
+              {profile.logoUrl ? <img src={profile.logoUrl} alt="" className="h-11 w-11 shrink-0 rounded-2xl bg-white object-contain p-1.5 shadow" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-lg font-bold text-white shadow">{profileBrand.slice(0, 1).toUpperCase()}</span>}
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-lg font-bold leading-tight">Ikuti {profileBrand}</h2>
+                <p className="text-[13px] text-fg/55">Tag kami saat membagikan hasilmu{hashtag ? ` dengan ${hashtag}` : ""}.</p>
+              </div>
+            </div>
+            {socials.length > 0 && (
+              <ul className="mt-4 grid grid-cols-2 gap-2.5">
+                {socials.map((item) => (
+                  <li key={item.key}>
+                    <a href={item.url} target="_blank" rel="noreferrer" className={`group flex min-h-14 items-center gap-2.5 rounded-2xl border px-2.5 py-2 transition active:scale-[0.98] ${item.key === "whatsapp" ? "border-emerald-400/35 bg-emerald-400/10" : "border-fg/10 bg-fg/[0.04] hover:border-accent/50"}`}>
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.key === "whatsapp" ? "bg-emerald-500 text-white" : "bg-accent/15 text-accent"}`}><SocialIcon name={item.key} className="h-5 w-5" /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg/45">{item.key === "whatsapp" ? "Chat WhatsApp" : item.label}</span>
+                        <span className="block truncate text-[13.5px] font-semibold">{item.handle}</span>
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {hashtag && (
+              <button
+                type="button"
+                onClick={() => { void navigator.clipboard?.writeText(hashtag).then(() => { setHashtagCopied(true); window.setTimeout(() => setHashtagCopied(false), 1800); }); }}
+                className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-accent/50 px-4 text-[15px] font-bold text-accent transition active:scale-[0.98]"
+              >
+                {hashtag}<span className="text-xs font-semibold text-fg/45">{hashtagCopied ? "· tersalin" : "· ketuk untuk salin"}</span>
+              </button>
+            )}
+          </motion.section>
+        )}
+
         {/* Bagikan */}
         <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className={card}>
           <h2 className="font-display text-lg font-semibold">Bagikan keseruannya</h2>
@@ -354,13 +400,6 @@ export default function ShareGallery({ id }: { id: string }) {
       <footer className="border-t border-fg/[0.06] px-4 py-8 text-center sm:px-6">
         <p className="text-sm font-semibold text-fg/70">{profileBrand}</p>
         {(profile.tagline || profile.address) && <p className="mt-1 text-xs text-fg/40">{profile.tagline || profile.address}</p>}
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-emerald-400/25 px-3 py-1.5 text-xs text-emerald-600">WhatsApp</a>}
-          {profile.socialInstagram && <a href={profile.socialInstagram} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Instagram</a>}
-          {profile.socialTiktok && <a href={profile.socialTiktok} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">TikTok</a>}
-          {profile.socialFacebook && <a href={profile.socialFacebook} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Facebook</a>}
-          {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-fg/10 px-3 py-1.5 text-xs text-fg/60">Website</a>}
-        </div>
       </footer>
     </div>
   );

@@ -119,7 +119,7 @@ body.superadmin-mode #root {
 /* Shape applies to every real <button> AND to anything styled .k-btn (the main call-to-action on Idle is a <div>, which
    the old `button`-only rule never reached — that is why the setting seemed to work on some screens and not others).
    Round icon buttons / tabs that are deliberately circular (rounded-full) keep their own shape. */
-[data-button-style] button:not([class*="rounded-full"]),
+[data-button-style] button:not([class*="rounded-full"]):not(.glass-panel):not(.kinetic-card):not([class*="rounded-["]),
 [data-button-style] .k-btn {
   border-radius: var(--button-radius);
 }
@@ -673,3 +673,7 @@ html[data-admin-theme="dark"] .brand-logo-white { display: block; }
 [data-kiosk-style="fullcam"] .kinetic-heading h1,
 [data-kiosk-style="fullcam"] .kinetic-title { font-weight: 600; letter-spacing: -0.04em; }
 [data-kiosk-style="fullcam"] .text-on-accent { color: #000; }
+
+/* Result screen: a thin line sweeping over the QR (purely decorative) */
+.k-scan-line { top: 1rem; animation: k-scan 2.6s ease-in-out infinite; }
+@keyframes k-scan { 0%, 100% { transform: translateY(0); opacity: 0; } 12%, 88% { opacity: 1; } 50% { transform: translateY(clamp(140px, 23vh, 210px)); } }

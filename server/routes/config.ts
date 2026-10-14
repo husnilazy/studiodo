@@ -83,6 +83,8 @@ configRouter.get("/public", async (req, res) => {
     socialInstagram: tenantSettings.socialInstagram,
     socialTiktok: tenantSettings.socialTiktok,
     socialFacebook: tenantSettings.socialFacebook,
+    socialYoutube: tenantSettings.socialYoutube,
+    hashtag: tenantSettings.hashtag,
     websiteUrl: tenantSettings.websiteUrl,
     address: tenantSettings.address,
     // accentColor is the only theme value stored server-side (everything
@@ -110,6 +112,8 @@ configRouter.get("/tenant", requireAnyAuth, async (req, res) => {
     socialInstagram: tenantSettings.socialInstagram,
     socialTiktok: tenantSettings.socialTiktok,
     socialFacebook: tenantSettings.socialFacebook,
+    socialYoutube: tenantSettings.socialYoutube,
+    hashtag: tenantSettings.hashtag,
     websiteUrl: tenantSettings.websiteUrl,
     address: tenantSettings.address,
     accentColor: tenantSettings.accentColor,
@@ -138,7 +142,7 @@ const KIOSK_CONFIG_STRINGS = [
   "eventName", "eventDescription", "eventStartAt", "eventEndAt", "buttonStyle", "kioskDensity", "sessionLayout", "backgroundStyle",
   "backgroundGradientStart", "backgroundGradientEnd", "promoText", "idleStartText", "idleHeadline", "idleSubheadline",
   "packageHeadline", "orientationHeadline", "paymentHeadline", "captureHeadline", "previewHeadline", "frameHeadline", "resultHeadline",
-  "idleCoverType", "captureVibe", "kioskStyle", "idleLayout", "packageLayout", "captureLayout", "stripLayout", "stripTemplate",
+  "idleCoverType", "captureVibe", "kioskStyle", "idleLayout", "packageLayout", "captureLayout", "socialYoutube", "hashtag", "stripLayout", "stripTemplate",
 ] as const;
 const KIOSK_CONFIG_NUMBERS = ["logoScale", "keyboardScale", "countdownSeconds", "sessionTimerMinutes", "eventSessionTimerMinutes", "eventMaxPhotosPerSession", "maxPhotosPerSession", "printCopies"] as const;
 const KIOSK_CONFIG_BOOLS = [
@@ -220,6 +224,12 @@ configRouter.patch("/kiosk-config", requireAdminAuth, async (req, res) => {
   if (typeof clean.tagline === "string") columns.tagline = clean.tagline.slice(0, 160);
   if (typeof clean.accentColor === "string") columns.accentColor = clean.accentColor;
   if ("logoUrl" in images) columns.logoUrl = images.logoUrl;
+  // Social/contact lines are read by the customer's result page from these columns, so a save from the design screen
+  // has to land here too (empty string = cleared).
+  const mirror = (key: "contactWhatsapp" | "socialInstagram" | "socialTiktok" | "socialFacebook" | "socialYoutube" | "websiteUrl" | "address" | "hashtag") => {
+    if (typeof clean[key] === "string") columns[key] = (clean[key] as string).trim() || null;
+  };
+  for (const key of ["contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "websiteUrl", "address", "hashtag"] as const) mirror(key);
   await db.update(tenantSettings).set(columns).where(eq(tenantSettings.tenantId, tenantId));
 
   res.json({ ok: true, images });
@@ -257,6 +267,8 @@ configRouter.patch("/gallery-profile", requireAdminAuth, async (req, res) => {
   if (body.socialTiktok !== undefined) values.socialTiktok = text("socialTiktok", 160);
   if (body.socialFacebook !== undefined) values.socialFacebook = text("socialFacebook", 160);
   if (body.websiteUrl !== undefined) values.websiteUrl = text("websiteUrl", 160);
+  if (body.socialYoutube !== undefined) values.socialYoutube = text("socialYoutube", 160);
+  if (body.hashtag !== undefined) values.hashtag = text("hashtag", 60);
   if (body.address !== undefined) values.address = text("address", 200);
   await ensureTenantSettingsRow(tenantId);
   await db.update(tenantSettings).set(values).where(eq(tenantSettings.tenantId, tenantId));

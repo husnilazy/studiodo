@@ -14,6 +14,7 @@ import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext"
 import Positionable from "@/components/Positionable";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
 import { CUSTOM_FRAME_LOCK } from "@/lib/templateStore";
 
 type Mode = "choose" | "voucher" | "qris";
@@ -60,6 +61,8 @@ export default function Pembayaran() {
   const [cashPaymentEnabled, setCashPaymentEnabled] = useState(false);
   const [cashRedeemed, setCashRedeemed] = useState(false);
   const [qrisExpirySeconds, setQrisExpirySeconds] = useState(QRIS_DISPLAY_SECONDS);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+  useKeyboardAvoid(showKeyboard && mode === "voucher", keyboardRef);
   const qrisCanvasRef = useRef<HTMLCanvasElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrisTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -420,6 +423,7 @@ export default function Pembayaran() {
             <div className="mt-6 flex items-center gap-2">
               <input
                 autoFocus
+                data-kb-target
                 value={voucherCode}
                 onChange={(event) => { setError(null); setVoucherCode(event.target.value.toUpperCase()); }}
                 onFocus={() => setShowKeyboard(true)}
@@ -453,8 +457,8 @@ export default function Pembayaran() {
           {showKeyboard && mode === "voucher" && (
             // pointer-events-none on this full-screen wrapper (with -auto only on the keyboard itself): a tap anywhere
             // that isn't the keyboard must reach whatever is really there, not just dismiss the overlay first.
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-fg/15 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6">
-              <motion.div initial={{ opacity: 0, y: 32, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.24, ease: "easeOut" }} className="pointer-events-auto w-full max-w-5xl">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center p-3 pb-4 sm:p-5 sm:pb-6">
+              <motion.div initial={{ opacity: 0, y: 32, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.24, ease: "easeOut" }} ref={keyboardRef} className="pointer-events-auto w-full max-w-5xl">
                 <VirtualKeyboard value={voucherCode} onChange={(value) => setVoucherCode(value.toUpperCase())} onClose={() => setShowKeyboard(false)} />
               </motion.div>
             </motion.div>
