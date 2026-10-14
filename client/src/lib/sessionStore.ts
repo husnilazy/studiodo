@@ -67,6 +67,8 @@ interface KioskSessionState {
   sessionStartedAt: number | null;
   mediaUrl: string | null;
   mediaUrls: string[];
+  /** What each entry of mediaUrls is, so screens never have to guess from the address. */
+  mediaKinds: Record<string, "gif" | "video">;
   /** The slow stop-motion video of every photo (its own tab on the result screen). */
   stopMotionUrl: string | null;
   // Short clip captured at each individual photo shot, indexed the same as
@@ -92,7 +94,7 @@ interface KioskSessionState {
   setPhotoStickers: (stickers: PhotoSticker[]) => void;
   setTemplatePhotoMap: (map: Record<number, number>) => void;
   setSelectedExtras: (extras: { id: string; name: string; price: number }[]) => void;
-  setMediaUrl: (url: string) => void;
+  setMediaUrl: (url: string, kind?: "gif" | "video") => void;
   setStopMotionUrl: (url: string | null) => void;
   setSlotClipUrl: (slot: number, url: string) => void;
   setPhotoEdit: (slot: number, edit: PhotoEdit) => void;
@@ -121,6 +123,7 @@ const initial = {
   sessionStartedAt: null,
   mediaUrl: null,
   mediaUrls: [] as string[],
+  mediaKinds: {} as Record<string, "gif" | "video">,
   stopMotionUrl: null as string | null,
   slotClipUrls: [] as (string | null)[],
   photoUrls: [] as string[],
@@ -145,13 +148,17 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
   setPhotoStickers: (photoStickers) => set({ photoStickers }),
   setTemplatePhotoMap: (templatePhotoMap) => set({ templatePhotoMap }),
   setSelectedExtras: (selectedExtras) => set({ selectedExtras }),
-  // One GIF and one video at most (the newest wins). Building the result more than once, or swapping the local copy for the
-  // uploaded one, used to stack duplicates, which showed up as a growing row of GIF/Video tabs.
-  setMediaUrl: (mediaUrl) =>
+  // One GIF and one video at most (the newest wins). The kind is passed in by whoever knows it: guessing from the address
+  // ("ends with .gif") breaks for storage URLs without an extension and turned a GIF into a second, blank "Video" tab.
+  setMediaUrl: (mediaUrl, kind) =>
     set((state) => {
-      const isGif = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif") || /#clip\.gif$/.test(url);
-      const kind = isGif(mediaUrl);
-      return { mediaUrl, mediaUrls: [...state.mediaUrls.filter((url) => url !== mediaUrl && isGif(url) !== kind), mediaUrl] };
+      const guessed: "gif" | "video" = mediaUrl.split(/[?#]/)[0].toLowerCase().endsWith(".gif") || /#clip\.gif$/.test(mediaUrl) ? "gif" : "video";
+      const kindOfNew = kind ?? guessed;
+      const kinds = { ...state.mediaKinds, [mediaUrl]: kindOfNew };
+      const kept = state.mediaUrls.filter((url) => url !== mediaUrl && (kinds[url] ?? "video") !== kindOfNew);
+      const nextKinds: Record<string, "gif" | "video"> = {};
+      for (const url of [...kept, mediaUrl]) nextKinds[url] = kinds[url] ?? "video";
+      return { mediaUrl, mediaUrls: [...kept, mediaUrl], mediaKinds: nextKinds };
     }),
   setStopMotionUrl: (stopMotionUrl) => set({ stopMotionUrl }),
   setSlotClipUrl: (slot, url) =>

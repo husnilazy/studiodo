@@ -63,6 +63,8 @@ const IconMinus = ({ className }: IconProps) => (
 // The URL's extension decides GIF vs video. Local fallbacks are blob: URLs, so SesiFoto tags those with a
 // "#clip.gif" / "#clip.video" fragment — strip query/fragment before looking at the extension.
 const isGifUrl = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif");
+// The session store knows what each result file is; the address is only a fallback.
+const kindIsGif = (kinds: Record<string, "gif" | "video">, url: string) => (kinds[url] ? kinds[url] === "gif" : isGifUrl(url));
 
 function canvasToJpegBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
@@ -112,7 +114,7 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
@@ -198,7 +200,8 @@ export default function Hasil() {
         const urls = [data?.gifUrl, data?.videoUrl].filter(Boolean) as string[];
         if (urls.length > 0) {
           if (!cancelled) {
-            urls.forEach((url) => setMediaUrl(url));
+            if (data?.gifUrl) setMediaUrl(data.gifUrl, "gif");
+            if (data?.videoUrl) setMediaUrl(data.videoUrl, "video");
             setAwaitingMedia(false);
           }
           return;
@@ -530,7 +533,7 @@ export default function Hasil() {
   const previewCount = 1 + mediaUrls.length + (showExtraMediaSlide ? 1 : 0) + (hasStopMotion ? 1 : 0);
   const stopMotionIndex = hasStopMotion ? previewCount - 1 : -1;
   const currentMediaUrl = previewIndex > 0 && previewIndex !== stopMotionIndex && previewIndex <= mediaUrls.length ? mediaUrls[previewIndex - 1] : null;
-  const currentMediaIsGif = currentMediaUrl ? isGifUrl(currentMediaUrl) : false;
+  const currentMediaIsGif = currentMediaUrl ? kindIsGif(mediaKinds, currentMediaUrl) : false;
 
   // A media src that fails to load (e.g. a transient permission-propagation
   // hiccup right after upload) used to just sit there as a permanently
@@ -583,7 +586,7 @@ export default function Hasil() {
                 {Array.from({ length: previewCount }).map((_, index) => {
                   const isStopMotionTab = index === stopMotionIndex;
                   const url = !isStopMotionTab && index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
-                  const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
+                  const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (kindIsGif(mediaKinds, url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
                   return (
                     <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
                       {isStopMotionTab && stopMotionState === "making" && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}

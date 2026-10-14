@@ -1036,28 +1036,28 @@ export default function SesiFoto() {
       const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.video` : null;
       const online = isBrowserOnline() && !isOfflineSessionId(sessionId);
       if (!online) {
-        if (localGifUrl) setMediaUrl(localGifUrl);
-        if (localVideoUrl) setMediaUrl(localVideoUrl);
+        if (localGifUrl) setMediaUrl(localGifUrl, "gif");
+        if (localVideoUrl) setMediaUrl(localVideoUrl, "video");
       }
       if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
         if (gifBlob) {
           try {
             const result = await api.uploadMedia(sessionId, "gif", gifBlob);
             const finalGif = result?.gifUrl ?? localGifUrl;
-            if (finalGif) setMediaUrl(finalGif);
+            if (finalGif) setMediaUrl(finalGif, "gif");
           } catch (error) {
             console.error("Gagal upload GIF gabungan", error);
-            if (localGifUrl) setMediaUrl(localGifUrl);
+            if (localGifUrl) setMediaUrl(localGifUrl, "gif");
           }
         }
         if (videoBlob) {
           try {
             const result = await api.uploadMedia(sessionId, "video", videoBlob);
             const finalVideo = result?.videoUrl ?? localVideoUrl;
-            if (finalVideo) setMediaUrl(finalVideo);
+            if (finalVideo) setMediaUrl(finalVideo, "video");
           } catch (error) {
             console.error("Gagal upload video gabungan", error);
-            if (localVideoUrl) setMediaUrl(localVideoUrl);
+            if (localVideoUrl) setMediaUrl(localVideoUrl, "video");
           }
         }
       }
