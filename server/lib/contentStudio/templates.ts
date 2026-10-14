@@ -146,20 +146,71 @@ function mockHub(): string {
     <div class="core pop" style="--d:.1s"><div style="display:grid;place-items:center;gap:10px"><svg width="80" height="80" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#fff" fill-opacity=".95"/><circle cx="32" cy="32" r="12" fill="#4f4fe8"/><circle cx="32" cy="32" r="5" fill="#fff"/></svg><b>Dashboard</b></div></div></div>`;
 }
 
-const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit" }> = {
-  dashboard: { html: () => mockDashboard(), fit: "crop" },
-  qris: { html: (_s, reel) => mockQris(reel), fit: "crop" },
-  gallery: { html: (s) => mockGallery(s.images), fit: "crop" },
-  booth: { html: (s) => mockBooth(s.images), fit: "crop" },
-  strip: { html: (s) => mockStrip(s.images), fit: "fit" },
-  queue: { html: () => mockQueue(), fit: "fit" },
-  hub: { html: () => mockHub(), fit: "fit" },
+const lphoto = (i: number, images: string[] | undefined, extra = "") => photo(i, images, extra);
+const popIn = (delay: number) => `animation:pop .6s cubic-bezier(.3,1.5,.5,1) both;animation-delay:calc(var(--s,0s) + ${delay}s)`;
+
+function mockQrisL(reel: boolean): string {
+  return `<div class="mock mon"><div class="bez"><div class="lscr">
+    <div class="l-left">
+      <span class="chip">Pembayaran</span>
+      <h3>Scan QRIS<br>untuk mulai</h3>
+      <div class="sub">Paket Strip 4 Foto · Rp 35.000</div>
+      <div class="ls"><i>1</i>Buka aplikasi pembayaran kamu</div>
+      <div class="ls"><i>2</i>Scan kode di samping</div>
+      <div class="ls"><i>3</i>Sesi foto langsung dimulai</div>
+    </div>
+    <div class="l-right"><div class="qr pop" style="--d:.3s">${qrCells()}</div></div>
+    ${reel ? `<div class="paid pop" style="--d:2.4s"><div class="ck">${icon("check", 84, 3.2, "#fff")}</div><h3>Pembayaran diterima</h3><div class="sub">Rp 35.000 · QRIS</div></div>` : ""}
+  </div></div><div class="neck"></div><div class="base"></div></div>`;
+}
+
+function mockBoothL(images?: string[]): string {
+  return `<div class="mock mon"><div class="bez"><div class="lscr" style="grid-template-columns:1.25fr 1fr">
+    <div class="l-left" style="padding:28px"><div class="cam" style="background:${PHOTO_BG[0]}">${lphoto(1, images, "position:absolute;inset:0;aspect-ratio:auto;border-radius:0")}<div class="cnt3 pop" style="--d:.6s">3</div></div></div>
+    <div class="l-right" style="gap:16px;align-content:center;justify-items:center">
+      <span class="chip">Sesi foto</span>
+      <h3 style="text-align:center">Foto 1 dari 4</h3>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="minis">${[0, 1, 2, 3].map((i) => lphoto(i + 1, images, "opacity:" + (i === 0 ? "1" : ".45"))).join("")}</div>
+      <div class="bigbtn in" ${D(0.3)}>Mulai Foto</div>
+    </div>
+  </div></div><div class="neck"></div><div class="base"></div></div>`;
+}
+
+function mockGalleryL(images?: string[]): string {
+  return `<div class="mock mon"><div class="bez"><div class="lscr" style="grid-template-columns:1.3fr 1fr">
+    <div class="l-left" style="padding:30px"><div class="g4">${[0, 1, 2, 3].map((i) => lphoto(i, images, popIn(0.5 + i * 0.15))).join("")}</div></div>
+    <div class="l-right" style="gap:14px;align-content:center;justify-items:center">
+      <h3 style="text-align:center;font-size:30px">Foto kamu siap</h3>
+      <div class="qr sm pop" style="--d:1.0s">${qrCells()}</div>
+      <div class="sub">Scan untuk unduh di HP</div>
+      <div class="dl" style="width:100%"><span>Unduh semua</span><span>Bagikan</span></div>
+    </div>
+  </div></div><div class="neck"></div><div class="base"></div></div>`;
+}
+
+function mockPrintL(images?: string[]): string {
+  return `<div class="mock"><div class="print float"><div class="pg">${[0, 1, 2, 3].map((i) => `<div style="${popIn(0.4 + i * 0.22)}">${lphoto(i, images)}</div>`).join("")}</div><div class="lb"><span>STUDIODO</span><span>Cetak 4R · landscape</span></div></div></div>`;
+}
+
+const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit"; k: number }> = {
+  dashboard: { html: () => mockDashboard(), fit: "crop", k: 1 },
+  qris: { html: (_s, reel) => mockQris(reel), fit: "crop", k: 0.82 },
+  gallery: { html: (s) => mockGallery(s.images), fit: "crop", k: 0.8 },
+  booth: { html: (s) => mockBooth(s.images), fit: "crop", k: 0.82 },
+  strip: { html: (s) => mockStrip(s.images), fit: "fit", k: 0.45 },
+  queue: { html: () => mockQueue(), fit: "fit", k: 0.9 },
+  hub: { html: () => mockHub(), fit: "fit", k: 0.72 },
+  "qris-l": { html: (_s, reel) => mockQrisL(reel), fit: "fit", k: 0.7 },
+  "booth-l": { html: (s) => mockBoothL(s.images), fit: "fit", k: 0.7 },
+  "gallery-l": { html: (s) => mockGalleryL(s.images), fit: "fit", k: 0.7 },
+  "print-l": { html: (s) => mockPrintL(s.images), fit: "fit", k: 0.6 },
 };
 
 const stage = (s: Slide, reel: boolean, d = 0.36) => {
   if (!s.mockup || s.mockup === "none") return "";
   const m = MOCKS[s.mockup];
-  return `<div class="stage in" data-fit="${m.fit}" data-k="${s.mockup === "qris" || s.mockup === "booth" ? 0.82 : s.mockup === "gallery" ? 0.8 : 1}" ${D(d)}>${m.html(s, reel)}</div>`;
+  return `<div class="stage in" data-fit="${m.fit}" data-k="${m.k}" style="--d:${d}s;--k:${m.k}">${m.html(s, reel)}</div>`;
 };
 const note = (s: Slide) => (s.note ? `<div class="pill in" ${D(0.7)}>${rich(s.note)}</div>` : "");
 const eyebrow = (s: Slide) => (s.eyebrow ? `<div class="eyebrow in"><span class="dot"></span>${esc(s.eyebrow)}</div>` : "");

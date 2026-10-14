@@ -107,6 +107,40 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .glass{background:var(--card);border:1px solid var(--cb);box-shadow:var(--shadow);border-radius:36px}
 .stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;margin:0 -50px;padding:0 50px 0}
 .mock{transform:scale(var(--k,1));transform-origin:center}
+/* Layout must not depend on the fit script (it is only a refinement): per-mockup --k is set inline on the stage. */
+.stagebox:not(.reel) .stage[data-fit="crop"]{align-items:flex-start;overflow:hidden;-webkit-mask-image:linear-gradient(#000 82%,transparent);mask-image:linear-gradient(#000 82%,transparent)}
+.stagebox:not(.reel) .stage[data-fit="crop"] .mock{transform-origin:top center}
+.stagebox:not(.reel) .stage[data-fit="fit"]{overflow:hidden}
+/* ---- landscape kiosk / monitor mockups ---- */
+.mon{width:880px;display:grid;justify-items:center}
+.mon .bez{width:100%;border-radius:30px;background:#0b1020;padding:16px;box-shadow:0 40px 90px rgba(11,16,32,.35)}
+.mon .neck{width:110px;height:40px;background:linear-gradient(#1b2236,#0b1020)}
+.mon .base{width:300px;height:16px;border-radius:12px;background:#0b1020;box-shadow:0 14px 30px rgba(11,16,32,.25)}
+.lscr{border-radius:18px;overflow:hidden;background:linear-gradient(160deg,#f2f3ff,#fff);aspect-ratio:16/10;display:grid;grid-template-columns:1.1fr 1fr;color:#0b1020;position:relative}
+.lscr .l-left{padding:40px 42px;display:flex;flex-direction:column;justify-content:center;gap:16px}
+.lscr .l-right{display:grid;place-items:center;background:linear-gradient(160deg,#e3e6ff,#f4f5ff);padding:24px}
+.lscr h3{font-family:"Sora";font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.lscr .sub{font-size:20px;color:#5b6478;font-weight:600}
+.lscr .qr{width:300px;height:300px;padding:16px}
+.lscr .qr.sm{width:190px;height:190px;padding:12px}
+.lscr .chip{align-self:flex-start}
+.lscr .cnt3{font-size:150px}
+.lscr .bigbtn{font-size:24px;padding:18px 46px;text-align:center}
+.lscr .dl span{font-size:16px;padding:12px 8px;white-space:nowrap}
+.ls{display:flex;align-items:center;gap:14px;font-size:19px;font-weight:600;color:#273049}
+.ls i{flex:none;width:34px;height:34px;border-radius:50%;background:#0b1020;color:#fff;font-style:normal;font-weight:700;font-size:17px;display:grid;place-items:center}
+.cam{position:relative;width:100%;aspect-ratio:4/3;border-radius:20px;overflow:hidden}
+.cam .ph{position:absolute;inset:0;aspect-ratio:auto;border-radius:0}
+.dots{display:flex;gap:10px}.dots i{width:16px;height:16px;border-radius:50%;background:#cfd3f5}.dots i.on{background:#4f4fe8}
+.minis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.minis .ph{aspect-ratio:4/3;border-radius:8px}
+.g4{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+.g4 .ph{aspect-ratio:4/3;border-radius:16px}
+.print{width:760px;padding:26px 26px 22px;background:#fff;border-radius:8px;box-shadow:0 30px 70px rgba(11,16,32,.28);display:grid;gap:14px}
+.print .pg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.print .pg .ph{aspect-ratio:16/10;border-radius:4px}
+.print .lb{display:flex;justify-content:space-between;font-family:"Sora";font-weight:700;font-size:20px;color:#0b1020;letter-spacing:.08em}
+.print .lb span:last-child{font-weight:400;color:#7a8296;letter-spacing:.02em;font-family:"Plus Jakarta Sans"}
 .win{width:900px;border-radius:34px;background:var(--card);border:1px solid var(--cb);box-shadow:var(--shadow);overflow:hidden}
 .t-light .win,.t-mint .win{background:#fff}
 .win .bar{height:58px;display:flex;align-items:center;gap:10px;padding:0 24px;background:var(--soft)}

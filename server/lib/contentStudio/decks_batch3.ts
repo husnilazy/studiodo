@@ -172,7 +172,7 @@ export const BATCH3_DECKS: Deck[] = [
     slides: [
       { kind: "cover", eyebrow: "Tampilan kiosk", title: "Portrait atau|*landscape?*", body: "Dua-duanya didukung.", mockup: "booth" },
       { kind: "compare", eyebrow: "Dua orientasi", title: "Pilih yang *cocok dengan boothmu*", labelBefore: "Portrait", labelAfter: "Landscape", itemsBefore: ["Berdiri tegak, hemat tempat", "Pas untuk strip foto vertikal"], items: ["Layar lebar untuk foto grup", "Pas untuk layar horizontal"] },
-      { kind: "feature", eyebrow: "Screen Builder", title: "Tata layar *sesuai orientasi*", body: "Atur tampilan kiosk lewat Screen Builder supaya tetap rapi di orientasi apa pun.", mockup: "qris", note: "Tampilan kiosk *sesuai brand*" },
+      { kind: "feature", eyebrow: "Screen Builder", title: "Tata layar *sesuai orientasi*", body: "Atur tampilan kiosk lewat Screen Builder supaya tetap rapi di orientasi apa pun.", mockup: "qris-l", note: "Tampilan kiosk *sesuai brand*" },
       CTA("Atur orientasi booth kamu. Coba gratis.", "mint"),
     ],
   },

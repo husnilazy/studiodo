@@ -45,7 +45,7 @@ Tidak perlu coding atau build ulang untuk deck baru. Coding hanya untuk jenis sl
 
 ### Mockup (`mockup`)
 
-`none` · `dashboard` · `qris` · `gallery` · `booth` · `strip` · `queue` · `hub`
+`none` · `dashboard` · `qris` · `gallery` · `booth` · `strip` · `queue` · `hub` (portrait / netral) dan versi landscape di monitor: `qris-l` · `booth-l` · `gallery-l` · `print-l` (hasil cetak 4R landscape)
 
 ### Foto
 
@@ -88,3 +88,10 @@ Deck seri perkenalan: `carousel-perkenalan-studiodo`, `reel-perkenalan-studiodo`
 - Format **Cover Sorotan 9:16** (1080×1920) dengan jenis slide **Cover Sorotan (ikon)**: hanya ikon + lingkaran di tengah, karena Instagram memotong cover menjadi lingkaran.
 - Deck bawaan `highlight-covers` berisi 6 cover: Kenalan, Fitur, Cara Mulai, FAQ, Update, Event. Ganti **Tema dasar** (indigo, gelap, terang, mint) untuk varian warna, dan pilih ikon lain di editor slide.
 - **Render PNG** menghasilkan satu file per cover dengan nama `sorotan-01-kenalan.png` dst. Unggah satu per satu sebagai cover di Instagram (Sorotan → Edit sorotan → Edit sampul).
+
+## Unduh sebagai video (MP4 HD)
+
+- **Reel**: Render MP4 HD (1080×1920, 30 fps).
+- **Carousel**: dua pilihan. **MP4 per slide (HD)** menghasilkan satu video beranimasi 5 detik per slide (1080×1350), cocok diunggah sebagai slide video dalam carousel Instagram. **MP4 Reel gabungan (HD)** mengubah seluruh carousel menjadi satu Reel 9:16 (tiap slide jadi scene ±4,2 detik).
+- Encode H.264 High, CRF 15, warna BT.709 (warna brand tetap akurat di HP). Tanpa audio: tambahkan musik langsung di Instagram.
+- Cover Sorotan hanya PNG. Render video butuh Chrome + ffmpeg di PC server dan memakan ±1 menit per deck.

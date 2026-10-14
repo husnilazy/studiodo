@@ -56,7 +56,7 @@ contentStudioAdminRouter.post("/preview", async (req, res) => {
 contentStudioAdminRouter.post("/render", async (req, res) => {
   const deck = parseDeck(req.body?.deck);
   if (typeof deck === "string") return res.status(400).json({ error: deck });
-  const mode = req.body?.mode === "mp4" ? "mp4" : "png";
+  const mode = req.body?.mode === "mp4" ? "mp4" : req.body?.mode === "mp4-slides" ? "mp4-slides" : "png";
   try { res.json(await startRender(deck, mode)); }
   catch (e) { res.status(409).json({ error: e instanceof Error ? e.message : "Gagal memulai render" }); }
 });

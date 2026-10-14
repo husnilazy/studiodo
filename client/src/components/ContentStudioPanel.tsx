@@ -8,7 +8,7 @@ import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"], ["badge", "Cover Sorotan (ikon)"]];
 const ICON_OPTIONS: [string, string][] = [["user", "Orang (Kenalan)"], ["grid", "Kisi (Fitur)"], ["play", "Mulai"], ["help", "Tanya (FAQ)"], ["bell", "Lonceng (Update)"], ["ticket", "Tiket (Event/Promo)"], ["qr", "QR (Bayar)"], ["image", "Foto (Hasil)"], ["camera", "Kamera"], ["chart", "Grafik"], ["card", "Kartu"], ["spark", "Kilau"], ["check", "Centang"]];
-const MOCKUPS: [CsMockup, string][] = [["none", "Tanpa mockup"], ["dashboard", "Dashboard"], ["qris", "Kiosk QRIS"], ["gallery", "Galeri HP"], ["booth", "Kiosk sesi foto"], ["strip", "Strip foto"], ["queue", "Antrian"], ["hub", "Hub dashboard (diagram)"]];
+const MOCKUPS: [CsMockup, string][] = [["none", "Tanpa mockup"], ["dashboard", "Dashboard"], ["qris", "Kiosk QRIS"], ["gallery", "Galeri HP"], ["booth", "Kiosk sesi foto"], ["strip", "Strip foto"], ["queue", "Antrian"], ["hub", "Hub dashboard (diagram)"], ["qris-l", "Kiosk QRIS · landscape"], ["booth-l", "Kiosk sesi foto · landscape"], ["gallery-l", "Galeri di monitor · landscape"], ["print-l", "Hasil cetak 4R · landscape"]];
 const TONES: [CsTone, string][] = [["light", "Terang"], ["dark", "Gelap"], ["indigo", "Indigo"], ["mint", "Mint"]];
 const SIZES = { carousel: { w: 1080, h: 1350 }, reel: { w: 1080, h: 1920 }, highlight: { w: 1080, h: 1920 } } as const;
 const PREVIEW_W = 400;
@@ -90,7 +90,7 @@ export function ContentStudioPanel() {
     await contentStudioApi.deleteDeck(draft.id);
     const d = await load(); setDirty(false); setDraft(d.find((x) => x.id === draft.id) ?? d[0] ?? null); setSel(0);
   };
-  const render = async (mode: "png" | "mp4") => {
+  const render = async (mode: "png" | "mp4" | "mp4-slides") => {
     if (!draft) return;
     setMessage(null);
     try { const j = await contentStudioApi.render(draft, mode); if (j) setJob(j); }
@@ -233,12 +233,18 @@ export function ContentStudioPanel() {
               <div className="mt-2 w-full max-w-[520px] rounded-xl border border-fg/10 bg-canvas p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <button disabled={!env?.chrome || job?.status === "running"} onClick={() => render("png")} className="rounded-full bg-fg px-4 py-2 text-xs font-bold text-canvas disabled:opacity-40">Render PNG{draft.format === "reel" ? " (tiap scene)" : ` (${draft.slides.length} ${draft.format === "highlight" ? "cover" : "slide"})`}</button>
-                  {draft.format === "reel" && <button disabled={!env?.chrome || !env?.ffmpeg || job?.status === "running"} onClick={() => render("mp4")} className="rounded-full bg-accent px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Render MP4 (30 fps)</button>}
+                  {draft.format === "reel" && <button disabled={!env?.chrome || !env?.ffmpeg || job?.status === "running"} onClick={() => render("mp4")} className="rounded-full bg-accent px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Render MP4 HD (30 fps)</button>}
+                  {draft.format === "carousel" && (
+                    <>
+                      <button disabled={!env?.chrome || !env?.ffmpeg || job?.status === "running"} onClick={() => render("mp4-slides")} title="Satu video beranimasi per slide, bisa diunggah sebagai slide video di carousel Instagram" className="rounded-full bg-accent px-4 py-2 text-xs font-bold text-white disabled:opacity-40">MP4 per slide (HD)</button>
+                      <button disabled={!env?.chrome || !env?.ffmpeg || job?.status === "running"} onClick={() => render("mp4")} title="Seluruh carousel menjadi satu Reel 9:16" className="rounded-full bg-accent px-4 py-2 text-xs font-bold text-white disabled:opacity-40">MP4 Reel gabungan (HD)</button>
+                    </>
+                  )}
                   {dirty && <span className="text-[11px] text-amber-600">Render memakai versi yang sedang diedit.</span>}
                 </div>
                 {job && (
                   <div className="mt-3 text-xs">
-                    {job.status === "running" && (<><div className="h-2 overflow-hidden rounded-full bg-fg/10"><div className="h-full bg-accent transition-all" style={{ width: `${Math.round(job.progress * 100)}%` }} /></div><p className="mt-1 text-fg/60">{job.label} · {Math.round(job.progress * 100)}%{job.mode === "mp4" ? " (±30–60 detik)" : ""}</p></>)}
+                    {job.status === "running" && (<><div className="h-2 overflow-hidden rounded-full bg-fg/10"><div className="h-full bg-accent transition-all" style={{ width: `${Math.round(job.progress * 100)}%` }} /></div><p className="mt-1 text-fg/60">{job.label} · {Math.round(job.progress * 100)}%{job.mode !== "png" ? " (video: ±1–2 menit)" : ""}</p></>)}
                     {job.status === "error" && <p className="text-red-500">Gagal: {job.error}</p>}
                     {job.status === "done" && (
                       <div className="grid gap-1.5">
@@ -316,7 +322,7 @@ export function ContentStudioPanel() {
                     <input ref={bgRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f, "bg"); e.target.value = ""; }} />
                   </div>
                 </div>
-                {["gallery", "booth", "strip"].includes(slide.mockup ?? "") && (
+                {["gallery", "booth", "strip", "booth-l", "gallery-l", "print-l"].includes(slide.mockup ?? "") && (
                   <div>
                     <p className="text-xs font-semibold text-fg/60">Foto asli untuk mockup ({slide.images?.length ?? 0})</p>
                     <div className="mt-1 flex flex-wrap gap-2">

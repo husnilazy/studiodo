@@ -61,7 +61,16 @@ export function ContentPlanPanel({ decks, onOpenDeck }: { decks: CsDeck[]; onOpe
   const latest = useRef<CsPlan | null>(null);
   const today = ymd(new Date());
 
-  useEffect(() => { contentStudioApi.plan().then((p) => { if (p) { setPlan(p); latest.current = p; } }).catch((e) => setMessage({ ok: false, text: e instanceof Error ? e.message : "Gagal memuat rencana" })); }, []);
+  // A server that predates the plan routes answers GET /plan with the app's index.html (200, not JSON), so the API helper
+  // returns undefined instead of throwing. Say so instead of spinning forever.
+  const OLD_SERVER = "Server belum mendukung Rencana & jadwal. Jalankan build:server, lalu restart service StudiodoServer (server memuat kodenya hanya saat start).";
+  const load = useCallback(() => {
+    setMessage(null);
+    contentStudioApi.plan()
+      .then((p) => { if (p && Array.isArray(p.items)) { setPlan(p); latest.current = p; } else setMessage({ ok: false, text: OLD_SERVER }); })
+      .catch((e) => setMessage({ ok: false, text: e instanceof Error ? e.message : "Gagal memuat rencana" }));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const flush = useCallback(async () => {
     if (!latest.current) return;
@@ -141,7 +150,14 @@ export function ContentPlanPanel({ decks, onOpenDeck }: { decks: CsDeck[]; onOpe
     setNewTitle(""); setOpen(item.id);
   };
 
-  if (!plan) return <p className="text-sm text-fg/50">{message ? message.text : "Memuat rencana…"}</p>;
+  if (!plan) {
+    return message ? (
+      <div className="max-w-xl rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700">
+        <p>{message.text}</p>
+        <button onClick={load} className="mt-3 rounded-full bg-fg px-4 py-1.5 text-xs font-bold text-canvas">Coba lagi</button>
+      </div>
+    ) : <p className="text-sm text-fg/50">Memuat rencana…</p>;
+  }
   const pct = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
   const profileDone = plan.profileChecks.length;
 

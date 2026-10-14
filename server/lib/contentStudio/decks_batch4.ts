@@ -73,6 +73,18 @@ export const BATCH4_DECKS: Deck[] = [
     ],
   },
   {
+    id: "carousel-kiosk-landscape", title: "Carousel · Tampilan kiosk landscape", format: "carousel", tone: "light", handle: H,
+    caption: "Booth dengan monitor lebar? Tampilan kiosk STUDIODO juga mendukung orientasi landscape 🖥️\n\nDari layar QRIS, sesi foto, sampai galeri hasil, semuanya tertata rapi untuk layar horizontal. Pilihan cetak strip, grid, atau satu foto tetap sama.\n\nstudiodo.id (link di bio)",
+    hashtags: [...TAGS, "#landscape", "#kiosk", "#desainbooth"],
+    slides: [
+      { kind: "cover", eyebrow: "Mode landscape", title: "Layar lebar,|*tampilan tetap rapi.*", body: "Kiosk STUDIODO mendukung orientasi landscape.", mockup: "booth-l" },
+      { kind: "feature", eyebrow: "Pembayaran", title: "QRIS di *layar horizontal*", body: "Kode QR dan langkah pembayaran tertata berdampingan.", mockup: "qris-l" },
+      { kind: "feature", eyebrow: "Hasil digital", title: "Galeri dan QR *dalam satu layar*", body: "Customer melihat hasil dan langsung scan untuk mengunduh.", mockup: "gallery-l", note: "Foto, GIF, dan video dalam *satu sesi*" },
+      { kind: "feature", eyebrow: "Cetak", title: "Hasil cetak *landscape*", body: "Pilih strip, grid, atau satu foto sesuai kebutuhan.", mockup: "print-l", note: "Mode cermin / asli untuk *hasil cetak*" },
+      { kind: "cta", tone: "dark", eyebrow: "Mulai sekarang", title: "Atur orientasi *boothmu*", body: "Portrait atau landscape, dua-duanya didukung.", mockup: "none" },
+    ],
+  },
+  {
     id: "highlight-covers", title: "Cover Sorotan Instagram", format: "highlight", tone: "indigo", handle: H,
     caption: "Cover Sorotan (Highlights) Instagram, 1080x1920. Unggah satu per satu sebagai cover sorotan: Instagram memotong menjadi lingkaran di tengah, jadi ikon sudah berada di area aman. Ganti 'Tema dasar' di sebelah kanan untuk varian warna lain.",
     hashtags: [],

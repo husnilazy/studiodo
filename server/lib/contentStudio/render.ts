@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import puppeteer, { type Browser } from "puppeteer-core";
+import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { resolveFfmpeg } from "../ffmpeg.js";
 import { BUILTIN_DECKS } from "./decks.js";
 import { buildReelDoc, buildSlideDoc, SLIDE_SETTLE_MS } from "./templates.js";
@@ -145,7 +145,7 @@ export function renderEnvironment(): { chrome: string | null; ffmpeg: boolean } 
 
 // ---- jobs (in memory; outputs on disk, pruned after a day) ----
 export type Job = {
-  id: string; deckId: string; mode: "png" | "mp4"; status: "running" | "done" | "error";
+  id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides"; status: "running" | "done" | "error";
   progress: number; label: string; files: { name: string; size: number }[]; error?: string; startedAt: number;
 };
 const jobs = new Map<string, Job>();
@@ -191,51 +191,90 @@ async function renderPng(job: Job, deck: Deck, dir: string) {
 }
 
 const FPS = 30;
-async function renderMp4(job: Job, deck: Deck, dir: string) {
+const SLIDE_VIDEO_SEC = 5; // per-slide video: every slide animation settles within ~3.6 s, then a short hold
+
+/** H.264 High, CRF 15, BT.709-tagged yuv420p: HD output that keeps STUDIODO's colours on phones. */
+function startEncoder(out: string) {
   const ffmpeg = resolveFfmpeg();
   if (!ffmpeg) throw new Error("ffmpeg tidak ditemukan di server");
+  const proc = spawn(ffmpeg, [
+    "-y", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "15", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", String(FPS),
+    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos:out_color_matrix=bt709,format=yuv420p",
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+    "-movflags", "+faststart", "-an", out,
+  ], { stdio: ["pipe", "ignore", "pipe"] });
+  let stderr = "";
+  proc.stderr.on("data", (c) => { stderr = (stderr + c).slice(-1500); });
+  const closed = new Promise<void>((resolve, reject) => {
+    proc.on("error", reject);
+    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr}`))));
+  });
+  closed.catch(() => undefined); // surfaced when awaited below; this only prevents an unhandled-rejection crash meanwhile
+  proc.stdin.on("error", () => undefined);
+  return { proc, closed };
+}
+
+/** Seeks the (paused) page frame by frame and pipes JPEG frames into ffmpeg. */
+async function recordFrames(page: Page, out: string, frames: number, onFrame: (f: number) => void, cover?: { at: number; path: string }) {
+  const enc = startEncoder(out);
+  for (let f = 0; f < frames; f++) {
+    await page.evaluate(`window.__seek(${((f / FPS) * 1000).toFixed(2)})`);
+    const shot = (await page.screenshot({ type: "jpeg", quality: 96 })) as Uint8Array;
+    if (!enc.proc.stdin.write(shot)) await new Promise<void>((r) => enc.proc.stdin.once("drain", () => r()));
+    if (cover && f === cover.at) await writeFile(cover.path, shot);
+    onFrame(f);
+  }
+  enc.proc.stdin.end();
+  await enc.closed;
+}
+
+/** One continuous video: a native reel as is, or a carousel re-laid-out as a 9:16 reel (every slide becomes a scene). */
+async function renderMp4(job: Job, deck: Deck, dir: string) {
+  const native = deck.format === "reel";
+  const reelDeck: Deck = native ? deck : { ...deck, format: "reel", slides: deck.slides.map((sl) => ({ ...sl, seconds: sl.seconds ?? 4.2 })) };
   const { width, height } = FORMATS.reel;
-  const { html, durationSec } = buildReelDoc(deck);
+  const { html, durationSec } = buildReelDoc(reelDeck);
   const frames = Math.ceil(durationSec * FPS);
-  const out = path.join(dir, `${slug(deck.title)}.mp4`);
+  const out = path.join(dir, `${slug(deck.title)}${native ? "" : "-reel"}.mp4`);
   const browser = await launch();
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width, height: FORMATS.reel.height, deviceScaleFactor: 1 });
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });
     await page.waitForFunction("window.__ready === true", { timeout: 20000 });
-
-    const proc = spawn(ffmpeg, [
-      "-y", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-",
-      "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p", "-r", String(FPS),
-      "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-movflags", "+faststart", "-an", out,
-    ], { stdio: ["pipe", "ignore", "pipe"] });
-    let stderr = "";
-    proc.stderr.on("data", (c) => { stderr = (stderr + c).slice(-1500); });
-    const closed = new Promise<void>((resolve, reject) => {
-      proc.on("error", reject);
-      proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr}`))));
-    });
-    proc.stdin.on("error", () => undefined); // surfaced through `closed`
-
-    for (let f = 0; f < frames; f++) {
-      await page.evaluate(`window.__seek(${((f / FPS) * 1000).toFixed(2)})`);
-      const shot = (await page.screenshot({ type: "jpeg", quality: 92 })) as Uint8Array;
-      if (!proc.stdin.write(shot)) await new Promise<void>((r) => proc.stdin.once("drain", () => r()));
-      if (f === Math.min(frames - 1, Math.round(FPS * 2.2))) await writeFile(path.join(dir, `${slug(deck.title)}-cover.jpg`), shot);
-      job.progress = (f + 1) / frames * 0.97;
-      job.label = `Frame ${f + 1} / ${frames}`;
-    }
-    proc.stdin.end();
-    job.label = "Menggabungkan video…";
-    await closed;
+    await recordFrames(page, out, frames, (f) => { job.progress = ((f + 1) / frames) * 0.97; job.label = `Frame ${f + 1} / ${frames}`; },
+      { at: Math.min(frames - 1, Math.round(FPS * 2.2)), path: path.join(dir, `${slug(deck.title)}-cover.jpg`) });
+    job.label = "Menyelesaikan video…";
   } finally {
     await browser.close();
   }
 }
 
-export async function startRender(deckIn: Deck, mode: "png" | "mp4"): Promise<Job> {
-  if (mode === "mp4" && deckIn.format !== "reel") throw new Error("MP4 hanya untuk deck format Reel");
+/** One short animated video per carousel slide (upload them as video slides in an Instagram carousel). */
+async function renderMp4Slides(job: Job, deck: Deck, dir: string) {
+  const { width, height } = FORMATS[deck.format];
+  const per = Math.ceil(SLIDE_VIDEO_SEC * FPS);
+  const total = per * deck.slides.length;
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    for (let i = 0; i < deck.slides.length; i++) {
+      await page.setContent(buildSlideDoc(deck, i), { waitUntil: "load" });
+      await page.waitForFunction("window.__ready === true", { timeout: 20000 });
+      const out = path.join(dir, `${slug(deck.title)}-${String(i + 1).padStart(2, "0")}.mp4`);
+      await recordFrames(page, out, per, (f) => { job.progress = ((i * per + f + 1) / total) * 0.98; job.label = `Slide ${i + 1} / ${deck.slides.length} · frame ${f + 1} / ${per}`; });
+    }
+    job.label = "Menyelesaikan video…";
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function startRender(deckIn: Deck, mode: "png" | "mp4" | "mp4-slides"): Promise<Job> {
+  if (mode !== "png" && deckIn.format === "highlight") throw new Error("Cover Sorotan hanya tersedia sebagai PNG");
+  if (mode === "mp4-slides" && deckIn.format !== "carousel") throw new Error("MP4 per slide hanya untuk carousel");
   if (!deckIn.slides.length) throw new Error("Deck belum punya slide");
   if ([...jobs.values()].some((j) => j.status === "running")) throw new Error("Masih ada render yang berjalan, tunggu selesai dulu");
   await pruneOldJobs();
@@ -247,6 +286,7 @@ export async function startRender(deckIn: Deck, mode: "png" | "mp4"): Promise<Jo
   (async () => {
     try {
       if (mode === "png") await renderPng(job, deck, dir);
+      else if (mode === "mp4-slides") await renderMp4Slides(job, deck, dir);
       else await renderMp4(job, deck, dir);
       await finish(job, dir);
     } catch (e) {

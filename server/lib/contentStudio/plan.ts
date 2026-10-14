@@ -70,6 +70,7 @@ const SEED: [string, string, string, "carousel" | "reel", string][] = [
   ["carousel-printer-cetak", "Printer & format cetak", "Kamera & cetak", "carousel", PHASES.depth],
   ["carousel-mirror-asli", "Mode cermin vs asli", "Kamera & cetak", "carousel", PHASES.depth],
   ["carousel-portrait-landscape", "Portrait atau landscape", "Pengalaman booth", "carousel", PHASES.depth],
+  ["carousel-kiosk-landscape", "Tampilan kiosk landscape", "Pengalaman booth", "carousel", PHASES.depth],
   ["carousel-update-otomatis", "Update otomatis per kiosk", "Andal", "carousel", PHASES.depth],
   ["reel-saldo-penarikan", "Reel: Saldo & penarikan dana", "Pembayaran", "reel", PHASES.depth],
   ["carousel-kreator-marketplace", "Jadi kreator, jual frame", "Kreator", "carousel", PHASES.depth],

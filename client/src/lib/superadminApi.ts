@@ -559,7 +559,7 @@ export const superadminApi = {
 };
 
 // ---- Konten Instagram (Content Studio) ----
-export type CsMockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip";
+export type CsMockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
 export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge";
 export type CsTone = "light" | "dark" | "indigo" | "mint";
 export type CsSlide = {
@@ -569,7 +569,7 @@ export type CsSlide = {
 };
 export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
-export type CsJob = { id: string; deckId: string; mode: "png" | "mp4"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
+export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
 export type CsPlanStatus = "ide" | "draf" | "siap" | "terjadwal" | "terposting";
 export type CsPlanItem = { id: string; title: string; phase: string; pillar: string; format: "carousel" | "reel" | "story"; deckId?: string; date?: string; time?: string; status: CsPlanStatus; checks: string[]; notes?: string };
@@ -585,7 +585,7 @@ export const contentStudioApi = {
   saveDeck: (deck: CsDeck) => request<CsDeck>(`/content-studio/decks/${encodeURIComponent(deck.id)}`, { method: "PUT", body: JSON.stringify(deck) }),
   deleteDeck: (id: string) => request<{ ok: boolean }>(`/content-studio/decks/${encodeURIComponent(id)}`, { method: "DELETE" }),
   preview: (deck: CsDeck, index: number) => request<{ html: string }>("/content-studio/preview", { method: "POST", body: JSON.stringify({ deck, index }) }),
-  render: (deck: CsDeck, mode: "png" | "mp4") => request<CsJob>("/content-studio/render", { method: "POST", body: JSON.stringify({ deck, mode }) }),
+  render: (deck: CsDeck, mode: "png" | "mp4" | "mp4-slides") => request<CsJob>("/content-studio/render", { method: "POST", body: JSON.stringify({ deck, mode }) }),
   job: (id: string) => request<CsJob>(`/content-studio/jobs/${id}`),
   uploadAsset: (name: string, dataUrl: string) => request<{ name: string }>("/content-studio/assets", { method: "POST", body: JSON.stringify({ name, dataUrl }) }),
   /** Downloads need the Bearer header, so fetch as a blob and click a temporary link. */
