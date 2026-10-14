@@ -557,3 +557,39 @@ export const superadminApi = {
   convertApplication: (id: string, body: { slug: string; password: string; trialDays?: number }) =>
     request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
 };
+
+// ---- Konten Instagram (Content Studio) ----
+export type CsMockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip";
+export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta";
+export type CsTone = "light" | "dark" | "indigo" | "mint";
+export type CsSlide = {
+  kind: CsSlideKind; tone?: CsTone; eyebrow?: string; title: string; body?: string; mockup?: CsMockup; note?: string;
+  items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
+  images?: string[]; seconds?: number;
+};
+export type CsDeck = { id: string; title: string; format: "carousel" | "reel"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
+export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
+export type CsJob = { id: string; deckId: string; mode: "png" | "mp4"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
+
+export const contentStudioApi = {
+  status: () => request<{ chrome: string | null; ffmpeg: boolean }>("/content-studio/status"),
+  decks: () => request<CsDeck[]>("/content-studio/decks"),
+  ideas: () => request<CsIdea[]>("/content-studio/ideas"),
+  saveDeck: (deck: CsDeck) => request<CsDeck>(`/content-studio/decks/${encodeURIComponent(deck.id)}`, { method: "PUT", body: JSON.stringify(deck) }),
+  deleteDeck: (id: string) => request<{ ok: boolean }>(`/content-studio/decks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  preview: (deck: CsDeck, index: number) => request<{ html: string }>("/content-studio/preview", { method: "POST", body: JSON.stringify({ deck, index }) }),
+  render: (deck: CsDeck, mode: "png" | "mp4") => request<CsJob>("/content-studio/render", { method: "POST", body: JSON.stringify({ deck, mode }) }),
+  job: (id: string) => request<CsJob>(`/content-studio/jobs/${id}`),
+  uploadAsset: (name: string, dataUrl: string) => request<{ name: string }>("/content-studio/assets", { method: "POST", body: JSON.stringify({ name, dataUrl }) }),
+  /** Downloads need the Bearer header, so fetch as a blob and click a temporary link. */
+  async download(jobId: string, name: string) {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin/content-studio/jobs/${jobId}/files/${encodeURIComponent(name)}`, {
+      headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {},
+    });
+    if (!res.ok) throw new Error("Gagal mengunduh file");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+};

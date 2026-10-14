@@ -18,6 +18,7 @@ import { paymentGatewaysAdminRouter } from "./paymentGateways.js";
 import { reconcileOrder } from "../lib/billing.js";
 import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
+import { contentStudioAdminRouter } from "./contentStudio.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -88,6 +89,7 @@ superadminRouter.use("/assets", siteAssetsAdminRouter);
 superadminRouter.use("/payment-gateways", paymentGatewaysAdminRouter);
 superadminRouter.use("/licenses", licensesAdminRouter);
 superadminRouter.use("/notifications", notificationsAdminRouter);
+superadminRouter.use("/content-studio", contentStudioAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of

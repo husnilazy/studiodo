@@ -20,7 +20,7 @@ function works(binary: string) {
 
 // FFMPEG_PATH wins, then a system ffmpeg (the Docker image installs one — the
 // ffmpeg-static binary is glibc-only and does not run on Alpine), then ffmpeg-static.
-function resolveFfmpeg(): string | null {
+export function resolveFfmpeg(): string | null {
   if (cachedBinary !== undefined) return cachedBinary;
   const candidates: string[] = [];
   if (process.env.FFMPEG_PATH) candidates.push(process.env.FFMPEG_PATH);

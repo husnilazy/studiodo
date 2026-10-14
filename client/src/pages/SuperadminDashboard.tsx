@@ -35,6 +35,7 @@ const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").
 const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
 const SuperadminSecurityPanel = lazy(() => import("@/components/SuperadminSecurityPanel").then((m) => ({ default: m.SuperadminSecurityPanel })));
 const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
+const ContentStudioPanel = lazy(() => import("@/components/ContentStudioPanel").then((m) => ({ default: m.ContentStudioPanel })));
 const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
@@ -1362,7 +1363,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
@@ -1385,6 +1386,7 @@ const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon
     { id: "blog", label: "Blog", icon: "file" },
     { id: "marketplace", label: "Marketplace", icon: "image" },
     { id: "creators", label: "Kreator", icon: "sparkles" },
+    { id: "instagram", label: "Konten Instagram", icon: "image" },
   ] },
   { title: "Sistem", items: [{ id: "settings", label: "Pengaturan", icon: "sliders" }] },
 ];
@@ -1583,6 +1585,7 @@ export default function SuperadminDashboard() {
         {section === "website" && <SiteContentPanel />}
 
         {section === "blog" && <BlogPanel />}
+        {section === "instagram" && <ContentStudioPanel />}
 
         {section === "marketplace" && <MarketplacePanel />}
 
