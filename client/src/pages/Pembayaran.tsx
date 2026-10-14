@@ -14,6 +14,7 @@ import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext"
 import Positionable from "@/components/Positionable";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { CUSTOM_FRAME_LOCK } from "@/lib/templateStore";
 
 type Mode = "choose" | "voucher" | "qris";
 
@@ -29,7 +30,7 @@ const POLL_FAILURE_TOLERANCE = 5;
 
 export default function Pembayaran() {
   const [, navigate] = useLocation();
-  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession } = useKioskSession();
+  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession, setFrameId, setSelectedTemplateId, setSelectedTemplateData } = useKioskSession();
   const boothConfig = useBoothConfig((state) => state.config);
   const offlineModeEnabled = boothConfig.offlineModeEnabled;
   const eventFreeEntryActive = boothConfig.eventEnabled && boothConfig.eventFreeEntry && (() => {
@@ -297,6 +298,17 @@ export default function Pembayaran() {
     try {
       const result = await api.redeemVoucher(sessionId, code);
       if (!result) throw new Error("Voucher tidak valid");
+      // A custom-frame voucher brings the customer's own frame: lock it in now; the "Pilih Frame" step is skipped.
+      if (result.frame) {
+        setFrameId(result.frame.id);
+        setSelectedTemplateId(result.frame.id);
+        setSelectedTemplateData({
+          id: result.frame.id, name: result.frame.name, category: "custom", style: CUSTOM_FRAME_LOCK,
+          orientation: result.frame.orientation === "landscape" ? "landscape" : "portrait",
+          outputPreset: (result.frame.outputPreset as never) ?? "4r",
+          canvasWidth: result.frame.canvasWidth, canvasHeight: result.frame.canvasHeight, frameDataUrl: result.frame.imageUrl, slots: result.frame.slots,
+        });
+      }
       const isCash = Boolean(result.cash);
       setPayableAmount(result.amount);
       setCashRedeemed(isCash);

@@ -33,6 +33,20 @@ function resolveAssetUrls(values: unknown): string[] {
   return Array.isArray(values) ? values.filter(Boolean).map(resolveAssetUrl) : [];
 }
 
+// Upload responses hand the kiosk the session row. Its media URLs must be absolute like the public-session route's, or a
+// local-storage URL ("/storage/...") resolves against the kiosk's own origin and the result screen shows blank previews.
+function withResolvedMedia<T extends Record<string, any>>(row: T): T {
+  return {
+    ...row,
+    stripUrl: resolveAssetUrl(row.stripUrl) || row.stripUrl,
+    gifUrl: resolveAssetUrl(row.gifUrl) || row.gifUrl,
+    videoUrl: resolveAssetUrl(row.videoUrl) || row.videoUrl,
+    stopMotionUrl: resolveAssetUrl(row.stopMotionUrl) || row.stopMotionUrl,
+    mediaUrls: resolveAssetUrls(row.mediaUrls),
+    slotClipUrls: Array.isArray(row.slotClipUrls) ? row.slotClipUrls.map((u: unknown) => (u ? resolveAssetUrl(u) : u)) : row.slotClipUrls,
+  };
+}
+
 // A stale QR code/link from before the Postgres migration (session ids used
 // to be nanoid strings, e.g. "VhwE5V4J4soUDjS8jmnHz") would otherwise reach
 // the DB and blow up as a raw 500 — see validateUuidParam.ts.
@@ -42,6 +56,8 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
+// The combined output video is now the whole photo session recorded in one take, so it is far bigger than a photo or a 2 s clip.
+const mediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 // POST /api/sessions — mulai sesi baru (setelah pilih paket + orientasi)
 sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req, res) => {
@@ -209,7 +225,7 @@ sessionsRouter.post("/:id/photo", requireKioskAuthUpload, upload.single("photo")
 
 // Same concurrency reasoning as /:id/photo above — media upload can now
 // genuinely overlap with in-flight photo uploads for the same session.
-sessionsRouter.post("/:id/media", requireKioskAuthUpload, upload.single("media"), async (req, res) => {
+sessionsRouter.post("/:id/media", requireKioskAuthUpload, mediaUpload.single("media"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   if (!req.file) return res.status(400).json({ error: "File media wajib diupload" });
@@ -252,7 +268,7 @@ sessionsRouter.post("/:id/media", requireKioskAuthUpload, upload.single("media")
   });
 
   if (!row) return res.status(404).json({ error: "Sesi tidak ditemukan" });
-  res.json(row);
+  res.json(withResolvedMedia(row));
 });
 
 // POST /api/sessions/:id/slot-media — the short clip captured at ONE
@@ -294,7 +310,7 @@ sessionsRouter.post("/:id/slot-media", requireKioskAuthUpload, upload.single("me
   });
 
   if (!row) return res.status(404).json({ error: "Sesi tidak ditemukan" });
-  res.json(row);
+  res.json(withResolvedMedia(row));
 });
 
 sessionsRouter.post("/:id/strip", requireKioskAuthUpload, upload.single("strip"), async (req, res) => {
@@ -330,7 +346,7 @@ sessionsRouter.post("/:id/strip", requireKioskAuthUpload, upload.single("strip")
   });
 
   if (!row) return res.status(404).json({ error: "Sesi tidak ditemukan" });
-  res.json(row);
+  res.json(withResolvedMedia(row));
 });
 
 // POST /api/sessions/:id/finalize — tandai selesai, generate share link + QR data

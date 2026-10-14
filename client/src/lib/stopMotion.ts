@@ -10,11 +10,10 @@ import type { LocalTemplate } from "./templateStore";
 
 export const STOP_MOTION_CATEGORY = "__stopmotion";
 
-const MAX_WIDTH = 720;
+const MAX_WIDTH = 1080; // HD: a 4:5 / 2:3 frame comes out at up to 1080x1920
 const INTRO_MS = 600; // empty frame first, so the first photo "arrives" instead of already being there
 const OUTRO_EXTRA_MS = 900; // the last photo stays a little longer before the loop restarts
-const POP_MS = 220; // each new photo scales in slightly (no flash)
-const VIDEO_BITRATE = 5_000_000;
+const VIDEO_BITRATE = 12_000_000;
 
 export interface StopMotionOptions {
   photoUrls: string[];
@@ -39,7 +38,7 @@ export async function renderStopMotion(options: StopMotionOptions): Promise<Blob
   const aspect = options.template ? options.template.canvasWidth / options.template.canvasHeight : photos[0].naturalWidth / photos[0].naturalHeight;
   let width = Math.min(MAX_WIDTH, options.template?.canvasWidth ?? MAX_WIDTH);
   let height = Math.round(width / aspect);
-  if (height > 1280) { height = 1280; width = Math.round(height * aspect); }
+  if (height > 1920) { height = 1920; width = Math.round(height * aspect); }
   width -= width % 2;
   height -= height % 2;
 
@@ -59,8 +58,6 @@ export async function renderStopMotion(options: StopMotionOptions): Promise<Blob
     const index = Math.floor((elapsed - INTRO_MS) / holdMs);
     if (index >= 0) {
       const shown = photos[Math.min(index, photos.length - 1)];
-      const sinceArrival = index >= photos.length ? Infinity : elapsed - INTRO_MS - index * holdMs;
-      const pop = sinceArrival < POP_MS ? 1 - sinceArrival / POP_MS : 0; // 1 → 0 over POP_MS
       const box = slot
         ? { x: slot.x * width, y: slot.y * height, w: slot.w * width, h: slot.h * height }
         : { x: 0, y: 0, w: width, h: height };
@@ -69,11 +66,8 @@ export async function renderStopMotion(options: StopMotionOptions): Promise<Blob
       ctx.rect(box.x, box.y, box.w, box.h);
       ctx.clip();
       ctx.filter = filter;
-      // Scale in from slightly zoomed (4 %) to rest — draws the eye to each new photo.
-      const zoom = 1 + 0.04 * pop;
-      ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
-      ctx.scale(zoom, zoom);
-      drawImageCover(ctx, shown, -box.w / 2, -box.h / 2, box.w, box.h, options.mirror);
+      // Classic stop motion: each photo simply replaces the previous one, no zoom or other camera-style movement.
+      drawImageCover(ctx, shown, box.x, box.y, box.w, box.h, options.mirror);
       ctx.filter = "none";
       ctx.restore();
     }

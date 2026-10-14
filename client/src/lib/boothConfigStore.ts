@@ -4,6 +4,7 @@ import { api, getAdminToken } from "./api";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
 import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
+import type { CaptureLayoutId, IdleLayoutId, KioskStyleId, PackageLayoutId } from "./kioskStyles";
 
 export type CaptureVibe = "Electric" | "Cotton Candy" | "Ocean" | "Sunset" | "Mono";
 export type CameraMode = "webcam" | "tether";
@@ -64,6 +65,12 @@ export interface BoothConfig {
   eventMaxPhotosPerSession: number;
   eventHasGif: boolean;
   eventHasVideo: boolean;
+  /** Whole-look style (Default / Minimalis / Sinematik / Ceria), see lib/kioskStyles.ts. */
+  kioskStyle: KioskStyleId;
+  /** "auto" = the layout that belongs to the style. */
+  idleLayout: IdleLayoutId;
+  packageLayout: PackageLayoutId;
+  captureLayout: CaptureLayoutId;
   buttonStyle: ButtonStyle;
   buttonSize: ButtonSize;
   /** Whole-kiosk text/element scale in percent (90–130); 100 = the automatic screen-based size. */
@@ -170,6 +177,10 @@ const DEFAULT_CONFIG: BoothConfig = {
   eventMaxPhotosPerSession: 0,
   eventHasGif: false,
   eventHasVideo: true,
+  kioskStyle: "default",
+  idleLayout: "auto",
+  packageLayout: "auto",
+  captureLayout: "auto",
   buttonStyle: "rounded",
   buttonSize: "medium",
   uiScale: 100,
@@ -435,6 +446,7 @@ export function applyThemeToDocument(config: BoothConfig) {
   root.style.setProperty("--font-display", pairing.display);
   root.style.setProperty("--font-body", pairing.body);
   root.dataset.themeMode = config.themeMode ?? "light";
+  root.dataset.kioskStyle = config.kioskStyle ?? "default";
   root.dataset.buttonStyle = config.buttonStyle;
   root.dataset.buttonSize = config.buttonSize ?? "medium";
   root.style.setProperty("--ui-scale", String(Math.max(80, Math.min(140, config.uiScale ?? 100)) / 100));

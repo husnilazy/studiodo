@@ -523,3 +523,153 @@ html[data-admin-theme="dark"] .brand-logo-white { display: block; }
 @keyframes net-progress-sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
 .net-progress-bar { animation: net-progress-sweep 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .net-progress-bar { animation: none; width: 100%; opacity: 0.6; } }
+
+/* =============================================================================================
+   Gaya kiosk (lib/kioskStyles.ts). "default" is the base look above; each block below re-skins the shared
+   surfaces/buttons/headings for the whole flow, idle → result. Layouts of Idle and PilihPaket live in the pages.
+   ============================================================================================= */
+
+/* ---- Minimalis: flat, hairlines, no glass, left-aligned titles ---- */
+[data-kiosk-style="minimal"] {
+  --kiosk-shadow-ambient: 0 1px 0 var(--hairline);
+  --kiosk-shadow-soft: none;
+}
+[data-kiosk-style="minimal"] .kinetic-card,
+[data-kiosk-style="minimal"] .glass-panel {
+  background: var(--kiosk-surface);
+  border: 1px solid var(--hairline);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-kiosk-style="minimal"] .glass-panel:not([class*="rounded-full"]):not([class*="rounded-2xl"]) { border-radius: 0.75rem; }
+[data-kiosk-style="minimal"] .k-btn { box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; background: transparent; border: 1px solid var(--kiosk-text); }
+[data-kiosk-style="minimal"] .k-btn:hover:not(:disabled) { transform: none; background: color-mix(in srgb, var(--kiosk-text) 6%, transparent); box-shadow: none; }
+[data-kiosk-style="minimal"] .k-btn-accent,
+[data-kiosk-style="minimal"] .k-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+[data-kiosk-style="minimal"] .k-btn-ghost { border-color: transparent; background: transparent; }
+[data-kiosk-style="minimal"] .kinetic-card-hover:hover { transform: none; box-shadow: none; border-color: var(--kiosk-text); }
+[data-kiosk-style="minimal"] .kinetic-title,
+[data-kiosk-style="minimal"] .kinetic-heading h1 { font-weight: 500; letter-spacing: -0.04em; }
+[data-kiosk-style="minimal"] .kinetic-heading { text-align: left; align-self: stretch; width: 100%; max-width: 1500px; margin-inline: auto; }
+[data-kiosk-style="minimal"] .kinetic-heading p { margin-left: 0; }
+[data-kiosk-style="minimal"] .eyebrow { letter-spacing: 0.22em; }
+[data-kiosk-style="minimal"] .k-drift { display: none; }
+
+/* ---- Sinematik: dark glass over the photo, glowing accent ---- */
+[data-kiosk-style="immersive"] .kinetic-card,
+[data-kiosk-style="immersive"] .glass-panel {
+  background: color-mix(in srgb, #000 42%, transparent);
+  border-color: rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+[data-kiosk-style="immersive"] .k-btn-accent { background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent), 0 18px 50px color-mix(in srgb, var(--accent) 55%, transparent); }
+[data-kiosk-style="immersive"] .kinetic-heading h1,
+[data-kiosk-style="immersive"] .kinetic-title { font-weight: 700; letter-spacing: -0.045em; }
+[data-kiosk-style="immersive"] .eyebrow { color: var(--accent); }
+
+/* ---- Ceria: thick outlines, hard shadows, slightly tilted cards ---- */
+[data-kiosk-style="playful"] .kinetic-card,
+[data-kiosk-style="playful"] .glass-panel {
+  background: var(--kiosk-surface);
+  border: 3px solid var(--kiosk-text);
+  box-shadow: 6px 6px 0 var(--kiosk-text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-kiosk-style="playful"] .glass-panel[class*="rounded-full"] { box-shadow: 3px 3px 0 var(--kiosk-text); border-width: 2px; }
+[data-kiosk-style="playful"] .k-btn {
+  border: 3px solid var(--kiosk-text);
+  box-shadow: 4px 4px 0 var(--kiosk-text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--kiosk-surface);
+  font-weight: 800;
+}
+[data-kiosk-style="playful"] .k-btn:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--kiosk-text); }
+[data-kiosk-style="playful"] .k-btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--kiosk-text); }
+[data-kiosk-style="playful"] .k-btn-accent { background: var(--accent); color: #fff; }
+[data-kiosk-style="playful"] .k-btn-primary { background: var(--kiosk-text); color: var(--kiosk-background); }
+[data-kiosk-style="playful"] .k-btn-ghost { box-shadow: none; border-color: transparent; background: transparent; }
+[data-kiosk-style="playful"] .kinetic-card-hover:hover { transform: translate(-2px, -2px); box-shadow: 9px 9px 0 var(--kiosk-text); }
+[data-kiosk-style="playful"] .kinetic-heading h1,
+[data-kiosk-style="playful"] .kinetic-title { font-weight: 800; letter-spacing: -0.03em; }
+[data-kiosk-style="playful"] .pkg-slot:nth-child(odd) { transform: rotate(-1.2deg); }
+[data-kiosk-style="playful"] .pkg-slot:nth-child(even) { transform: rotate(1deg) translateY(0.5rem); }
+[data-kiosk-style="playful"] .kinetic-heading .eyebrow,
+[data-kiosk-style="playful"] .kinetic-heading p.inline-flex { border: 2px solid var(--kiosk-text); }
+
+/* Package picker: horizontal "swipe" layout (Sinematik default) */
+.pkg-carousel {
+  display: flex;
+  gap: 1.25rem;
+  width: 100%;
+  overflow-x: auto;
+  padding: 0.5rem max(1.5rem, calc(50% - 220px)) 1.25rem;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: max(1.5rem, calc(50% - 220px));
+  -webkit-overflow-scrolling: touch;
+}
+.pkg-carousel > .pkg-slot { flex: 0 0 min(82vw, 440px); scroll-snap-align: center; }
+
+/* ---- Seru!: confetti dots, bouncy chunky buttons, sticker cards ---- */
+[data-kiosk-style="fun"] .kinetic-noise {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent) 2.5px, transparent 3px), radial-gradient(circle, rgba(255, 255, 255, 0.55) 2px, transparent 2.5px);
+  background-size: 44px 44px, 44px 44px;
+  background-position: 0 0, 22px 22px;
+  animation: fun-dots 14s linear infinite;
+}
+@keyframes fun-dots { to { background-position: 44px 44px, 66px 66px; } }
+[data-kiosk-style="fun"] .kinetic-card,
+[data-kiosk-style="fun"] .glass-panel {
+  background: var(--kiosk-surface);
+  border: 3px solid var(--kiosk-text);
+  box-shadow: 0 6px 0 var(--kiosk-text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-kiosk-style="fun"] .glass-panel:not([class*="rounded-full"]) { border-radius: 2rem; }
+[data-kiosk-style="fun"] .glass-panel[class*="rounded-full"] { box-shadow: 0 3px 0 var(--kiosk-text); border-width: 2px; }
+[data-kiosk-style="fun"] .k-btn {
+  border: 3px solid var(--kiosk-text);
+  box-shadow: 0 5px 0 var(--kiosk-text);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--kiosk-surface);
+  font-weight: 800;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+[data-kiosk-style="fun"] .k-btn:hover:not(:disabled) { transform: translateY(-3px) rotate(-0.6deg); box-shadow: 0 8px 0 var(--kiosk-text); }
+[data-kiosk-style="fun"] .k-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 var(--kiosk-text); }
+[data-kiosk-style="fun"] .k-btn-accent { background: linear-gradient(135deg, var(--accent), #ff4fa3); color: #fff; animation: fun-bob 2.4s ease-in-out infinite; }
+[data-kiosk-style="fun"] .k-btn-ghost { box-shadow: none; border-color: transparent; background: transparent; }
+@keyframes fun-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -4px; } }
+[data-kiosk-style="fun"] .kinetic-title,
+[data-kiosk-style="fun"] .kinetic-heading h1 { font-weight: 800; letter-spacing: -0.03em; text-shadow: 3px 3px 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+[data-kiosk-style="fun"] .eyebrow { color: var(--accent); }
+[data-kiosk-style="fun"] .kinetic-card-hover:hover { transform: translateY(-4px) rotate(-1deg); box-shadow: 0 10px 0 var(--kiosk-text); }
+[data-kiosk-style="fun"] .pkg-slot:nth-child(3n+1) { transform: rotate(-1.5deg); }
+[data-kiosk-style="fun"] .pkg-slot:nth-child(3n+2) { transform: rotate(1.2deg) translateY(0.4rem); }
+[data-kiosk-style="fun"] .pkg-slot:nth-child(3n) { transform: rotate(-0.6deg); }
+[data-kiosk-style="fun"] .kinetic-heading p.inline-flex { border: 2px solid var(--kiosk-text); background: #fff; }
+[data-kiosk-style="fun"][data-animations="false"] .kinetic-noise { animation: none; }
+
+/* ---- Kamera penuh: dark transparent glass everywhere; white primary buttons ---- */
+[data-kiosk-style="fullcam"] .kinetic-card,
+[data-kiosk-style="fullcam"] .glass-panel {
+  background: color-mix(in srgb, #000 38%, transparent);
+  border-color: rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+[data-kiosk-style="fullcam"] .k-btn-accent { background: #fff; color: #000; box-shadow: 0 14px 40px rgba(255, 255, 255, 0.18); }
+[data-kiosk-style="fullcam"] .k-btn { border-color: rgba(255, 255, 255, 0.22); }
+[data-kiosk-style="fullcam"] .kinetic-heading h1,
+[data-kiosk-style="fullcam"] .kinetic-title { font-weight: 600; letter-spacing: -0.04em; }
+[data-kiosk-style="fullcam"] .text-on-accent { color: #000; }

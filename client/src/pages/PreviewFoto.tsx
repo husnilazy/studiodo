@@ -318,8 +318,8 @@ export default function PreviewFoto() {
                   />
                 )}
               </div>
-              <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={openZoom} aria-label="Perbesar preview" className="k-btn absolute right-2 top-2 !min-h-0 !rounded-full !p-2.5">
-                <Icon name="zoom" className="h-5 w-5" />
+              <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={openZoom} aria-label="Perbesar preview" className="k-btn absolute right-2 top-2 !min-h-0 !gap-2 !rounded-full !px-4 !py-2.5 !text-sm">
+                <Icon name="zoom" className="h-5 w-5" /> Zoom
               </button>
             </div>
 
@@ -344,7 +344,7 @@ export default function PreviewFoto() {
                 {features.retake && (
                   <button type="button" onClick={() => redo(selectedPhoto)} disabled={retakesLeft <= 0} className="k-btn shrink-0 !min-h-0 !px-4 !py-2.5 !text-sm">
                     <Icon name="refresh" className="h-4 w-4" />
-                    Ulangi foto {selectedPhoto + 1}
+                    Ganti foto {selectedPhoto + 1} (foto ulang)
                     <span className="text-xs text-muted">({Math.max(0, retakesLeft)}x lagi)</span>
                   </button>
                 )}

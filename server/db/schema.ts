@@ -349,6 +349,8 @@ export const vouchers = pgTable("vouchers", {
   cashAmount: numeric("cash_amount", { precision: 12, scale: 2 }),
   invoiceNumber: text("invoice_number"),
   customerName: text("customer_name"),
+  // Custom-frame voucher: redeeming it puts the session straight into this (customer-specific) template.
+  frameId: uuid("frame_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   index("vouchers_tenant_id_idx").on(table.tenantId),
@@ -522,6 +524,9 @@ export const templates = pgTable("templates", {
   style: text("style").notNull().default("Custom"),
   outputPreset: text("output_preset").notNull().default("4r"),
   active: boolean("active").notNull().default(true),
+  // Custom frames (category "__custom") are made for one customer and sold at the cashier: their price and who they are for.
+  price: numeric("price", { precision: 12, scale: 2 }),
+  customerName: text("customer_name"),
   // Set when the tenant installed this template from the marketplace catalog (null = they made it
   // themselves). Lets "install" be idempotent; the catalog entry can be removed without touching
   // installed copies (ON DELETE SET NULL).
@@ -813,7 +818,7 @@ export const creatorTemplates = pgTable("creator_templates", {
 // runs shifts with cash counting, hands out queue numbers and refunds with a supervisor PIN. Selling a package or print
 // also mints a one-use "cash" voucher the customer types at the kiosk, so the existing payment flow marks that session paid.
 // ---------------------------------------------------------------------------------------------------------------------
-export type PosOrderItem = { type: "package" | "print" | "product" | "custom"; refId?: string | null; name: string; qty: number; unitPrice: number };
+export type PosOrderItem = { type: "package" | "print" | "product" | "custom" | "frame"; refId?: string | null; name: string; qty: number; unitPrice: number };
 
 export const posSettings = pgTable("pos_settings", {
   tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),

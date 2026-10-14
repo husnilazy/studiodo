@@ -1,7 +1,8 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { tenantSettings, tenants, sessions, vouchers, voucherRedemptions } from "../db/schema.js";
+import { tenantSettings, tenants, sessions, templates, vouchers, voucherRedemptions } from "../db/schema.js";
+import { resolveFrameUrl } from "../lib/frameUrl.js";
 import { and, eq } from "drizzle-orm";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
@@ -306,6 +307,7 @@ paymentRouter.post("/additional-print/voucher", requireKioskAuth, requireActiveS
   const found = await findRedeemableVoucher(tenantId, code);
   if ("error" in found) return res.status(found.status).json({ error: found.error });
   const voucher = found.voucher;
+  if (voucher.frameId) return res.status(400).json({ error: "Voucher frame custom hanya untuk memulai sesi foto, bukan cetak tambahan." });
   const chargeAmount = quantity * config.price;
 
   if (voucher.voucherType === "cash") {
@@ -368,6 +370,15 @@ paymentRouter.get("/status/:sessionId", requireKioskAuth, async (req, res) => {
   res.json({ status: session.paymentStatus, additionalPrintsPaid: session.additionalPrintsPaid, additionalPrintsPending: session.additionalPrintsPending });
 });
 
+// The customer-specific frame a custom-frame voucher is bound to, shaped like a /api/frames entry. Also pins it on the session.
+async function applyVoucherFrame(tenantId: string, sessionId: string, frameId: string | null) {
+  if (!frameId) return null;
+  const [t] = await db.select().from(templates).where(and(eq(templates.id, frameId), eq(templates.tenantId, tenantId)));
+  if (!t) return null;
+  await db.update(sessions).set({ frameId: t.id }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+  return { id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, outputPreset: t.outputPreset };
+}
+
 paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
   const { sessionId, code } = req.body as { sessionId: string; code: string };
@@ -390,7 +401,8 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
       tenantId, voucherId: voucher.id, sessionId, redemptionPurpose: "session",
       originalAmount: sessionAmount.toFixed(2), discountAmount: "0.00", finalAmount: sessionAmount.toFixed(2),
     });
-    return res.json({ valid: true, amount: sessionAmount, discount: 0, cash: true, invoiceNumber: voucher.invoiceNumber });
+    const frame = await applyVoucherFrame(tenantId, sessionId, voucher.frameId);
+    return res.json({ valid: true, amount: sessionAmount, discount: 0, cash: true, invoiceNumber: voucher.invoiceNumber, frame });
   }
 
   const originalAmount = Number(session.totalAmount ?? 0);
@@ -413,7 +425,8 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
     originalAmount: originalAmount.toFixed(2), discountAmount: discount.toFixed(2), finalAmount: amount.toFixed(2),
   });
   if (amount === 0) expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
-  res.json({ valid: true, amount, discount, voucherCode: voucher.code });
+  const frame = await applyVoucherFrame(tenantId, sessionId, voucher.frameId);
+  res.json({ valid: true, amount, discount, voucherCode: voucher.code, frame });
 });
 
 // Xendit webhook (for production mode) — one URL per tenant, registered by that tenant in their own Xendit dashboard

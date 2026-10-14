@@ -2,13 +2,14 @@ import { Router, type Response } from "express";
 import crypto from "node:crypto";
 import { and, asc, desc, eq, gte, like, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { kioskKeys, packages, posOrders, posProducts, posQueueTickets, posRefunds, posSettings, posShifts, vouchers, type PosOrderItem } from "../db/schema.js";
+import { kioskKeys, packages, templates, posOrders, posProducts, posQueueTickets, posRefunds, posSettings, posShifts, vouchers, type PosOrderItem } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import {
-  PosError, computeTotals, expectedCash, kioskPortionOf, orderNumber, pickNextTicket, priceCart, queueLabel,
+  CUSTOM_FRAME_CATEGORY, PosError, computeTotals, customFrameOf, expectedCash, kioskPortionOf, orderNumber, pickNextTicket, priceCart, queueLabel,
   refundAmount, refundStatus, settlePayment, wibDay, type Catalog, type CartLine, type RefundLine,
 } from "../lib/pos.js";
+import { resolveFrameUrl } from "../lib/frameUrl.js";
 
 // POS / Kasir API (tenant-admin auth, mounted at /api/pos). Every query is scoped to req.tenantId.
 
@@ -62,14 +63,17 @@ async function shiftSummary(shift: typeof posShifts.$inferSelect) {
 posRouter.get("/catalog", async (req, res) => {
   try {
     const tenantId = req.tenantId!;
-    const [pk, products, booths, shift, settings] = await Promise.all([
+    const [pk, products, booths, shift, settings, customFrames] = await Promise.all([
       db.select().from(packages).where(and(eq(packages.tenantId, tenantId), eq(packages.active, true))).orderBy(asc(packages.sortOrder), asc(packages.createdAt)),
       db.select().from(posProducts).where(and(eq(posProducts.tenantId, tenantId), eq(posProducts.active, true))).orderBy(asc(posProducts.sortOrder), asc(posProducts.createdAt)),
       db.select({ id: kioskKeys.id, label: kioskKeys.label }).from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), sql`${kioskKeys.revokedAt} is null`)),
       openShift(tenantId),
       getSettings(tenantId),
+      // Custom frames the admin uploaded and priced; the cashier sells one together with a package.
+      db.select().from(templates).where(and(eq(templates.tenantId, tenantId), eq(templates.active, true), eq(templates.category, CUSTOM_FRAME_CATEGORY))).orderBy(desc(templates.createdAt)),
     ]);
     res.json({
+      customFrames: customFrames.map((f) => ({ id: f.id, name: f.name, customerName: f.customerName, price: num(f.price), imageUrl: resolveFrameUrl(f.frameImageUrl), orientation: f.orientation })),
       packages: pk.map((p) => ({ id: p.id, name: p.name, price: num(p.price), photoCount: p.photoCount, thumbnailUrl: p.thumbnailUrl, prints: (p.extraPrints ?? []).map((x) => ({ key: `${p.id}:${x.id}`, name: x.name, price: x.price })) })),
       products: products.map((p) => ({ id: p.id, name: p.name, price: num(p.price) })),
       booths, shift: shift ? { id: shift.id, cashierName: shift.cashierName, openedAt: shift.openedAt } : null,
@@ -186,11 +190,13 @@ posRouter.post("/shifts/close", async (req, res) => {
 // --- orders -------------------------------------------------------------------------------------------------------
 
 async function loadCatalog(tenantId: string): Promise<Catalog> {
-  const [pk, products] = await Promise.all([
+  const [pk, products, frames] = await Promise.all([
     db.select().from(packages).where(and(eq(packages.tenantId, tenantId), eq(packages.active, true))),
     db.select().from(posProducts).where(and(eq(posProducts.tenantId, tenantId), eq(posProducts.active, true))),
+    db.select().from(templates).where(and(eq(templates.tenantId, tenantId), eq(templates.active, true), eq(templates.category, CUSTOM_FRAME_CATEGORY))),
   ]);
-  const catalog: Catalog = { packages: new Map(), prints: new Map(), products: new Map() };
+  const catalog: Catalog = { packages: new Map(), prints: new Map(), products: new Map(), frames: new Map() };
+  for (const f of frames) catalog.frames.set(f.id, { name: f.customerName ? `Frame custom · ${f.customerName}` : `Frame custom · ${f.name}`, price: num(f.price) });
   for (const p of pk) {
     catalog.packages.set(p.id, { name: p.name, price: num(p.price) });
     for (const x of p.extraPrints ?? []) catalog.prints.set(`${p.id}:${x.id}`, { name: `${x.name} (${p.name})`, price: x.price });
@@ -220,6 +226,7 @@ posRouter.post("/orders", async (req, res) => {
     const customerWhatsapp = String(b.customerWhatsapp ?? "").replace(/[^\d+]/g, "").slice(0, 20) || null;
     const queueTicketId = typeof b.queueTicketId === "string" && UUID.test(b.queueTicketId) ? b.queueTicketId : null;
     const kioskAmount = kioskPortionOf(items, discount);
+    const customFrame = customFrameOf(items);
 
     const day = wibDay(new Date());
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -228,9 +235,9 @@ posRouter.post("/orders", async (req, res) => {
           const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(posOrders).where(and(eq(posOrders.tenantId, tenantId), like(posOrders.orderNumber, `KSR-${day.replaceAll("-", "")}-%`)));
           const number = orderNumber(day, n + 1 + attempt);
           let voucherCode: string | null = null;
-          if (kioskAmount > 0) {
+          if (kioskAmount > 0 || customFrame) {
             voucherCode = `CASH-${crypto.randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`;
-            await tx.insert(vouchers).values({ tenantId, code: voucherCode, voucherType: "cash", discountType: "free", discountValue: "0", cashAmount: String(kioskAmount), invoiceNumber: number, customerName, maxUses: 1, active: true });
+            await tx.insert(vouchers).values({ tenantId, code: voucherCode, voucherType: "cash", discountType: "free", discountValue: "0", cashAmount: String(kioskAmount), invoiceNumber: number, customerName, maxUses: 1, active: true, frameId: customFrame?.frameId ?? null });
           }
           const [row] = await tx.insert(posOrders).values({
             tenantId, shiftId: shift.id, orderNumber: number, items, subtotal: String(subtotal), discount: String(discount), total: String(total),

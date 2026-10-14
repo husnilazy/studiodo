@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
-import { OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
+import { CUSTOM_FRAME_LOCK, OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useFrameCategories, hydrateFrameCategoriesFromServer } from "@/lib/frameCategoryStore";
 import { isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
@@ -32,6 +32,11 @@ export default function PilihFrame() {
   const [, navigate] = useLocation();
   const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
+  // A custom-frame voucher already put the customer's own frame in the session: nothing to choose, go on.
+  const lockedFrame = useKioskSession((s) => s.selectedTemplateData?.style === CUSTOM_FRAME_LOCK);
+  useEffect(() => {
+    if (lockedFrame) navigate(getNextRoute("frame", kioskFlow), { replace: true });
+  }, [lockedFrame, kioskFlow, navigate]);
   const frameHeadline = useBoothConfig((s) => s.config.frameHeadline);
   const localTemplates = useTemplateLibrary((state) => state.templates);
   // The category list an admin builds in Kelola Frame (Admin → Kelola Frame →

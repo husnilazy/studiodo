@@ -138,7 +138,7 @@ const KIOSK_CONFIG_STRINGS = [
   "eventName", "eventDescription", "eventStartAt", "eventEndAt", "buttonStyle", "kioskDensity", "sessionLayout", "backgroundStyle",
   "backgroundGradientStart", "backgroundGradientEnd", "promoText", "idleStartText", "idleHeadline", "idleSubheadline",
   "packageHeadline", "orientationHeadline", "paymentHeadline", "captureHeadline", "previewHeadline", "frameHeadline", "resultHeadline",
-  "idleCoverType", "captureVibe", "stripLayout", "stripTemplate",
+  "idleCoverType", "captureVibe", "kioskStyle", "idleLayout", "packageLayout", "captureLayout", "stripLayout", "stripTemplate",
 ] as const;
 const KIOSK_CONFIG_NUMBERS = ["logoScale", "keyboardScale", "countdownSeconds", "sessionTimerMinutes", "eventSessionTimerMinutes", "eventMaxPhotosPerSession", "maxPhotosPerSession", "printCopies"] as const;
 const KIOSK_CONFIG_BOOLS = [

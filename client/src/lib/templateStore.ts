@@ -16,6 +16,9 @@ export interface TemplateSlot {
   aspectRatio?: number;
 }
 
+/** `style` of a template that arrived with a custom-frame voucher: the customer cannot (and need not) pick another one. */
+export const CUSTOM_FRAME_LOCK = "__custom_frame_lock";
+
 export interface LocalTemplate {
   id: string;
   name: string;

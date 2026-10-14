@@ -204,6 +204,22 @@ function crmQs(params: CrmQuery) {
   return qs.toString();
 }
 
+// Upload responses can carry local-storage paths ("/storage/..."). Those resolve against the kiosk's own origin and show
+// blank previews on the result screen, so anchor them to the API server's origin (no-op for absolute URLs / same-origin APIs).
+function absoluteAssetUrl<T>(value: T): T {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return value;
+  const base = getApiBaseUrl();
+  if (!/^https?:\/\//i.test(base)) return value;
+  try { return `${new URL(base).origin}${value}` as unknown as T; } catch { return value; }
+}
+function absolutizeMedia<T extends Record<string, any> | null | undefined>(row: T): T {
+  if (!row || typeof row !== "object") return row;
+  const out: Record<string, any> = { ...row };
+  for (const key of ["stripUrl", "gifUrl", "videoUrl", "stopMotionUrl"]) if (key in out) out[key] = absoluteAssetUrl(out[key]);
+  for (const key of ["mediaUrls", "slotClipUrls"]) if (Array.isArray(out[key])) out[key] = out[key].map(absoluteAssetUrl);
+  return out as T;
+}
+
 export const api = {
   getCrmCustomers: (params: CrmQuery = {}) =>
     request<{ items: CrmCustomer[]; total: number; limit: number; offset: number; summary: { customers: number; withWhatsapp: number; consent: number; returning: number; new30d: number; lifetimeSpend: number }; tags: string[] }>(`/crm/customers?${crmQs(params)}`),
@@ -321,7 +337,7 @@ export const api = {
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Media upload gagal: ${res.status}`);
-    return res.json();
+    return absolutizeMedia(await res.json());
   },
   // The short clip captured at one specific photo shot (slotIndex), as
   // opposed to uploadMedia above which is the combined all-slots-at-once clip.
@@ -333,7 +349,7 @@ export const api = {
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/slot-media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Slot media upload gagal: ${res.status}`);
-    return res.json();
+    return absolutizeMedia(await res.json());
   },
   uploadStrip: async (sessionId: string, blob: Blob) => {
     const form = new FormData();
@@ -365,7 +381,7 @@ export const api = {
   getPrintingConfig: () => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing"),
   updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
-    request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
+    request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string; frame?: { id: string; name: string; imageUrl: string; slots: any[]; canvasWidth: number; canvasHeight: number; orientation: string; outputPreset?: string } | null }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
   getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>("/config/payment"),
   updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production" }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
