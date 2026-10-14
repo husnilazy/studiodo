@@ -11,7 +11,7 @@ export function clientIp(req: Request): string {
   const cf = req.headers["cf-connecting-ip"];
   const value = Array.isArray(cf) ? cf[0] : cf;
   if (value && value.length <= 64) return value.trim();
-  return req.ip ?? req.socket.remoteAddress ?? "unknown";
+  return req.ip ?? req.socket?.remoteAddress ?? "unknown";
 }
 
 /** Small in-memory sliding-window limiter (single process, like the login guards). Returns true when over the limit. */

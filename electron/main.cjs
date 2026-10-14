@@ -5,11 +5,12 @@
 // Electron here only owns the native shell: fullscreen kiosk window, camera
 // bridges, and printing — it no longer spawns a local server or local DB.
 require("dotenv").config();
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, safeStorage } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { startCanonBridge, stopCanonBridge, getCanonBridgeStatus } = require("./canon-bridge.cjs");
 const { startDigicamBridge, stopDigicamBridge } = require("./digicam-bridge.cjs");
 const { listPrinters, printImage, waitForPrintQueue } = require("./print.cjs");
+const device = require("./device.cjs");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -349,6 +350,7 @@ app.whenReady().then(() => {
   if (process.env.DIGICAM_BRIDGE_ENABLED !== "false") {
     startDigicamBridge({ onLiveViewShown: bringKioskToFront });
   }
+  void hardwareId(); // warm up: reading the hardware id takes about a second
   createKioskWindow();
   setupAutoUpdater();
 
@@ -404,6 +406,21 @@ app.on("will-quit", () => {
 // renderer's console call had; appendLog already knows how to render them.
 ipcMain.on("renderer:log", (_event, level, args) => {
   appendLog(`RENDERER-${String(level ?? "LOG").toUpperCase()}`, Array.isArray(args) ? args : [args]);
+});
+
+// Device identity for licence binding (see electron/device.cjs): a hardware-derived id plus the per-device secret the server
+// issues at activation. Kept in the main process / OS keystore, never in the page's localStorage.
+let deviceIdPromise = null;
+const hardwareId = () => (deviceIdPromise = deviceIdPromise || device.getDeviceId(app.getPath("userData")));
+ipcMain.handle("device:getIdentity", async () => ({ deviceId: await hardwareId(), token: device.readToken(app.getPath("userData"), safeStorage) }));
+ipcMain.handle("device:setToken", (_event, token) => {
+  if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) return false;
+  device.writeToken(app.getPath("userData"), safeStorage, token);
+  return true;
+});
+ipcMain.handle("device:clearToken", () => {
+  device.clearToken(app.getPath("userData"));
+  return true;
 });
 
 ipcMain.handle("app:getVersion", () => app.getVersion());

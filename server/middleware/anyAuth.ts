@@ -1,13 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import crypto from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
-import { db } from "../db/client.js";
-import { kioskKeys } from "../db/schema.js";
+import { authenticateKiosk } from "../lib/kioskAccess.js";
 import { verifyAdminToken } from "../lib/jwt.js";
-
-function hashKey(rawKey: string) {
-  return crypto.createHash("sha256").update(rawKey).digest("hex");
-}
 
 /**
  * Some settings (e.g. current Xendit/printing config) are read both by the
@@ -29,17 +22,15 @@ export async function requireAnyAuth(req: Request, res: Response, next: NextFunc
     }
   }
 
-  const rawKey = String(req.headers["x-kiosk-key"] ?? "");
-  if (rawKey) {
-    const [row] = await db
-      .select({ id: kioskKeys.id, tenantId: kioskKeys.tenantId })
-      .from(kioskKeys)
-      .where(and(eq(kioskKeys.keyHash, hashKey(rawKey)), isNull(kioskKeys.revokedAt)));
-    if (row) {
-      req.tenantId = row.tenantId;
-      db.update(kioskKeys).set({ lastUsedAt: new Date() }).where(eq(kioskKeys.id, row.id)).catch(() => undefined);
+  // The kiosk path goes through the same device checks as requireKioskAuth — "the key alone" is never enough.
+  if (req.headers["x-kiosk-key"]) {
+    const result = await authenticateKiosk(req);
+    if (result.ok) {
+      req.tenantId = result.row.tenantId;
+      req.kioskKeyId = result.row.id;
       return next();
     }
+    return res.status(result.status).json({ error: result.error, code: result.code });
   }
 
   return res.status(401).json({ error: "Butuh login admin atau kiosk yang sudah di-pairing", code: "any_auth_required" });

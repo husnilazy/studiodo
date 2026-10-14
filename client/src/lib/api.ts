@@ -1,5 +1,5 @@
 import { tracked } from "./netActivity";
-import { clearKioskPairing, getApiBaseUrl, getDeviceId, getKioskKey } from "./apiConfig";
+import { clearKioskPairing, getApiBaseUrl, getDeviceId, getDeviceToken, getKioskKey } from "./apiConfig";
 import { videoExtension } from "@/lib/videoMime";
 import type { LayoutElement, ScreenOrientation } from "./screenBuilder/types";
 
@@ -93,7 +93,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
       headers: {
         "Content-Type": "application/json",
         ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-        ...(kioskKey ? { "x-kiosk-key": kioskKey, "x-device-id": getDeviceId() } : {}),
+        ...(kioskKey ? { "x-kiosk-key": kioskKey, "x-device-id": getDeviceId(), ...(getDeviceToken() ? { "x-device-token": getDeviceToken()! } : {}) } : {}),
         ...(options?.headers ?? {}),
       },
     }));
@@ -133,6 +133,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
   }
   if (res.status === 403 && body?.code === "kiosk_device_mismatch") {
     window.dispatchEvent(new Event("studiodo-kiosk-device-mismatch"));
+  }
+  // The server no longer accepts this install's credentials (never activated, secret lost/rotated, old app without a device id):
+  // go back to the sign-in + key screen instead of failing mid-session.
+  if (res.status === 403 && kioskKey && ["activation_required", "device_token_invalid", "device_required"].includes(body?.code)) {
+    clearKioskPairing();
+    window.dispatchEvent(new Event("studiodo-kiosk-pairing-required"));
   }
   // The booth's licence ran out: show the lock screen right away instead of waiting for the next heartbeat.
   if (res.status === 403 && body?.code === "subscription_locked" && kioskKey) {
@@ -194,6 +200,12 @@ export const api = {
     request<{ ok: boolean }>("/crm/customer", { method: "PUT", body: JSON.stringify(body) }),
   getCrmExport: (params: CrmQuery = {}) => request<{ items: CrmCustomer[] }>(`/crm/export?${crmQs(params)}`),
   getLive: () => request<LiveData>("/live"),
+  /** First-run activation: needs the tenant admin's login (adminToken) and the booth key; binds this computer. */
+  activateKiosk: (body: { key: string; deviceId: string }) =>
+    request<{ deviceToken: string; booth: { id: string; label: string | null; licenseType: string; locked: boolean; reason: string | null } }>("/kiosk-keys/activate", { method: "POST", body: JSON.stringify(body) }),
+  /** One-time upgrade of a booth paired before activation existed: trade key + device id for the per-device secret. */
+  upgradeKioskBinding: (body: { newDeviceId?: string }) =>
+    request<{ deviceToken: string; deviceId: string | null }>("/kiosk-keys/upgrade-binding", { method: "POST", body: JSON.stringify(body) }),
   loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logoutAdmin: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   getMe: () => request<{

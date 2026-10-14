@@ -108,7 +108,9 @@ describe.skipIf(!PGlite)("settleOrder (per-booth licences, real SQL)", () => {
     expect(created.licenseType).toBe("paid");
     expect(created.licenseEndsAt.getTime()).toBeGreaterThanOrEqual(before + 30 * DAY - 1000);
     const { hashKioskKey } = await import("./license.js");
-    expect(hashKioskKey(created.rawKey)).toBe(created.keyHash); // the stored key really is the one that authenticates
+    const { readStoredSecret } = await import("./secretBox.js");
+    expect(created.rawKey.startsWith("v1:")).toBe(true); // the recoverable copy is encrypted at rest
+    expect(hashKioskKey(readStoredSecret(created.rawKey)!)).toBe(created.keyHash); // and is the key that authenticates
 
     expect((await endsOf(K_REVOKED)).ends!).toBeLessThan(before + 10 * DAY); // revoked booth untouched
 
@@ -210,21 +212,18 @@ describe.skipIf(!PGlite)("settleOrder (per-booth licences, real SQL)", () => {
       expect(nextCalled).toBe(true);
     });
 
-    it("one free trial per computer: a PC that ran a trial cannot start another, but can use a paid key", async () => {
+    it("a key only works on the computer it was activated on (activation itself is covered by the API tests)", async () => {
       const lic = await import("./license.js");
-      const t1 = await lic.issueKioskKey(TENANT, { label: "Trial PC-1", kind: "trial", days: 7 });
-      const t2 = await lic.issueKioskKey(TENANT, { label: "Trial PC-1 lagi", kind: "trial", days: 7 });
-      const paid = await lic.issueKioskKey(TENANT, { label: "Paid PC-1", kind: "paid", days: 30 });
+      const k = await lic.issueKioskKey(TENANT, { label: "Bound PC-1", kind: "paid", days: 30 });
 
-      expect((await auth(t1.rawKey, "device-PC1")).passed).toBe(true);
-      const second = await auth(t2.rawKey, "device-PC1");
-      expect(second.passed).toBe(false);
-      expect(second.res.statusCode).toBe(403);
-      expect(second.res.body).toMatchObject({ code: "trial_already_used" });
+      // Never activated: the key alone is useless, however the request is made.
+      expect((await auth(k.rawKey, "device-PC1-aaaa")).res.body).toMatchObject({ code: "activation_required" });
+      expect((await auth(k.rawKey, "")).res.body).toMatchObject({ code: "device_required" });
 
-      expect((await auth(paid.rawKey, "device-PC1")).passed).toBe(true); // a real subscription is welcome on the same PC
-      expect((await auth(t2.rawKey, "device-PC2")).passed).toBe(true); // a different computer may take that trial
-      expect((await auth(t1.rawKey, "device-PC9")).res.body).toMatchObject({ code: "kiosk_device_mismatch" }); // still 1 key = 1 device
+      await db.update(schema.kioskKeys).set({ boundDeviceId: "device-PC1-aaaa", activatedAt: new Date() }).where(eq(schema.kioskKeys.id, k.id));
+      expect((await auth(k.rawKey, "device-PC1-aaaa")).passed).toBe(true);
+      expect((await auth(k.rawKey, "device-PC9-zzzz")).res.body).toMatchObject({ code: "kiosk_device_mismatch" });
+      expect((await auth(k.rawKey, "")).res.body).toMatchObject({ code: "device_required" }); // omitting the header is no longer a pass
     });
   });
 });

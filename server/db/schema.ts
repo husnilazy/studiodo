@@ -284,7 +284,29 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // Set when the key was issued as a trial. Survives a later trial→paid conversion, so a computer that already used a
   // trial can't be paired with a second trial key (see requireKioskAuth).
   trialStartedAt: timestamp("trial_started_at"),
+  // Activation: a key becomes usable only after a tenant admin LOGGED IN on the computer and entered it (POST
+  // /api/kiosk-keys/activate) — that is what binds the device. A key that was merely copied can no longer claim a device
+  // by itself. Keys already bound before activation existed were grandfathered (activated_at = bound_at).
+  activatedAt: timestamp("activated_at"),
+  // SHA-256 of the per-device secret issued at activation (kept in the Electron main process, never in the web page's
+  // storage). Once set, every kiosk request must also carry it: knowing the key AND the (guessable) device id is not enough.
+  deviceTokenHash: text("device_token_hash"),
+  // Tenant self-service "Reset device" is capped (see lib/deviceLock.ts) so one paid key can't be rotated across many PCs.
+  deviceResetCount: integer("device_reset_count").notNull().default(0),
+  deviceResetWindowStart: timestamp("device_reset_window_start"),
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
+
+// A permanent memory of which computers already used a free trial. Unlike kiosk_keys.bound_device_id it is NOT cleared by
+// "reset device", revoking a key or deleting a tenant, so trial-hopping (new account, new key, same PC) stays blocked.
+// A superadmin can free a computer from here when a trial was legitimately granted twice.
+export const deviceRegistry = pgTable("device_registry", {
+  deviceId: text("device_id").primaryKey(),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  trialStartedAt: timestamp("trial_started_at"),
+  trialKeyId: uuid("trial_key_id"),
+  trialTenantId: uuid("trial_tenant_id"),
+  note: text("note"),
+});
 
 // Paket foto (packages)
 export const packages = pgTable("packages", {

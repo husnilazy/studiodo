@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { encryptSecret } from "./secretBox.js";
 import { kioskKeys, platformSettings, tenants } from "../db/schema.js";
 
 // Per-booth licensing. ONE kiosk key = ONE booth = ONE licence, each with its own type and end date (see the comment on
@@ -223,7 +224,7 @@ export async function issueKioskKey(
     tenantId,
     label: opts.label?.trim().slice(0, 80) || null,
     keyHash: hashKioskKey(rawKey),
-    rawKey,
+    rawKey: encryptSecret(rawKey), // recoverable copy, encrypted at rest: a database leak must not hand out working keys
     licenseType: opts.kind,
     licenseEndsAt: endsAt,
     licensePlanSlug: opts.planSlug ?? null,

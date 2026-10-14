@@ -8,6 +8,7 @@ import { billingOrders, kioskKeys, plans, tenantPayments, tenants } from "../db/
 import { clearLicenseCache, extendKeys, hashKioskKey, syncTenantEndsAt } from "./license.js";
 import { syncTenantFeaturesToPlan } from "./planFeatures.js";
 import { logEvent } from "./platformEvents.js";
+import { encryptSecret } from "./secretBox.js";
 import { fetchMidtransStatus, outcomeFromNotification, type OrderOutcome } from "./midtrans.js";
 import { fetchXenditInvoice, outcomeFromInvoice } from "./xenditBilling.js";
 import { loadGateway } from "./gateways.js";
@@ -80,7 +81,7 @@ export async function settleOrder(order: Order, outcome: OrderOutcome, paymentTy
         const rawKey = crypto.randomBytes(32).toString("hex");
         const label = item.label?.trim() || `Booth ${existingKeys.length + index + 1}`;
         await tx.insert(kioskKeys).values({
-          tenantId: order.tenantId, label, keyHash: hashKioskKey(rawKey), rawKey,
+          tenantId: order.tenantId, label, keyHash: hashKioskKey(rawKey), rawKey: encryptSecret(rawKey),
           licenseType: "paid", licenseEndsAt: endsAt, licensePlanSlug: planSlug,
         });
         created.push(label);
