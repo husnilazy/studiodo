@@ -13,8 +13,9 @@ import {
 } from "../lib/gdrive.js";
 import { ensureMp4Upload } from "../lib/ffmpeg.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
-import { requireKioskAuth } from "../middleware/kioskAuth.js";
+import { requireKioskAuth, requireKioskAuthUpload } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
+import { getKeyPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 
@@ -152,7 +153,7 @@ sessionsRouter.patch("/:id/customer", requireKioskAuth, async (req, res) => {
 // slot, or (for gdrive) each could see no folder yet and create two. A
 // row lock for the duration of this one request serializes just that,
 // which is cheap (one small file write) and keeps every write correct.
-sessionsRouter.post("/:id/photo", requireKioskAuth, upload.single("photo"), async (req, res) => {
+sessionsRouter.post("/:id/photo", requireKioskAuthUpload, upload.single("photo"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   const slotIndex = Number(req.body.slotIndex);
@@ -208,10 +209,12 @@ sessionsRouter.post("/:id/photo", requireKioskAuth, upload.single("photo"), asyn
 
 // Same concurrency reasoning as /:id/photo above — media upload can now
 // genuinely overlap with in-flight photo uploads for the same session.
-sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), async (req, res) => {
+sessionsRouter.post("/:id/media", requireKioskAuthUpload, upload.single("media"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   if (!req.file) return res.status(400).json({ error: "File media wajib diupload" });
+  // GIF, video and stop-motion are a plan feature of THIS booth: refuse them here too, so a modified app can't bypass what GET /packages hides.
+  if (!(await getKeyPlanFeatures(req.kioskKeyId!)).gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   // GIFs stay GIFs; any video is converted to MP4 so it plays on every phone (WebM doesn't on iOS).
   const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
@@ -257,11 +260,12 @@ sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), asyn
 // /:id/media above which is the combined all-slots-at-once output. Same
 // concurrency handling as /:id/photo, since retakes can re-upload a slot's
 // clip while other slots are still capturing.
-sessionsRouter.post("/:id/slot-media", requireKioskAuth, upload.single("media"), async (req, res) => {
+sessionsRouter.post("/:id/slot-media", requireKioskAuthUpload, upload.single("media"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   const slotIndex = Number(req.body.slotIndex);
   if (!req.file || !Number.isInteger(slotIndex) || slotIndex < 0) return res.status(400).json({ error: "File dan slotIndex wajib diisi" });
+  if (!(await getKeyPlanFeatures(req.kioskKeyId!)).gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
   const fallbackExtension = req.body.kind === "gif" ? ".gif" : /mp4/i.test(file.mimetype) ? ".mp4" : ".webm";
@@ -293,7 +297,7 @@ sessionsRouter.post("/:id/slot-media", requireKioskAuth, upload.single("media"),
   res.json(row);
 });
 
-sessionsRouter.post("/:id/strip", requireKioskAuth, upload.single("strip"), async (req, res) => {
+sessionsRouter.post("/:id/strip", requireKioskAuthUpload, upload.single("strip"), async (req, res) => {
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   const file = req.file;

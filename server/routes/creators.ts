@@ -7,6 +7,7 @@ import { hashPassword } from "../lib/passwordHash.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { revokeSessions } from "../lib/sessionGuard.js";
 import { platformEvents } from "../db/schema.js";
 import { REJECTION_PRESETS, reviewChecks } from "../lib/moderation.js";
 import { sendMail, templateReviewedMail } from "../lib/mailer.js";
@@ -129,6 +130,7 @@ creatorsAdminRouter.post("/accounts/:id/reset-password", async (req, res) => {
   const password = newPassword();
   const [row] = await db.update(creators).set({ passwordHash: hashPassword(password) }).where(eq(creators.id, req.params.id)).returning({ id: creators.id });
   if (!row) return res.status(404).json({ error: "Akun tidak ditemukan" });
+  revokeSessions("creator", row.id);
   res.json({ password });
 });
 

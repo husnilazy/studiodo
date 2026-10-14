@@ -136,18 +136,6 @@ export function subscriptionMail(p: { ownerName: string | null; boothName: strin
   };
 }
 
-export function receiptMail(p: { ownerName: string | null; orderId: string; planName: string; boothCount: number; periodDays: number; amount: number; discountPercent: number; paidAt: Date }): Mail {
-  const rupiah = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(p.amount);
-  const date = p.paidAt.toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" });
-  const row = (k: string, v: string) => `<tr><td style="padding:6px 0;color:#7b849c">${esc(k)}</td><td style="padding:6px 0;text-align:right;font-weight:600">${esc(v)}</td></tr>`;
-  return {
-    subject: `Pembayaran diterima — ${rupiah}`,
-    html: layout("Pembayaran diterima", `<p>${esc(p.ownerName ? `Terima kasih, ${p.ownerName}. ` : "Terima kasih. ")}Pembayaran langganan Anda sudah kami terima dan masa aktif booth sudah diperbarui.</p>
-<table role="presentation" width="100%" style="border-top:1px solid #e4e7f2;border-bottom:1px solid #e4e7f2;margin:14px 0;font-size:14px">${row("Nomor pesanan", p.orderId)}${row("Paket", p.planName)}${row("Jumlah booth", String(p.boothCount))}${row("Periode", `${p.periodDays} hari`)}${p.discountPercent > 0 ? row("Diskon", `${p.discountPercent}%`) : ""}${row("Total dibayar", rupiah)}${row("Waktu", date)}</table>${button(web("/portal/tagihan"), "Lihat riwayat tagihan")}`),
-    text: `Pembayaran diterima: ${rupiah}\nPesanan ${p.orderId} · ${p.planName} · ${p.boothCount} booth · ${p.periodDays} hari\n${date}\nRiwayat: ${web("/portal/tagihan")}`,
-  };
-}
-
 export function templateSubmittedMail(p: { name: string; templateName: string }): Mail {
   return {
     subject: `Template "${p.templateName}" kami terima`,

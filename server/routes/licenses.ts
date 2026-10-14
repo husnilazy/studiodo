@@ -1,10 +1,11 @@
 import { Router, type Request } from "express";
 import { and, desc, eq, ilike, isNull, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { kioskKeys, platformSettings, superadmins, tenants } from "../db/schema.js";
+import { deviceRegistry, kioskKeys, platformSettings, superadmins, tenants } from "../db/schema.js";
 import { clearKioskAuthCache } from "../middleware/kioskAuth.js";
 import { clearLicenseCache, computeKeyLock, getGracePeriodDays, issueKioskKey, syncTenantEndsAt, type IssueKind } from "../lib/license.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { readStoredSecret } from "../lib/secretBox.js";
 
 // Superadmin control over every booth licence on the platform (mounted under /api/superadmin/licenses, behind
 // requireSuperadminAuth). One kiosk key = one booth = one licence: this is where a superadmin issues trial keys,
@@ -151,8 +152,12 @@ licensesAdminRouter.patch("/:id", async (req, res) => {
 // POST /api/superadmin/licenses/:id/reset-device — free the key so it can be paired with a different computer
 licensesAdminRouter.post("/:id/reset-device", async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(400).json({ error: "Booth tidak valid" });
-  const [row] = await db.update(kioskKeys).set({ boundDeviceId: null, boundAt: null }).where(eq(kioskKeys.id, req.params.id)).returning({ id: kioskKeys.id, tenantId: kioskKeys.tenantId, label: kioskKeys.label });
+  // Superadmin resets are not capped. forgetTrial: true also frees the computer to take another free trial (use it only
+  // when a trial was granted twice on purpose); by default the computer stays remembered as having used one.
+  const [before] = await db.select({ bound: kioskKeys.boundDeviceId }).from(kioskKeys).where(eq(kioskKeys.id, req.params.id));
+  const [row] = await db.update(kioskKeys).set({ boundDeviceId: null, boundAt: null, activatedAt: null, deviceTokenHash: null }).where(eq(kioskKeys.id, req.params.id)).returning({ id: kioskKeys.id, tenantId: kioskKeys.tenantId, label: kioskKeys.label });
   if (!row) return res.status(404).json({ error: "Booth tidak ditemukan" });
+  if (req.body?.forgetTrial === true && before?.bound) await db.delete(deviceRegistry).where(eq(deviceRegistry.deviceId, before.bound));
   clearKioskAuthCache();
   logEvent({ tenantId: row.tenantId, category: "kiosk", action: "kiosk_key.device_reset", message: `Device booth "${row.label ?? row.id.slice(0, 8)}" direset oleh superadmin`, actorType: "superadmin", actorLabel: await actorLabel(req) });
   res.json({ ok: true });
@@ -186,7 +191,8 @@ licensesAdminRouter.get("/:id/key", async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(400).json({ error: "Booth tidak valid" });
   const [row] = await db.select({ key: kioskKeys.rawKey, tenantId: kioskKeys.tenantId, label: kioskKeys.label }).from(kioskKeys).where(eq(kioskKeys.id, req.params.id));
   if (!row) return res.status(404).json({ error: "Booth tidak ditemukan" });
-  if (!row.key) return res.status(410).json({ error: "Key ini dibuat sebelum fitur lihat-ulang tersedia — tidak bisa ditampilkan lagi." });
+  const plainKey = readStoredSecret(row.key);
+  if (!plainKey) return res.status(410).json({ error: "Key ini dibuat sebelum fitur lihat-ulang tersedia — tidak bisa ditampilkan lagi." });
   logEvent({ tenantId: row.tenantId, category: "auth", action: "kiosk_key.revealed", message: `Key booth "${row.label ?? req.params.id.slice(0, 8)}" dilihat oleh superadmin`, actorType: "superadmin", actorLabel: await actorLabel(req) });
-  res.json({ key: row.key });
+  res.json({ key: plainKey });
 });

@@ -39,6 +39,9 @@ export interface StudiodoUpdaterStatus {
 
 export interface StudiodoBridgeAPI {
   getVersion: () => Promise<string>;
+  getDeviceIdentity?: () => Promise<{ deviceId: string; token: string | null }>;
+  setDeviceToken?: (token: string) => Promise<boolean>;
+  clearDeviceToken?: () => Promise<boolean>;
   relaunchKiosk: () => Promise<void>;
   getKioskStatus: () => Promise<{ open: boolean }>;
   closeKiosk: () => Promise<{ open: boolean }>;

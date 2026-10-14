@@ -161,6 +161,12 @@ export const superadmins = pgTable("superadmins", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Two-factor sign-in (TOTP, see lib/totp.ts + routes/superadminTwoFactor.ts). The secret is encrypted at rest; it only counts
+  // once totp_enabled_at is set (after the owner proved the authenticator app works). Recovery codes are stored as hashes.
+  totpSecretEnc: text("totp_secret_enc"),
+  totpEnabledAt: timestamp("totp_enabled_at"),
+  totpLastStep: integer("totp_last_step"), // last accepted 30-second step: a code can never be used twice
+  recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
 });
 
 // Singleton row (platform-wide, not per-tenant) of settings a superadmin can tune
@@ -284,7 +290,29 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // Set when the key was issued as a trial. Survives a later trial→paid conversion, so a computer that already used a
   // trial can't be paired with a second trial key (see requireKioskAuth).
   trialStartedAt: timestamp("trial_started_at"),
+  // Activation: a key becomes usable only after a tenant admin LOGGED IN on the computer and entered it (POST
+  // /api/kiosk-keys/activate) — that is what binds the device. A key that was merely copied can no longer claim a device
+  // by itself. Keys already bound before activation existed were grandfathered (activated_at = bound_at).
+  activatedAt: timestamp("activated_at"),
+  // SHA-256 of the per-device secret issued at activation (kept in the Electron main process, never in the web page's
+  // storage). Once set, every kiosk request must also carry it: knowing the key AND the (guessable) device id is not enough.
+  deviceTokenHash: text("device_token_hash"),
+  // Tenant self-service "Reset device" is capped (see lib/deviceLock.ts) so one paid key can't be rotated across many PCs.
+  deviceResetCount: integer("device_reset_count").notNull().default(0),
+  deviceResetWindowStart: timestamp("device_reset_window_start"),
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
+
+// A permanent memory of which computers already used a free trial. Unlike kiosk_keys.bound_device_id it is NOT cleared by
+// "reset device", revoking a key or deleting a tenant, so trial-hopping (new account, new key, same PC) stays blocked.
+// A superadmin can free a computer from here when a trial was legitimately granted twice.
+export const deviceRegistry = pgTable("device_registry", {
+  deviceId: text("device_id").primaryKey(),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  trialStartedAt: timestamp("trial_started_at"),
+  trialKeyId: uuid("trial_key_id"),
+  trialTenantId: uuid("trial_tenant_id"),
+  note: text("note"),
+});
 
 // Paket foto (packages)
 export const packages = pgTable("packages", {
@@ -779,3 +807,98 @@ export const creatorTemplates = pgTable("creator_templates", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [index("creator_templates_creator_idx").on(table.creatorId, table.updatedAt), index("creator_templates_status_idx").on(table.status)]);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// POS / Kasir. A central cashier (web portal) that sells booth packages, extra prints and ordinary products in one cart,
+// runs shifts with cash counting, hands out queue numbers and refunds with a supervisor PIN. Selling a package or print
+// also mints a one-use "cash" voucher the customer types at the kiosk, so the existing payment flow marks that session paid.
+// ---------------------------------------------------------------------------------------------------------------------
+export type PosOrderItem = { type: "package" | "print" | "product" | "custom"; refId?: string | null; name: string; qty: number; unitPrice: number };
+
+export const posSettings = pgTable("pos_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  supervisorPinHash: text("supervisor_pin_hash"), // null = refunds need no PIN
+  receiptHeader: text("receipt_header").notNull().default(""),
+  receiptFooter: text("receipt_footer").notNull().default("Terima kasih!"),
+  queuePrefix: text("queue_prefix").notNull().default("A"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Things sold at the counter that are not photo packages (drinks, merch, printed frames…).
+export const posProducts = pgTable("pos_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  price: numeric("price", { precision: 12, scale: 2 }).notNull(),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("pos_products_tenant_idx").on(table.tenantId)]);
+
+export const posShifts = pgTable("pos_shifts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  cashierName: text("cashier_name").notNull(),
+  openingCash: numeric("opening_cash", { precision: 12, scale: 2 }).notNull().default("0"),
+  openedAt: timestamp("opened_at").notNull().defaultNow(),
+  closedAt: timestamp("closed_at"),
+  expectedCash: numeric("expected_cash", { precision: 12, scale: 2 }), // frozen at close
+  countedCash: numeric("counted_cash", { precision: 12, scale: 2 }),
+  note: text("note"),
+}, (table) => [index("pos_shifts_tenant_idx").on(table.tenantId, table.openedAt)]);
+
+export const posOrders = pgTable("pos_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  shiftId: uuid("shift_id").references(() => posShifts.id, { onDelete: "set null" }),
+  orderNumber: text("order_number").notNull(), // e.g. KSR-20261014-001, unique per tenant
+  items: jsonb("items").$type<PosOrderItem[]>().notNull().default([]),
+  subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
+  discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method").notNull().default("cash"), // 'cash' | 'qris' | 'transfer' | 'other'
+  cashReceived: numeric("cash_received", { precision: 12, scale: 2 }),
+  changeGiven: numeric("change_given", { precision: 12, scale: 2 }),
+  status: text("status").notNull().default("paid"), // 'paid' | 'partial_refund' | 'refunded'
+  refundedAmount: numeric("refunded_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  customerName: text("customer_name"),
+  customerWhatsapp: text("customer_whatsapp"),
+  kioskVoucherCode: text("kiosk_voucher_code"), // the code the customer enters at the booth, when the cart has a package/print
+  queueTicketId: uuid("queue_ticket_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("pos_orders_tenant_idx").on(table.tenantId, table.createdAt),
+  index("pos_orders_shift_idx").on(table.shiftId),
+  unique("pos_orders_tenant_number_unique").on(table.tenantId, table.orderNumber),
+]);
+
+export const posRefunds = pgTable("pos_refunds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  shiftId: uuid("shift_id").references(() => posShifts.id, { onDelete: "set null" }), // the shift the money left the drawer in
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  items: jsonb("items").$type<{ index: number; qty: number }[]>().notNull().default([]),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("pos_refunds_order_idx").on(table.orderId), index("pos_refunds_tenant_idx").on(table.tenantId, table.createdAt)]);
+
+export const posQueueTickets = pgTable("pos_queue_tickets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  queueDate: text("queue_date").notNull(), // YYYY-MM-DD in WIB: numbering restarts every day
+  seq: integer("seq").notNull(),
+  label: text("label").notNull(), // "A-007"
+  customerName: text("customer_name"),
+  customerWhatsapp: text("customer_whatsapp"),
+  partySize: integer("party_size").notNull().default(1),
+  status: text("status").notNull().default("waiting"), // 'waiting' | 'called' | 'serving' | 'done' | 'skipped'
+  kioskKeyId: uuid("kiosk_key_id").references(() => kioskKeys.id, { onDelete: "set null" }), // booth they were sent to
+  orderId: uuid("order_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  calledAt: timestamp("called_at"),
+  doneAt: timestamp("done_at"),
+}, (table) => [
+  index("pos_queue_tenant_day_idx").on(table.tenantId, table.queueDate),
+  unique("pos_queue_tenant_day_seq_unique").on(table.tenantId, table.queueDate, table.seq),
+]);

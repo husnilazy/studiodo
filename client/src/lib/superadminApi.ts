@@ -430,8 +430,17 @@ export interface TenantDetail extends SuperadminTenant {
   recentEvents: PlatformEvent[];
 }
 
+export interface TwoFactorStatus { enabled: boolean; enabledAt: string | null; recoveryCodesLeft: number; setupPending: boolean }
+
 export const superadminApi = {
-  login: (email: string, password: string) => request<{ token: string }>("/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string) => request<{ token?: string; twoFactorRequired?: boolean; challenge?: string }>("/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  /** Second sign-in step when 2FA is on: the challenge from login() plus a 6-digit authenticator code or a recovery code. */
+  login2fa: (challenge: string, code: string) => request<{ token: string; usedRecoveryCode?: boolean }>("/login/2fa", { method: "POST", body: JSON.stringify({ challenge, code }) }),
+  getTwoFactorStatus: () => request<TwoFactorStatus>("/2fa/status"),
+  setupTwoFactor: () => request<{ secret: string; otpauthUrl: string }>("/2fa/setup", { method: "POST" }),
+  enableTwoFactor: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>("/2fa/enable", { method: "POST", body: JSON.stringify({ code }) }),
+  disableTwoFactor: (password: string, code: string) => request<{ ok: boolean }>("/2fa/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
+  regenerateRecoveryCodes: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>("/2fa/recovery-codes", { method: "POST", body: JSON.stringify({ code }) }),
   logout: () => request<{ ok: boolean }>("/logout", { method: "POST" }),
   getMe: () => request<{ email: string }>("/me"),
   getTenants: () => request<SuperadminTenant[]>("/tenants"),

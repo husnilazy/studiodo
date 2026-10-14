@@ -5,11 +5,12 @@
 // Electron here only owns the native shell: fullscreen kiosk window, camera
 // bridges, and printing — it no longer spawns a local server or local DB.
 require("dotenv").config();
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, safeStorage, session } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { startCanonBridge, stopCanonBridge, getCanonBridgeStatus } = require("./canon-bridge.cjs");
 const { startDigicamBridge, stopDigicamBridge } = require("./digicam-bridge.cjs");
 const { listPrinters, printImage, waitForPrintQueue } = require("./print.cjs");
+const device = require("./device.cjs");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -185,6 +186,9 @@ function createKioskWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true, // the page's process gets no Node access at all; the preload only uses contextBridge + ipcRenderer
+      webviewTag: false,
+      allowRunningInsecureContent: false,
     },
   });
   openExternalLinksIn(kioskWin);
@@ -209,6 +213,9 @@ function createAdminWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true, // the page's process gets no Node access at all; the preload only uses contextBridge + ipcRenderer
+      webviewTag: false,
+      allowRunningInsecureContent: false,
     },
   });
   openExternalLinksIn(adminWin);
@@ -343,12 +350,19 @@ ipcMain.handle("updater:checkNow", async () => {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
+  // The UI is local and trusted, but still: ask for nothing it does not need. Camera (and microphone for video capture) and
+  // fullscreen are allowed; everything else (location, notifications, USB, midi, ...) is refused.
+  const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized-write"]);
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => ALLOWED_PERMISSIONS.has(permission));
+
   rotateLogIfNeeded();
   console.log(`[startup] app ready isDev=${isDev} version=${app.getVersion()}`);
   startCanonBridge();
   if (process.env.DIGICAM_BRIDGE_ENABLED !== "false") {
     startDigicamBridge({ onLiveViewShown: bringKioskToFront });
   }
+  void hardwareId(); // warm up: reading the hardware id takes about a second
   createKioskWindow();
   setupAutoUpdater();
 
@@ -378,6 +392,11 @@ app.whenReady().then(() => {
   });
 });
 
+// No <webview> tags and no popups to unknown places, whatever a page tries.
+app.on("web-contents-created", (_event, contents) => {
+  contents.on("will-attach-webview", (event) => event.preventDefault());
+});
+
 app.on("second-instance", () => {
   if (kioskWin && !kioskWin.isDestroyed()) {
     kioskWin.show();
@@ -404,6 +423,21 @@ app.on("will-quit", () => {
 // renderer's console call had; appendLog already knows how to render them.
 ipcMain.on("renderer:log", (_event, level, args) => {
   appendLog(`RENDERER-${String(level ?? "LOG").toUpperCase()}`, Array.isArray(args) ? args : [args]);
+});
+
+// Device identity for licence binding (see electron/device.cjs): a hardware-derived id plus the per-device secret the server
+// issues at activation. Kept in the main process / OS keystore, never in the page's localStorage.
+let deviceIdPromise = null;
+const hardwareId = () => (deviceIdPromise = deviceIdPromise || device.getDeviceId(app.getPath("userData")));
+ipcMain.handle("device:getIdentity", async () => ({ deviceId: await hardwareId(), token: device.readToken(app.getPath("userData"), safeStorage) }));
+ipcMain.handle("device:setToken", (_event, token) => {
+  if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) return false;
+  device.writeToken(app.getPath("userData"), safeStorage, token);
+  return true;
+});
+ipcMain.handle("device:clearToken", () => {
+  device.clearToken(app.getPath("userData"));
+  return true;
 });
 
 ipcMain.handle("app:getVersion", () => app.getVersion());

@@ -125,6 +125,7 @@ function PlanForm({ draft, setDraft, creating }: { draft: PlanDraft; setDraft: (
 
       <div className={`${group} lg:col-span-2`}>
         <p className={heading}>Fitur &amp; tampilan di website</p>
+        <p className="mt-1 text-xs leading-relaxed text-fg/40">Berlaku per booth: booth yang dibeli di paket ini mendapat (atau tidak mendapat) fitur yang dicentang. Booth tanpa paket (trial atau diberikan manual) selalu mendapat semua fitur. Perubahan langsung berlaku, tanpa menghapus data tenant.</p>
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
           <label className="flex items-center gap-2 text-sm text-fg/70"><input type="checkbox" checked={draft.screenBuilderEnabled} onChange={(e) => set("screenBuilderEnabled", e.target.checked)} /> Screen Builder</label>
           <label className="flex items-center gap-2 text-sm text-fg/70"><input type="checkbox" checked={draft.gifVideoEnabled} onChange={(e) => set("gifVideoEnabled", e.target.checked)} /> GIF &amp; Video</label>

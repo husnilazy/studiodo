@@ -33,6 +33,7 @@ const MarketplacePanel = lazy(() => import("@/components/MarketplacePanel").then
 const CreatorsPanel = lazy(() => import("@/components/CreatorsPanel").then((m) => ({ default: m.CreatorsPanel })));
 const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").then((m) => ({ default: m.BillingOrdersPanel })));
 const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
+const SuperadminSecurityPanel = lazy(() => import("@/components/SuperadminSecurityPanel").then((m) => ({ default: m.SuperadminSecurityPanel })));
 const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
 const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
@@ -399,19 +400,36 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Second step when two-factor is on: the password was right, now the authenticator (or a recovery) code.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
+      if (challenge) {
+        const result = await superadminApi.login2fa(challenge, code);
+        if (result?.token) {
+          setSuperadminToken(result.token);
+          onLoggedIn();
+        }
+        return;
+      }
       const result = await superadminApi.login(email, password);
+      if (result?.twoFactorRequired && result.challenge) {
+        setChallenge(result.challenge);
+        setPassword("");
+        return;
+      }
       if (result?.token) {
         setSuperadminToken(result.token);
         onLoggedIn();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email atau password salah");
+      if (challenge && err instanceof Error && /habis|tidak valid/i.test(err.message)) { setChallenge(null); setCode(""); }
     } finally {
       setSubmitting(false);
     }
@@ -431,13 +449,23 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
         <h1 className="mt-2 font-display text-2xl font-bold">Admin Pusat</h1>
         <p className="mt-2 text-sm text-fg/50">Panel superadmin — kelola semua tenant, paket harga, dan pembayaran di platform ini.</p>
         <div className="mt-6 space-y-3">
-          <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
+          {challenge ? (
+            <>
+              <p className="text-sm text-fg/60">Masukkan kode 6 angka dari aplikasi authenticator Anda. HP hilang? Pakai salah satu kode pemulihan.</p>
+              <input autoFocus inputMode="text" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-center font-mono text-lg tracking-[0.3em] outline-none transition focus:border-accent" />
+            </>
+          ) : (
+            <>
+              <input type="email" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
+              <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm outline-none transition focus:border-accent" />
+            </>
+          )}
         </div>
         {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
-        <button type="submit" disabled={submitting || !email || !password} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
-          {submitting ? "Memproses…" : "Masuk"}
+        <button type="submit" disabled={submitting || (challenge ? !code.trim() : !email || !password)} className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
+          {submitting ? "Memproses…" : challenge ? "Verifikasi" : "Masuk"}
         </button>
+        {challenge && <button type="button" onClick={() => { setChallenge(null); setCode(""); setError(null); }} className="mt-3 w-full text-center text-xs text-fg/45 underline-offset-4 hover:underline">Kembali</button>}
         <p className="mt-4 text-center text-xs text-fg/40">Halaman ini khusus pengelola platform. Pemilik booth masuk lewat <a href="https://www.studiodo.id/masuk" className="font-semibold text-accent hover:underline">www.studiodo.id/masuk</a>.</p>
       </form>
     </div>
@@ -1568,6 +1596,7 @@ export default function SuperadminDashboard() {
 
         {section === "settings" && (
           <div className="grid gap-6">
+            <SuperadminSecurityPanel />
             <PlatformSettingsPanel />
             <PaymentGatewaysPanel />
           </div>

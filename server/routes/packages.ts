@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { saveUploadedFile } from "../storage.js";
-import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { getKeyPlanFeatures, getTenantPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 
 export const packagesRouter = Router();
 packagesRouter.param("id", validateUuidParam("Paket tidak ditemukan"));
@@ -37,7 +37,11 @@ packagesRouter.get("/", requireKioskAuth, async (req, res) => {
     .from(packages)
     .where(and(eq(packages.tenantId, req.tenantId!), eq(packages.active, true)))
     .orderBy(packages.sortOrder);
-  res.json(rows);
+  // The kiosk offers GIF / video / stop-motion exactly as these flags say. They are masked per BOOTH from that booth's own plan
+  // (a Starter booth never offers them, even when the package was set up while the tenant also had a PRO booth). The package
+  // itself is untouched, so upgrading the booth brings the options straight back.
+  const { gifVideoEnabled } = await getKeyPlanFeatures(req.kioskKeyId!);
+  res.json(gifVideoEnabled ? rows : rows.map((row) => ({ ...row, hasGif: false, hasVideo: false, hasStopMotion: false })));
 });
 
 // GET /api/packages/all — admin panel (includes inactive)
@@ -58,7 +62,7 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
   }
   if ((hasGif || hasVideo || hasStopMotion)) {
     const { gifVideoEnabled } = await getTenantPlanFeatures(req.tenantId!);
-    if (!gifVideoEnabled) return res.status(403).json({ error: "Fitur GIF/Video tidak termasuk paket kamu saat ini." });
+    if (!gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   }
 
   const [row] = await db
@@ -107,7 +111,7 @@ packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
   if (patch.hasStopMotion !== undefined) patch.hasStopMotion = Boolean(patch.hasStopMotion);
   if (patch.hasGif || patch.hasVideo || patch.hasStopMotion) {
     const { gifVideoEnabled } = await getTenantPlanFeatures(req.tenantId!);
-    if (!gifVideoEnabled) return res.status(403).json({ error: "Fitur GIF/Video tidak termasuk paket kamu saat ini." });
+    if (!gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   }
   if (patch.extraPrints !== undefined) patch.extraPrints = Array.isArray(patch.extraPrints) ? patch.extraPrints : [];
   if (patch.active !== undefined) patch.active = Boolean(patch.active);

@@ -22,6 +22,8 @@ export async function createSnapTransaction(
     customerEmail: string;
     customerName: string;
     finishUrl?: string;
+    unfinishUrl?: string;
+    errorUrl?: string;
   },
 ): Promise<SnapTransaction> {
   const res = await fetch(`${snapBase(cfg)}/snap/v1/transactions`, {
@@ -31,7 +33,9 @@ export async function createSnapTransaction(
       transaction_details: { order_id: input.orderId, gross_amount: input.grossAmount },
       item_details: [{ id: input.orderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
       customer_details: { first_name: input.customerName.slice(0, 50), email: input.customerEmail },
-      ...(input.finishUrl ? { callbacks: { finish: input.finishUrl } } : {}),
+      // The payment page stays open for 24h (the same window the invoice shows as its due time).
+      expiry: { unit: "hours", duration: 24 },
+      ...(input.finishUrl ? { callbacks: { finish: input.finishUrl, ...(input.unfinishUrl ? { unfinish: input.unfinishUrl } : {}), ...(input.errorUrl ? { error: input.errorUrl } : {}) } } : {}),
     }),
     signal: AbortSignal.timeout(20_000),
   });

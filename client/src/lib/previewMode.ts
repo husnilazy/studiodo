@@ -1,6 +1,7 @@
 import { useKioskSession, type Package } from "./sessionStore";
 import { createJSONStorage } from "zustand/middleware";
 import { getApiBaseUrl } from "./apiConfig";
+import { kioskAuthHeaders } from "./api";
 import { useBoothConfig, type BoothConfig } from "./boothConfigStore";
 
 // "Kiosk preview" = the REAL kiosk app running inside an <iframe> on the admin's Kustomisasi Kiosk page, so the tenant
@@ -97,8 +98,7 @@ function samplePhoto(index: number) {
 
 async function pickPackage(): Promise<Package> {
   try {
-    const key = localStorage.getItem("studiodo-kiosk-key");
-    const response = await fetch(`${getApiBaseUrl()}/packages`, { headers: key ? { "x-kiosk-key": key } : undefined, cache: "no-store" });
+    const response = await fetch(`${getApiBaseUrl()}/packages`, { headers: kioskAuthHeaders(), cache: "no-store" });
     if (response.ok) {
       const list = (await response.json()) as Package[];
       if (Array.isArray(list) && list.length > 0) return list[0];

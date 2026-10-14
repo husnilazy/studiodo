@@ -22,7 +22,8 @@ import BuilderFrame from "@/pages/BuilderFrame";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useKioskSession } from "@/lib/sessionStore";
-import { clearKioskPairing, isKioskPaired } from "@/lib/apiConfig";
+import { clearKioskPairing, getDeviceToken, getHardwareDeviceId, isKioskPaired, setBoundDeviceId, setDeviceToken } from "@/lib/apiConfig";
+import { api } from "@/lib/api";
 import { prefetchFrames } from "@/lib/framesCache";
 import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { useLicenseLocked } from "@/lib/subscriptionLockStore";
@@ -200,7 +201,22 @@ export default function App() {
     // (see offlineStore.ts), so this only ever reacts to the specific
     // pairing-required/device-mismatch events dispatched by api.ts on an
     // actual 401/403, same mechanism the listener above already handles.
-    syncBoothConfigFromServer()
+    // A booth paired by an older app version has no per-device secret yet: trade key + device id for one, once (this also moves
+    // it to the hardware-derived id). Offline or already done: nothing happens and it is retried next start.
+    const upgrade = async () => {
+      if (getDeviceToken()) return;
+      try {
+        const r = await api.upgradeKioskBinding({ newDeviceId: getHardwareDeviceId() });
+        if (r?.deviceToken) {
+          if (r.deviceId) setBoundDeviceId(r.deviceId);
+          await setDeviceToken(r.deviceToken);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    upgrade()
+      .then(() => syncBoothConfigFromServer())
       .catch(() => {})
       .finally(() => {
         setCheckingPairing(false);

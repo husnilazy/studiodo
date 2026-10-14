@@ -20,6 +20,8 @@ import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
 import { publicContentRouter } from "./routes/siteContent.js";
 import { portalRouter, billingWebhookRouter } from "./routes/portal.js";
+import { posRouter } from "./routes/pos.js";
+import { publicInvoiceRouter } from "./routes/publicInvoice.js";
 import { crmRouter } from "./routes/crm.js";
 import { accountEmailRouter } from "./routes/accountEmail.js";
 import { notificationsTenantRouter } from "./routes/notifications.js";
@@ -34,6 +36,7 @@ import { client } from "./db/client.js";
 import { runNotificationRules } from "./lib/notificationRules.js";
 import { pruneEmailLog } from "./lib/emailLog.js";
 import { logEvent } from "./lib/platformEvents.js";
+import { corsOptions, rejectForeignWrites } from "./lib/cors.js";
 
 // Without these, an error thrown outside an Express route handler (e.g. the
 // postgres driver's internal reconnect logic hitting a dead socket when
@@ -62,7 +65,8 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
-app.use(cors());
+app.use(cors(corsOptions));
+app.use(rejectForeignWrites);
 // rawBody is kept for gateways that sign the exact bytes they send (DOKU notifications).
 const keepRawBody = (req: unknown, _res: unknown, buf: Buffer) => { (req as { rawBody?: string }).rawBody = buf.toString("utf8"); };
 // Only the routes that really receive images as base64 (package photos, frames, branding, CMS assets) may carry a huge JSON
@@ -99,12 +103,14 @@ app.use("/api/public", publicBlogRouter);
 app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
+app.use("/api/public", publicInvoiceRouter);
 app.use("/api/public", publicAssetsRouter);
 app.use("/api/creator", creatorPortalRouter);
 app.use("/api/portal/notifications", notificationsTenantRouter);
 app.use("/api/portal/directory", directoryTenantRouter);
 app.use("/api/portal/marketplace", marketplaceTenantRouter);
 app.use("/api/crm", crmRouter);
+app.use("/api/pos", posRouter);
 app.use("/api/live", liveRouter);
 app.use("/api/portal", portalRouter);
 app.use("/api/billing", billingWebhookRouter);

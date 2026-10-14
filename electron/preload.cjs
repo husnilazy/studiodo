@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("studiodo", {
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  // Licence binding: hardware-derived device id + the per-device secret (kept in the main process, never in localStorage).
+  getDeviceIdentity: () => ipcRenderer.invoke("device:getIdentity"),
+  setDeviceToken: (token) => ipcRenderer.invoke("device:setToken", token),
+  clearDeviceToken: () => ipcRenderer.invoke("device:clearToken"),
   relaunchKiosk: () => ipcRenderer.invoke("app:relaunchKiosk"),
   getKioskStatus: () => ipcRenderer.invoke("kiosk:status"),
   closeKiosk: () => ipcRenderer.invoke("kiosk:close"),

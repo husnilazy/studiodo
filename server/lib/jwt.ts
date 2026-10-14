@@ -13,6 +13,8 @@ function getSecret(): string {
 export interface AdminTokenPayload {
   adminId: string;
   tenantId: string;
+  /** Fingerprint of the password the token was issued under (lib/sessionGuard.ts); absent on older tokens. */
+  pv?: string;
 }
 
 export function signAdminToken(payload: AdminTokenPayload): string {
@@ -24,11 +26,12 @@ export function verifyAdminToken(token: string): AdminTokenPayload {
   if (typeof decoded !== "object" || !decoded || typeof decoded.adminId !== "string" || typeof decoded.tenantId !== "string") {
     throw new Error("Token tidak valid");
   }
-  return { adminId: decoded.adminId, tenantId: decoded.tenantId };
+  return { adminId: decoded.adminId, tenantId: decoded.tenantId, ...(typeof decoded.pv === "string" ? { pv: decoded.pv } : {}) };
 }
 
 export interface SuperadminTokenPayload {
   superadminId: string;
+  pv?: string;
 }
 
 // `type: "superadmin"` is a deliberate, explicit marker — not just a different
@@ -36,7 +39,7 @@ export interface SuperadminTokenPayload {
 // be mistaken for a superadmin one even though both are signed with the same
 // JWT_SECRET. Superadmins can read/edit every tenant, so this boundary matters.
 export function signSuperadminToken(payload: SuperadminTokenPayload): string {
-  return jwt.sign({ type: "superadmin", superadminId: payload.superadminId }, getSecret(), { expiresIn: TOKEN_TTL });
+  return jwt.sign({ type: "superadmin", superadminId: payload.superadminId, ...(payload.pv ? { pv: payload.pv } : {}) }, getSecret(), { expiresIn: TOKEN_TTL });
 }
 
 export function verifySuperadminToken(token: string): SuperadminTokenPayload {
@@ -44,17 +47,18 @@ export function verifySuperadminToken(token: string): SuperadminTokenPayload {
   if (typeof decoded !== "object" || !decoded || decoded.type !== "superadmin" || typeof decoded.superadminId !== "string") {
     throw new Error("Token tidak valid");
   }
-  return { superadminId: decoded.superadminId };
+  return { superadminId: decoded.superadminId, ...(typeof decoded.pv === "string" ? { pv: decoded.pv } : {}) };
 }
 
 export interface CreatorTokenPayload {
   creatorId: string;
+  pv?: string;
 }
 
 // Marketplace creators are a third identity realm; `type: "creator"` keeps their tokens from ever
 // passing as tenant-admin or superadmin tokens (all three share JWT_SECRET).
 export function signCreatorToken(payload: CreatorTokenPayload): string {
-  return jwt.sign({ type: "creator", creatorId: payload.creatorId }, getSecret(), { expiresIn: TOKEN_TTL });
+  return jwt.sign({ type: "creator", creatorId: payload.creatorId, ...(payload.pv ? { pv: payload.pv } : {}) }, getSecret(), { expiresIn: TOKEN_TTL });
 }
 
 export function verifyCreatorToken(token: string): CreatorTokenPayload {
@@ -62,5 +66,5 @@ export function verifyCreatorToken(token: string): CreatorTokenPayload {
   if (typeof decoded !== "object" || !decoded || decoded.type !== "creator" || typeof decoded.creatorId !== "string") {
     throw new Error("Token tidak valid");
   }
-  return { creatorId: decoded.creatorId };
+  return { creatorId: decoded.creatorId, ...(typeof decoded.pv === "string" ? { pv: decoded.pv } : {}) };
 }

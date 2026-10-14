@@ -4,7 +4,7 @@ import App from "./App";
 import "./index.css";
 import "./lib/fontPairings";
 import { api } from "./lib/api";
-import { isKioskPaired } from "./lib/apiConfig";
+import { initDeviceIdentity, isKioskPaired } from "./lib/apiConfig";
 import { installKioskPreview, IS_KIOSK_PREVIEW } from "./lib/previewMode";
 
 // Opened inside the admin's live-preview frame (?kioskPreview=1): sample data in, nothing real out.
@@ -76,8 +76,12 @@ if (window.studiodo?.logRenderer) {
   }
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// The hardware device id and the per-device secret come from the Electron main process; the first API request must not
+// leave before they are known (it would go out with the wrong id and be rejected).
+void initDeviceIdentity().finally(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+});

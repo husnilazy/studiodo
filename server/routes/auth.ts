@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { admins, platformSettings, tenants } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signAdminToken } from "../lib/jwt.js";
+import { sessionVersion } from "../lib/sessionGuard.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { getTenantLicenseSummary } from "../lib/license.js";
 import { portalBaseUrl } from "../lib/urls.js";
@@ -48,7 +49,7 @@ authRouter.post("/login", async (req, res) => {
   }
   accountGuard.succeed(email);
 
-  const token = signAdminToken({ adminId: admin.id, tenantId: admin.tenantId });
+  const token = signAdminToken({ adminId: admin.id, tenantId: admin.tenantId, pv: sessionVersion(admin.passwordHash) });
   res.json({ token });
 });
 

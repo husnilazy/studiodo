@@ -12,7 +12,7 @@ import { resetStorageSettingsCache } from "../lib/storageConfig.js";
 import { resetR2Client } from "../storage.js";
 import { resetDriveClient } from "../lib/gdrive.js";
 import { validateFlowOrder } from "../lib/kioskFlowRules.js";
-import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { getKeyPlanFeatures, getTenantBoothFeatures, getTenantPlanFeatures } from "../lib/planFeatures.js";
 import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import multer from "multer";
@@ -53,11 +53,16 @@ async function ensureTenantSettingsRow(tenantId: string) {
 // state proactively instead of only finding out from a 403 after trying.
 configRouter.get("/plan-features", requireAnyAuth, async (req, res) => {
   const tenantId = req.tenantId!;
-  const [features, [{ kioskCount }]] = await Promise.all([
-    getTenantPlanFeatures(tenantId),
+  // A kiosk asks about itself; the dashboard asks about the tenant (best of its booths) and gets the per-booth breakdown too.
+  const [features, booths, [{ kioskCount }]] = await Promise.all([
+    req.kioskKeyId ? getKeyPlanFeatures(req.kioskKeyId) : getTenantPlanFeatures(tenantId),
+    req.kioskKeyId ? Promise.resolve([]) : getTenantBoothFeatures(tenantId),
     db.select({ kioskCount: sql<number>`count(*)::int` }).from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt))),
   ]);
-  res.json({ ...features, kioskCount });
+  res.json({
+    ...features, kioskCount,
+    booths: booths.map((b) => ({ id: b.keyId, label: b.label, planSlug: b.features.planSlug, planName: b.features.planName, screenBuilderEnabled: b.features.screenBuilderEnabled, gifVideoEnabled: b.features.gifVideoEnabled })),
+  });
 });
 
 // GET /api/config/public?sessionId=... — dibuka dari halaman gallery publik (tanpa auth).
