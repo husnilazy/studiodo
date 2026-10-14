@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { authenticateKiosk } from "../lib/kioskAccess.js";
 import { verifyAdminToken } from "../lib/jwt.js";
+import { isSessionCurrent } from "../lib/sessionGuard.js";
 
 /**
  * Some settings (e.g. current Xendit/printing config) are read both by the
@@ -13,7 +14,8 @@ export async function requireAnyAuth(req: Request, res: Response, next: NextFunc
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
   if (bearer) {
     try {
-      const { adminId, tenantId } = verifyAdminToken(bearer);
+      const { adminId, tenantId, pv } = verifyAdminToken(bearer);
+      if (!(await isSessionCurrent("admin", adminId, pv))) throw new Error("sesi dicabut");
       req.adminId = adminId;
       req.tenantId = tenantId;
       return next();

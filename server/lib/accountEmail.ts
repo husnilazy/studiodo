@@ -5,6 +5,7 @@ import { hashPassword } from "./passwordHash.js";
 import { passwordBind, verifyEmailToken } from "./emailTokens.js";
 import { deliver, passwordChangedMail, passwordResetMail, resetLink, verifyEmailMail, verifyLink } from "./emails.js";
 import { logEvent } from "./platformEvents.js";
+import { revokeSessions } from "./sessionGuard.js";
 
 // Rules behind the email links: verifying an address, asking for a password reset, and using the reset link.
 // The routes only parse input and map these results to HTTP.
@@ -88,12 +89,14 @@ export async function confirmPasswordReset(realm: Realm, token: string, newPassw
     if (!row) return bad("not_found");
     if (passwordBind(row.hash) !== v.bind) return bad("used"); // the password changed since this link was issued, i.e. it was already used
     await db.update(admins).set({ passwordHash: hashPassword(newPassword) }).where(eq(admins.id, v.subjectId));
+    revokeSessions("admin", v.subjectId); // a reset means "I may have lost control of the account": end every session
     email = row.email; name = row.name; tenantId = row.tenantId;
   } else {
     const [row] = await db.select({ hash: creators.passwordHash, email: creators.email, name: creators.name, status: creators.status }).from(creators).where(eq(creators.id, v.subjectId));
     if (!row || row.status !== "active") return bad("not_found");
     if (passwordBind(row.hash) !== v.bind) return bad("used");
     await db.update(creators).set({ passwordHash: hashPassword(newPassword) }).where(eq(creators.id, v.subjectId));
+    revokeSessions("creator", v.subjectId);
     email = row.email; name = row.name;
   }
   logEvent({ tenantId, level: "info", category: "auth", action: "password.reset_completed", message: `Kata sandi ${email} diatur ulang lewat tautan email`, actorType: "system", actorLabel: email });

@@ -5,7 +5,7 @@
 // Electron here only owns the native shell: fullscreen kiosk window, camera
 // bridges, and printing — it no longer spawns a local server or local DB.
 require("dotenv").config();
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, shell, safeStorage, session } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { startCanonBridge, stopCanonBridge, getCanonBridgeStatus } = require("./canon-bridge.cjs");
 const { startDigicamBridge, stopDigicamBridge } = require("./digicam-bridge.cjs");
@@ -186,6 +186,9 @@ function createKioskWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true, // the page's process gets no Node access at all; the preload only uses contextBridge + ipcRenderer
+      webviewTag: false,
+      allowRunningInsecureContent: false,
     },
   });
   openExternalLinksIn(kioskWin);
@@ -210,6 +213,9 @@ function createAdminWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true, // the page's process gets no Node access at all; the preload only uses contextBridge + ipcRenderer
+      webviewTag: false,
+      allowRunningInsecureContent: false,
     },
   });
   openExternalLinksIn(adminWin);
@@ -344,6 +350,12 @@ ipcMain.handle("updater:checkNow", async () => {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
+  // The UI is local and trusted, but still: ask for nothing it does not need. Camera (and microphone for video capture) and
+  // fullscreen are allowed; everything else (location, notifications, USB, midi, ...) is refused.
+  const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized-write"]);
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => ALLOWED_PERMISSIONS.has(permission));
+
   rotateLogIfNeeded();
   console.log(`[startup] app ready isDev=${isDev} version=${app.getVersion()}`);
   startCanonBridge();
@@ -378,6 +390,11 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createKioskWindow();
   });
+});
+
+// No <webview> tags and no popups to unknown places, whatever a page tries.
+app.on("web-contents-created", (_event, contents) => {
+  contents.on("will-attach-webview", (event) => event.preventDefault());
 });
 
 app.on("second-instance", () => {

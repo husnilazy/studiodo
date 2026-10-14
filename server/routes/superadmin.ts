@@ -6,6 +6,8 @@ import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSet
 import { computeQrisBalance } from "../lib/qrisBalance.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signSuperadminToken } from "../lib/jwt.js";
+import { sessionVersion } from "../lib/sessionGuard.js";
+import { issueTwoFactorChallenge, twoFactorAdminRouter, twoFactorLoginRouter } from "./superadminTwoFactor.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
 import { siteContentAdminRouter } from "./siteContent.js";
 import { blogAdminRouter } from "./blog.js";
@@ -60,20 +62,25 @@ superadminRouter.post("/login", async (req, res) => {
   }
   loginGuard.succeed(email);
 
-  const token = signSuperadminToken({ superadminId: superadmin.id });
+  // 2FA on: the password alone gets nothing but a short-lived challenge; the token comes from POST /login/2fa.
+  if (superadmin.totpEnabledAt) return res.json({ twoFactorRequired: true, challenge: issueTwoFactorChallenge(superadmin) });
+
+  const token = signSuperadminToken({ superadminId: superadmin.id, pv: sessionVersion(superadmin.passwordHash) });
   res.json({ token });
 });
+superadminRouter.use(twoFactorLoginRouter);
 
 superadminRouter.post("/logout", requireSuperadminAuth, (_req, res) => {
   res.json({ ok: true });
 });
 
 superadminRouter.get("/me", requireSuperadminAuth, async (req, res) => {
-  const [superadmin] = await db.select({ email: superadmins.email }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
-  res.json({ email: superadmin?.email });
+  const [superadmin] = await db.select({ email: superadmins.email, totp: superadmins.totpEnabledAt }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  res.json({ email: superadmin?.email, twoFactorEnabled: !!superadmin?.totp });
 });
 
 superadminRouter.use(requireSuperadminAuth);
+superadminRouter.use("/2fa", twoFactorAdminRouter);
 superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);
 superadminRouter.use("/marketplace", marketplaceAdminRouter);

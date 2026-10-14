@@ -36,6 +36,7 @@ import { client } from "./db/client.js";
 import { runNotificationRules } from "./lib/notificationRules.js";
 import { pruneEmailLog } from "./lib/emailLog.js";
 import { logEvent } from "./lib/platformEvents.js";
+import { corsOptions, rejectForeignWrites } from "./lib/cors.js";
 
 // Without these, an error thrown outside an Express route handler (e.g. the
 // postgres driver's internal reconnect logic hitting a dead socket when
@@ -64,7 +65,8 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   next();
 });
-app.use(cors());
+app.use(cors(corsOptions));
+app.use(rejectForeignWrites);
 // rawBody is kept for gateways that sign the exact bytes they send (DOKU notifications).
 const keepRawBody = (req: unknown, _res: unknown, buf: Buffer) => { (req as { rawBody?: string }).rawBody = buf.toString("utf8"); };
 // Only the routes that really receive images as base64 (package photos, frames, branding, CMS assets) may carry a huge JSON

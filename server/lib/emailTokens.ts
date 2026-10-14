@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 // `bind` ties a token to current state so it dies when that state changes — e.g. a password-reset token binds to a
 // fragment of the current password hash, so using it once (which changes the hash) makes it unusable again.
 
-export type TokenPurpose = "verify-tenant" | "verify-creator" | "reset-tenant" | "reset-creator" | "unsub-tenant" | "unsub-creator" | "invoice";
+export type TokenPurpose = "verify-tenant" | "verify-creator" | "reset-tenant" | "reset-creator" | "unsub-tenant" | "unsub-creator" | "invoice" | "superadmin-2fa";
 
 interface Payload { p: TokenPurpose; s: string; b: string; e: number }
 

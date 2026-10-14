@@ -281,6 +281,13 @@
       "when": 1791957241977,
       "tag": "0039_device_activation",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791958857256,
+      "tag": "0040_superadmin_2fa",
+      "breakpoints": true
     }
   ]
 }

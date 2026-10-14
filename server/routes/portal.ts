@@ -9,6 +9,8 @@ import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { computeKeyLock, getGracePeriodDays, summarizeLicenses } from "../lib/license.js";
 import { MAX_BOOTHS_PER_ORDER, quoteBooths, readVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { signAdminToken } from "../lib/jwt.js";
+import { revokeSessions, sessionVersion } from "../lib/sessionGuard.js";
 import { createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
 import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
@@ -174,10 +176,13 @@ portalRouter.post("/password", async (req, res) => {
   if (verifyPassword(newPassword, admin.passwordHash)) return res.status(400).json({ error: "Password baru harus berbeda dari yang lama" });
 
   passwordAttempts.delete(adminId);
-  await db.update(admins).set({ passwordHash: hashPassword(newPassword) }).where(eq(admins.id, adminId));
+  const newHash = hashPassword(newPassword);
+  await db.update(admins).set({ passwordHash: newHash }).where(eq(admins.id, adminId));
+  revokeSessions("admin", adminId); // every token issued under the old password stops working, on every device
   void deliver(admin.email, passwordChangedMail({ name: null, when: new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" }) }), { tenantId: req.tenantId!, what: "kata sandi diubah" });
   logEvent({ tenantId: req.tenantId!, category: "auth", action: "password.changed", message: `Password diganti oleh ${admin.email} lewat portal web`, actorType: "tenant_admin", actorLabel: admin.email });
-  res.json({ ok: true });
+  // The person who just changed it stays signed in on THIS device: hand back a token for the new password.
+  res.json({ ok: true, token: signAdminToken({ adminId, tenantId: req.tenantId!, pv: sessionVersion(newHash) }) });
 });
 
 // GET/PATCH /api/portal/email-preferences — which optional emails this tenant receives (security mail can't be turned off).

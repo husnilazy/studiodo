@@ -5,6 +5,7 @@ import { creators, creatorTemplates, marketplaceTemplates, siteAssets } from "..
 import { requireCreatorAuth } from "../middleware/creatorAuth.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signCreatorToken } from "../lib/jwt.js";
+import { revokeSessions, sessionVersion } from "../lib/sessionGuard.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { sniffImageType } from "./siteAssets.js";
 import { MARKETPLACE_CATEGORIES } from "./marketplace.js";
@@ -56,7 +57,7 @@ creatorPortalRouter.post("/login", async (req, res) => {
   }
   loginGuard.succeed(email);
   await db.update(creators).set({ lastLoginAt: new Date() }).where(eq(creators.id, creator.id));
-  res.json({ token: signCreatorToken({ creatorId: creator.id }) });
+  res.json({ token: signCreatorToken({ creatorId: creator.id, pv: sessionVersion(creator.passwordHash) }) });
 });
 
 creatorPortalRouter.use(requireCreatorAuth);
@@ -108,9 +109,11 @@ creatorPortalRouter.post("/password", async (req, res) => {
   const [c] = await db.select().from(creators).where(eq(creators.id, req.creatorId!));
   if (!c || !verifyPassword(current, c.passwordHash)) return res.status(400).json({ error: "Password saat ini salah" });
   if (verifyPassword(next, c.passwordHash)) return res.status(400).json({ error: "Password baru harus berbeda dari yang lama" });
-  await db.update(creators).set({ passwordHash: hashPassword(next) }).where(eq(creators.id, c.id));
+  const newHash = hashPassword(next);
+  await db.update(creators).set({ passwordHash: newHash }).where(eq(creators.id, c.id));
+  revokeSessions("creator", c.id);
   void deliver(c.email, passwordChangedMail({ name: c.name, when: new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" }) }), { what: "kata sandi diubah" });
-  res.json({ ok: true });
+  res.json({ ok: true, token: signCreatorToken({ creatorId: c.id, pv: sessionVersion(newHash) }) });
 });
 
 type TemplateRow = typeof creatorTemplates.$inferSelect;

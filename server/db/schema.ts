@@ -161,6 +161,12 @@ export const superadmins = pgTable("superadmins", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Two-factor sign-in (TOTP, see lib/totp.ts + routes/superadminTwoFactor.ts). The secret is encrypted at rest; it only counts
+  // once totp_enabled_at is set (after the owner proved the authenticator app works). Recovery codes are stored as hashes.
+  totpSecretEnc: text("totp_secret_enc"),
+  totpEnabledAt: timestamp("totp_enabled_at"),
+  totpLastStep: integer("totp_last_step"), // last accepted 30-second step: a code can never be used twice
+  recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
 });
 
 // Singleton row (platform-wide, not per-tenant) of settings a superadmin can tune
