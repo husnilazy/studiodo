@@ -63,7 +63,8 @@ export const invoiceUrl = (orderId: string) => `${portalBaseUrl()}/invoice/${enc
 async function sellerInfo(): Promise<InvoiceView["seller"]> {
   const [row] = await db.select({ data: siteContent.data }).from(siteContent).where(eq(siteContent.key, "site"));
   const d = (row?.data ?? {}) as Record<string, unknown>;
-  const wa = String(d.whatsappNumber ?? "").replace(/\D/g, "");
+  let wa = String(d.whatsappNumber ?? "").replace(/\D/g, "");
+  if (wa.startsWith("0")) wa = `62${wa.slice(1)}`; // the CMS accepts a local-format number; show it internationally
   return { name: "STUDIODO", company: "Frameless Creative", email: String(d.supportEmail ?? "").trim() || null, whatsapp: wa || null, website: portalBaseUrl().replace(/^https?:\/\//, "") };
 }
 
