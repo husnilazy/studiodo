@@ -15,6 +15,7 @@ import { ensureMp4Upload } from "../lib/ffmpeg.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
+import { getKeyPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 
@@ -212,6 +213,8 @@ sessionsRouter.post("/:id/media", requireKioskAuth, upload.single("media"), asyn
   const tenantId = req.tenantId!;
   const id = String(req.params.id);
   if (!req.file) return res.status(400).json({ error: "File media wajib diupload" });
+  // GIF, video and stop-motion are a plan feature of THIS booth: refuse them here too, so a modified app can't bypass what GET /packages hides.
+  if (!(await getKeyPlanFeatures(req.kioskKeyId!)).gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   // GIFs stay GIFs; any video is converted to MP4 so it plays on every phone (WebM doesn't on iOS).
   const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
@@ -262,6 +265,7 @@ sessionsRouter.post("/:id/slot-media", requireKioskAuth, upload.single("media"),
   const id = String(req.params.id);
   const slotIndex = Number(req.body.slotIndex);
   if (!req.file || !Number.isInteger(slotIndex) || slotIndex < 0) return res.status(400).json({ error: "File dan slotIndex wajib diisi" });
+  if (!(await getKeyPlanFeatures(req.kioskKeyId!)).gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   const file = req.body.kind === "gif" ? req.file : await ensureMp4Upload(req.file);
 
   const fallbackExtension = req.body.kind === "gif" ? ".gif" : /mp4/i.test(file.mimetype) ? ".mp4" : ".webm";

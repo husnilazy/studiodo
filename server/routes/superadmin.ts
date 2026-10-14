@@ -27,7 +27,6 @@ import { LOCKOUT_ACTION } from "../lib/securityAlerts.js";
 import { emailLogSummary, listEmailLog } from "../lib/emailLog.js";
 import { esc, layout, sendMail } from "../lib/mailer.js";
 import { deliver, resetLink, SETUP_TTL_MS, welcomeTenantMail } from "../lib/emails.js";
-import { syncTenantFeaturesToPlan } from "../lib/planFeatures.js";
 
 export const superadminRouter = Router();
 
@@ -355,9 +354,13 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
     actorLabel: await currentSuperadminEmail(req),
     metadata: patch,
   });
-  // Plan changed here (not just status/profile) — bring existing tenant data
-  // into line with whatever the new plan no longer includes.
-  if (patch.plan !== undefined) await syncTenantFeaturesToPlan(row.id);
+  // Plan changed here: features follow the plan stamped on each booth's key, so move this tenant's subscribed booths onto it.
+  // (Nothing is deleted: a package keeps its own settings, and moving to a bigger plan brings the features straight back.)
+  if (patch.plan !== undefined) {
+    await db.update(kioskKeys).set({ licensePlanSlug: row.plan })
+      .where(and(eq(kioskKeys.tenantId, row.id), isNull(kioskKeys.revokedAt), ne(kioskKeys.licenseType, "unpaid")));
+    clearLicenseCache();
+  }
   res.json(row);
 });
 
@@ -736,7 +739,6 @@ superadminRouter.post("/tenants/:id/payments", async (req, res) => {
       planName = plan.name;
       planSlugForPayment = plan.slug;
       await db.update(tenants).set({ plan: plan.slug }).where(eq(tenants.id, tenantId));
-      await syncTenantFeaturesToPlan(tenantId);
     }
   }
 
@@ -876,13 +878,7 @@ superadminRouter.patch("/plans/:id", async (req, res) => {
   if (!row) return res.status(404).json({ error: "Plan tidak ditemukan" });
   logEvent({ category: "billing", action: "plan.updated", message: `Plan "${row.name}" diubah`, actorType: "superadmin", actorLabel: await currentSuperadminEmail(req), metadata: patch });
 
-  // A plan's own features changed (not a tenant being moved between plans) —
-  // cascade the sync to every tenant currently on this plan, so tightening a
-  // plan takes effect immediately instead of only on the next reassignment.
-  if (patch.screenBuilderEnabled !== undefined || patch.gifVideoEnabled !== undefined) {
-    const affectedTenants = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.plan, row.slug));
-    await Promise.all(affectedTenants.map((t) => syncTenantFeaturesToPlan(t.id)));
-  }
+  // Features are read live from the plan row for every booth on it, so a change here applies to all of them at once; nothing to cascade.
 
   res.json(row);
 });

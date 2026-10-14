@@ -6,7 +6,6 @@ import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { billingOrders, kioskKeys, plans, tenantPayments, tenants } from "../db/schema.js";
 import { clearLicenseCache, extendKeys, hashKioskKey, syncTenantEndsAt } from "./license.js";
-import { syncTenantFeaturesToPlan } from "./planFeatures.js";
 import { logEvent } from "./platformEvents.js";
 import { encryptSecret } from "./secretBox.js";
 import { fetchMidtransStatus, outcomeFromNotification, type OrderOutcome } from "./midtrans.js";
@@ -100,7 +99,6 @@ export async function settleOrder(order: Order, outcome: OrderOutcome, paymentTy
 
     clearLicenseCache();
     await syncTenantEndsAt(order.tenantId);
-    await syncTenantFeaturesToPlan(order.tenantId);
     const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, order.tenantId));
     logEvent({
       tenantId: order.tenantId, category: "billing", action: "payment.received",

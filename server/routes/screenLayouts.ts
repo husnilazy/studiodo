@@ -5,7 +5,7 @@ import { screenLayouts } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { KIOSK_STEP_KEYS } from "../lib/kioskFlowRules.js";
-import { getTenantPlanFeatures } from "../lib/planFeatures.js";
+import { getKeyPlanFeatures, getTenantPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 
@@ -163,7 +163,8 @@ screenLayoutsRouter.get("/screen-layout", requireAnyAuth, async (req, res) => {
   // customized) layout instead of serving a saved override. Nothing is
   // deleted: a saved override just comes back automatically if the tenant's
   // plan is ever upgraded again.
-  const { screenBuilderEnabled } = await getTenantPlanFeatures(req.tenantId!);
+  // A kiosk gets the answer for ITS booth's plan; the admin editor gets the tenant's best (it may design for its better booths).
+  const { screenBuilderEnabled } = req.kioskKeyId ? await getKeyPlanFeatures(req.kioskKeyId) : await getTenantPlanFeatures(req.tenantId!);
   if (!screenBuilderEnabled) return res.json({ elements: [], updatedAt: null });
 
   const [row] = await db.select({ elements: screenLayouts.elements, updatedAt: screenLayouts.updatedAt })
@@ -181,7 +182,7 @@ screenLayoutsRouter.patch("/screen-layout", requireAdminAuth, async (req, res) =
   if (!VALID_ORIENTATIONS.has(orientation)) return res.status(400).json({ error: "orientation tidak valid" });
 
   const { screenBuilderEnabled } = await getTenantPlanFeatures(req.tenantId!);
-  if (!screenBuilderEnabled) return res.status(403).json({ error: "Screen Builder tidak termasuk paket kamu saat ini." });
+  if (!screenBuilderEnabled) return res.status(403).json(planLockedBody("screenBuilder"));
 
   const validated = await validateElements(req.tenantId!, req.body?.elements);
   if (!validated.ok) return res.status(400).json({ error: validated.error });

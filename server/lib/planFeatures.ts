@@ -1,92 +1,103 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { packages, plans, tenants } from "../db/schema.js";
-import { logEvent } from "./platformEvents.js";
+import { kioskKeys, plans, tenants } from "../db/schema.js";
+import { getKeyLock } from "./license.js";
 
-export interface TenantPlanFeatures {
+// Which features a subscription includes. Pricing is PER BOOTH (one key = one booth = one subscription, each bought on
+// its own plan), so what is allowed is decided per booth from the plan stamped on its key (kiosk_keys.license_plan_slug,
+// set by checkout / superadmin), never from one tenant-wide plan: a tenant with a PRO booth and a Starter booth gets PRO
+// features on the first and Starter features on the second.
+//
+// Two gates exist today: Screen Builder, and GIF / video / stop-motion. The kiosk is told only what ITS booth may do
+// (GET /api/packages masks the media flags per booth) and the upload routes refuse what the plan excludes, so a modified
+// client gains nothing. Nothing is ever deleted: a package keeps its own settings, and an upgrade brings the features back.
+
+export interface PlanFeatures {
   planSlug: string | null;
   planName: string | null;
-  kioskLimit: number | null; // null = unlimited
+  kioskLimit: number | null; // legacy display field: the plan's old booth cap no longer limits anything
   screenBuilderEnabled: boolean;
   gifVideoEnabled: boolean;
 }
 
-// Fail-open on purpose: a tenant with no plan assigned yet, or a plan slug
-// that no longer matches any row (tenants.plan is deliberately not a FK —
-// see the comment on the `plans` table), gets every feature rather than
-// getting silently locked out because of a data mismatch that isn't their
-// fault.
-const UNRESTRICTED: Omit<TenantPlanFeatures, "planSlug" | "planName"> = {
+// Fail-open on purpose: a booth with no plan on its key (a trial, or a complimentary / manually granted licence), or a
+// plan slug that no longer matches any row (plan slugs are deliberately not a foreign key), gets every feature rather than
+// being silently locked out over a data mismatch that isn't the customer's fault.
+export const UNRESTRICTED: Omit<PlanFeatures, "planSlug" | "planName"> = {
   kioskLimit: null,
   screenBuilderEnabled: true,
   gifVideoEnabled: true,
 };
 
-export async function getTenantPlanFeatures(tenantId: string): Promise<TenantPlanFeatures> {
-  const [tenant] = await db.select({ plan: tenants.plan }).from(tenants).where(eq(tenants.id, tenantId));
-  if (!tenant?.plan) return { planSlug: null, planName: null, ...UNRESTRICTED };
+type PlanRow = { slug: string; name: string; kioskLimit: number | null; screenBuilderEnabled: boolean; gifVideoEnabled: boolean };
 
-  const [plan] = await db
-    .select({
-      name: plans.name,
-      slug: plans.slug,
-      kioskLimit: plans.kioskLimit,
-      screenBuilderEnabled: plans.screenBuilderEnabled,
-      gifVideoEnabled: plans.gifVideoEnabled,
-    })
-    .from(plans)
-    .where(eq(plans.slug, tenant.plan));
+/** Pure: the features a plan row grants (or everything, when there is no such plan). */
+export function featuresOf(slug: string | null, plan: PlanRow | undefined): PlanFeatures {
+  if (!plan) return { planSlug: slug, planName: null, ...UNRESTRICTED };
+  return { planSlug: plan.slug, planName: plan.name, kioskLimit: plan.kioskLimit, screenBuilderEnabled: plan.screenBuilderEnabled, gifVideoEnabled: plan.gifVideoEnabled };
+}
 
-  if (!plan) return { planSlug: tenant.plan, planName: null, ...UNRESTRICTED };
-
+/** Pure: a tenant can USE a feature if at least one of its booths' plans includes it (what the dashboard's editors check). */
+export function bestOf(list: PlanFeatures[]): PlanFeatures {
+  if (list.length === 0) return { planSlug: null, planName: null, ...UNRESTRICTED };
+  const withBoth = list.find((f) => f.screenBuilderEnabled && f.gifVideoEnabled);
+  const label = withBoth ?? list[0];
   return {
-    planSlug: plan.slug,
-    planName: plan.name,
-    kioskLimit: plan.kioskLimit,
-    screenBuilderEnabled: plan.screenBuilderEnabled,
-    gifVideoEnabled: plan.gifVideoEnabled,
+    planSlug: label.planSlug,
+    planName: label.planName,
+    kioskLimit: label.kioskLimit,
+    screenBuilderEnabled: list.some((f) => f.screenBuilderEnabled),
+    gifVideoEnabled: list.some((f) => f.gifVideoEnabled),
   };
 }
 
-// Called right after a superadmin changes a tenant's plan (see
-// server/routes/superadmin.ts). Actively brings the tenant's existing data
-// into compliance with whatever the new plan no longer allows, rather than
-// just blocking new attempts going forward:
-//
-// - Screen Builder needs no data change here — its GET is gated live in
-//   screenLayouts.ts, so a disabled plan just makes the kiosk fall back to
-//   the default (un-customized) layout without deleting the saved override;
-//   it comes back automatically if the tenant is ever upgraded again.
-// - GIF/Video is baked into each package's hasGif/hasVideo flags, which the
-//   kiosk actually reads to decide what to capture — those need to be
-//   flipped off for real, not just gated at the edge, or a package created
-//   under a better plan would keep offering GIF/Video after a downgrade.
-// - Kiosk count is deliberately NOT enforced retroactively here: revoking an
-//   already-paired kiosk key would kill a physical device that may be mid-
-//   session on-site. Only new key creation is blocked (kioskKeys.ts) — an
-//   over-limit tenant keeps what they already had until a superadmin chooses
-//   to revoke something explicitly.
-export async function syncTenantFeaturesToPlan(tenantId: string) {
-  const features = await getTenantPlanFeatures(tenantId);
-
-  if (!features.gifVideoEnabled) {
-    const affected = await db
-      .update(packages)
-      .set({ hasGif: false, hasVideo: false, hasStopMotion: false })
-      .where(and(eq(packages.tenantId, tenantId), or(eq(packages.hasGif, true), eq(packages.hasVideo, true), eq(packages.hasStopMotion, true))))
-      .returning({ id: packages.id, name: packages.name });
-
-    if (affected.length > 0) {
-      logEvent({
-        tenantId,
-        category: "billing",
-        action: "plan.features_synced",
-        message: `Plan "${features.planName ?? features.planSlug ?? "-"}" tidak termasuk GIF/Video — dimatikan otomatis di ${affected.length} paket (${affected.map((p) => p.name).join(", ")}).`,
-        actorType: "system",
-        metadata: { feature: "gifVideo", packageIds: affected.map((p) => p.id) },
-      });
-    }
-  }
-
-  return features;
+async function loadPlans(): Promise<Map<string, PlanRow>> {
+  const rows = await db.select({ slug: plans.slug, name: plans.name, kioskLimit: plans.kioskLimit, screenBuilderEnabled: plans.screenBuilderEnabled, gifVideoEnabled: plans.gifVideoEnabled }).from(plans);
+  return new Map(rows.map((r) => [r.slug, r]));
 }
+
+/** What ONE booth (kiosk key) may do. */
+export async function getKeyPlanFeatures(keyId: string): Promise<PlanFeatures> {
+  const [key] = await db.select({ slug: kioskKeys.licensePlanSlug }).from(kioskKeys).where(eq(kioskKeys.id, keyId));
+  if (!key?.slug) return { planSlug: null, planName: null, ...UNRESTRICTED };
+  const [plan] = await db.select({ slug: plans.slug, name: plans.name, kioskLimit: plans.kioskLimit, screenBuilderEnabled: plans.screenBuilderEnabled, gifVideoEnabled: plans.gifVideoEnabled }).from(plans).where(eq(plans.slug, key.slug));
+  return featuresOf(key.slug, plan);
+}
+
+/** Per-booth features for a whole tenant (the dashboard shows which booth has what). `locked` = that booth's licence has run out. */
+export async function getTenantBoothFeatures(tenantId: string): Promise<{ keyId: string; label: string | null; features: PlanFeatures; locked: boolean }[]> {
+  const [keys, planMap] = await Promise.all([
+    db.select({ id: kioskKeys.id, label: kioskKeys.label, slug: kioskKeys.licensePlanSlug })
+      .from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt), ne(kioskKeys.licenseType, "unpaid"))),
+    loadPlans(),
+  ]);
+  const locks = await Promise.all(keys.map((k) => getKeyLock(k.id)));
+  return keys.map((k, i) => ({ keyId: k.id, label: k.label, locked: locks[i].locked, features: k.slug ? featuresOf(k.slug, planMap.get(k.slug)) : { planSlug: null, planName: null, ...UNRESTRICTED } }));
+}
+
+/**
+ * What the tenant as a whole may configure (package editor, Screen Builder): the best of its RUNNING booths. A tenant with no
+ * subscribed booth yet falls back to tenants.plan (legacy), and to everything if that matches no plan.
+ */
+export async function getTenantPlanFeatures(tenantId: string): Promise<PlanFeatures> {
+  const booths = await getTenantBoothFeatures(tenantId);
+  if (booths.length > 0) {
+    // Only booths whose licence is still running count: an expired trial must not keep lifting a tenant that now pays for Starter.
+    // (If every booth has run out, fall back to all of them so the dashboard still reflects what the account last had.)
+    const running = booths.filter((b) => !b.locked);
+    return bestOf((running.length > 0 ? running : booths).map((b) => b.features));
+  }
+  const [tenant] = await db.select({ plan: tenants.plan }).from(tenants).where(eq(tenants.id, tenantId));
+  if (!tenant?.plan) return { planSlug: null, planName: null, ...UNRESTRICTED };
+  const [plan] = await db.select({ slug: plans.slug, name: plans.name, kioskLimit: plans.kioskLimit, screenBuilderEnabled: plans.screenBuilderEnabled, gifVideoEnabled: plans.gifVideoEnabled }).from(plans).where(eq(plans.slug, tenant.plan));
+  return featuresOf(tenant.plan, plan);
+}
+
+export const MEDIA_KINDS_REQUIRING_PLAN = new Set(["gif", "video", "stopmotion"]);
+
+/** The 403 body every plan-locked route answers with, so clients can tell "locked by plan" from other 403s. */
+export const planLockedBody = (feature: "gifVideo" | "screenBuilder") => ({
+  error: feature === "gifVideo" ? "GIF, video, dan stop-motion tidak termasuk paket langganan booth ini. Upgrade paket booth di dashboard." : "Screen Builder tidak termasuk paket langganan booth ini. Upgrade paket booth di dashboard.",
+  code: "plan_feature_locked",
+  feature,
+});
