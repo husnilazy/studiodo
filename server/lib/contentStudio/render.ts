@@ -182,7 +182,7 @@ async function renderPng(job: Job, deck: Deck, dir: string) {
       await page.setContent(buildSlideDoc(deck, i), { waitUntil: "load" });
       await page.waitForFunction("window.__ready === true", { timeout: 20000 });
       await page.evaluate(`window.__seek(${SLIDE_SETTLE_MS})`);
-      await page.screenshot({ path: path.join(dir, `${slug(deck.title)}-${String(i + 1).padStart(2, "0")}.png`), type: "png" });
+      await page.screenshot({ path: path.join(dir, deck.format === "highlight" ? `sorotan-${String(i + 1).padStart(2, "0")}-${slug(deck.slides[i].title)}.png` : `${slug(deck.title)}-${String(i + 1).padStart(2, "0")}.png`), type: "png" });
       job.progress = (i + 1) / deck.slides.length;
     }
   } finally {

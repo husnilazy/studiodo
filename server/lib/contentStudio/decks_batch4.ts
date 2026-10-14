@@ -72,4 +72,17 @@ export const BATCH4_DECKS: Deck[] = [
       { kind: "cta", tone: "light", eyebrow: "Siap mulai?", title: "Daftar di *studiodo.id*", body: "Ada pertanyaan soal langkah-langkahnya? Tulis di komentar.", mockup: "none" },
     ],
   },
+  {
+    id: "highlight-covers", title: "Cover Sorotan Instagram", format: "highlight", tone: "indigo", handle: H,
+    caption: "Cover Sorotan (Highlights) Instagram, 1080x1920. Unggah satu per satu sebagai cover sorotan: Instagram memotong menjadi lingkaran di tengah, jadi ikon sudah berada di area aman. Ganti 'Tema dasar' di sebelah kanan untuk varian warna lain.",
+    hashtags: [],
+    slides: [
+      { kind: "badge", title: "Kenalan", icon: "user" },
+      { kind: "badge", title: "Fitur", icon: "grid" },
+      { kind: "badge", title: "Cara Mulai", icon: "play" },
+      { kind: "badge", title: "FAQ", icon: "help" },
+      { kind: "badge", title: "Update", icon: "bell" },
+      { kind: "badge", title: "Event", icon: "ticket" },
+    ],
+  },
 ];

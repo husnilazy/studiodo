@@ -82,3 +82,9 @@ Manajemen konten untuk launching: urutan prioritas, tanggal tayang, status, dan 
 - Format `story` dan post tambahan bisa dibuat manual (tanpa deck).
 
 Deck seri perkenalan: `carousel-perkenalan-studiodo`, `reel-perkenalan-studiodo`, `carousel-fitur-lengkap`, `carousel-untuk-siapa`, `carousel-cara-mulai` (`server/lib/contentStudio/decks_batch4.ts`).
+
+## Cover Sorotan Instagram
+
+- Format **Cover Sorotan 9:16** (1080×1920) dengan jenis slide **Cover Sorotan (ikon)**: hanya ikon + lingkaran di tengah, karena Instagram memotong cover menjadi lingkaran.
+- Deck bawaan `highlight-covers` berisi 6 cover: Kenalan, Fitur, Cara Mulai, FAQ, Update, Event. Ganti **Tema dasar** (indigo, gelap, terang, mint) untuk varian warna, dan pilih ikon lain di editor slide.
+- **Render PNG** menghasilkan satu file per cover dengan nama `sorotan-01-kenalan.png` dst. Unggah satu per satu sebagai cover di Instagram (Sorotan → Edit sorotan → Edit sampul).

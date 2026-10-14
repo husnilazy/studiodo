@@ -7,7 +7,7 @@ import type { Deck } from "../lib/contentStudio/types.js";
 // Superadmin → Konten Instagram: mounted under /api/superadmin/content-studio (auth applied by the parent router).
 export const contentStudioAdminRouter = Router();
 
-const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta"];
+const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge"];
 const TONES = ["light", "dark", "indigo", "mint"];
 
 function parseDeck(input: any): Deck | string {
@@ -21,7 +21,7 @@ function parseDeck(input: any): Deck | string {
   }
   return {
     id, title: String(input.title ?? "Tanpa judul").slice(0, 120),
-    format: input.format === "reel" ? "reel" : "carousel",
+    format: input.format === "reel" ? "reel" : input.format === "highlight" ? "highlight" : "carousel",
     tone: TONES.includes(input.tone) ? input.tone : "light",
     handle: String(input.handle ?? "studiodo.id").replace(/^@/, "").slice(0, 60),
     caption: String(input.caption ?? "").slice(0, 2200),

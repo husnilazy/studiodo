@@ -6,10 +6,11 @@ import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, 
 // preview uses: PNG per carousel slide, MP4 (30 fps, 1080×1920) for reels. See server/lib/contentStudio.
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
-const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"]];
+const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"], ["badge", "Cover Sorotan (ikon)"]];
+const ICON_OPTIONS: [string, string][] = [["user", "Orang (Kenalan)"], ["grid", "Kisi (Fitur)"], ["play", "Mulai"], ["help", "Tanya (FAQ)"], ["bell", "Lonceng (Update)"], ["ticket", "Tiket (Event/Promo)"], ["qr", "QR (Bayar)"], ["image", "Foto (Hasil)"], ["camera", "Kamera"], ["chart", "Grafik"], ["card", "Kartu"], ["spark", "Kilau"], ["check", "Centang"]];
 const MOCKUPS: [CsMockup, string][] = [["none", "Tanpa mockup"], ["dashboard", "Dashboard"], ["qris", "Kiosk QRIS"], ["gallery", "Galeri HP"], ["booth", "Kiosk sesi foto"], ["strip", "Strip foto"], ["queue", "Antrian"], ["hub", "Hub dashboard (diagram)"]];
 const TONES: [CsTone, string][] = [["light", "Terang"], ["dark", "Gelap"], ["indigo", "Indigo"], ["mint", "Mint"]];
-const SIZES = { carousel: { w: 1080, h: 1350 }, reel: { w: 1080, h: 1920 } } as const;
+const SIZES = { carousel: { w: 1080, h: 1350 }, reel: { w: 1080, h: 1920 }, highlight: { w: 1080, h: 1920 } } as const;
 const PREVIEW_W = 400;
 
 const newId = () => `custom-${Date.now().toString(36)}`;
@@ -225,13 +226,13 @@ export function ContentStudioPanel() {
               </div>
               <div className="flex gap-2 text-xs">
                 <button onClick={() => setReplay((n) => n + 1)} className="rounded-full border border-fg/20 px-4 py-1.5 font-semibold hover:bg-fg/10">↻ Putar ulang animasi</button>
-                <span className="self-center text-fg/40">{size.w}×{size.h}{draft.format === "reel" ? " · tampil dari awal" : ""}</span>
+                <span className="self-center text-fg/40">{size.w}×{size.h}{draft.format === "reel" ? " · tampil dari awal" : draft.format === "highlight" ? " · hanya lingkaran tengah yang terlihat" : ""}</span>
               </div>
 
               {/* render */}
               <div className="mt-2 w-full max-w-[520px] rounded-xl border border-fg/10 bg-canvas p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button disabled={!env?.chrome || job?.status === "running"} onClick={() => render("png")} className="rounded-full bg-fg px-4 py-2 text-xs font-bold text-canvas disabled:opacity-40">Render PNG{draft.format === "carousel" ? ` (${draft.slides.length} slide)` : " (tiap scene)"}</button>
+                  <button disabled={!env?.chrome || job?.status === "running"} onClick={() => render("png")} className="rounded-full bg-fg px-4 py-2 text-xs font-bold text-canvas disabled:opacity-40">Render PNG{draft.format === "reel" ? " (tiap scene)" : ` (${draft.slides.length} ${draft.format === "highlight" ? "cover" : "slide"})`}</button>
                   {draft.format === "reel" && <button disabled={!env?.chrome || !env?.ffmpeg || job?.status === "running"} onClick={() => render("mp4")} className="rounded-full bg-accent px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Render MP4 (30 fps)</button>}
                   {dirty && <span className="text-[11px] text-amber-600">Render memakai versi yang sedang diedit.</span>}
                 </div>
@@ -259,7 +260,7 @@ export function ContentStudioPanel() {
               <div className="grid gap-3 rounded-2xl border border-fg/10 bg-fg/5 p-4">
                 <Field label="Nama deck (internal)"><input className={inputClass} value={draft.title} onChange={(e) => edit((d) => { d.title = e.target.value; })} /></Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Format"><select className={inputClass} value={draft.format} onChange={(e) => edit((d) => { d.format = e.target.value as "carousel" | "reel"; })}><option value="carousel">Carousel 4:5</option><option value="reel">Reel 9:16</option></select></Field>
+                  <Field label="Format"><select className={inputClass} value={draft.format} onChange={(e) => edit((d) => { d.format = e.target.value as "carousel" | "reel" | "highlight"; })}><option value="carousel">Carousel 4:5</option><option value="reel">Reel 9:16</option><option value="highlight">Cover Sorotan 9:16</option></select></Field>
                   <Field label="Tema dasar"><select className={inputClass} value={draft.tone} onChange={(e) => edit((d) => { d.tone = e.target.value as CsTone; })}>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
                 </div>
                 <Field label="Handle Instagram"><input className={inputClass} value={draft.handle} onChange={(e) => edit((d) => { d.handle = e.target.value; })} /></Field>
@@ -284,9 +285,10 @@ export function ContentStudioPanel() {
                   <Field label="Jenis"><select className={inputClass} value={slide.kind} onChange={(e) => editSlide((s) => { s.kind = e.target.value as CsSlideKind; })}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
                   <Field label="Tema slide"><select className={inputClass} value={slide.tone ?? ""} onChange={(e) => editSlide((s) => { s.tone = (e.target.value || undefined) as CsTone | undefined; })}><option value="">Ikut deck</option>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
                 </div>
-                <Field label="Label kecil (eyebrow)"><input className={inputClass} value={slide.eyebrow ?? ""} onChange={(e) => editSlide((s) => { s.eyebrow = e.target.value; })} /></Field>
-                <Field label="Judul  ( | = baris baru, *kata* = warna aksen )"><textarea rows={2} className={inputClass} value={slide.title} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} /></Field>
-                {slide.kind !== "compare" && <Field label="Teks pendukung"><textarea rows={2} className={inputClass} value={slide.body ?? ""} onChange={(e) => editSlide((s) => { s.body = e.target.value; })} /></Field>}
+                {slide.kind !== "badge" && <Field label="Label kecil (eyebrow)"><input className={inputClass} value={slide.eyebrow ?? ""} onChange={(e) => editSlide((s) => { s.eyebrow = e.target.value; })} /></Field>}
+                <Field label={slide.kind === "badge" ? "Nama sorotan (untuk nama file)" : "Judul  ( | = baris baru, *kata* = warna aksen )"}><textarea rows={2} className={inputClass} value={slide.title} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} /></Field>
+                {!["compare", "badge"].includes(slide.kind) && <Field label="Teks pendukung"><textarea rows={2} className={inputClass} value={slide.body ?? ""} onChange={(e) => editSlide((s) => { s.body = e.target.value; })} /></Field>}
+                {slide.kind === "badge" && <Field label="Ikon"><select className={inputClass} value={slide.icon ?? "spark"} onChange={(e) => editSlide((s) => { s.icon = e.target.value; })}>{ICON_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
                 {["cover", "feature", "steps", "cta"].includes(slide.kind) && <Field label="Mockup"><select className={inputClass} value={slide.mockup ?? "none"} onChange={(e) => editSlide((s) => { s.mockup = e.target.value as CsMockup; })}>{MOCKUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
                 {["feature", "stat", "compare"].includes(slide.kind) && <Field label="Catatan di bawah (pill)"><input className={inputClass} value={slide.note ?? ""} onChange={(e) => editSlide((s) => { s.note = e.target.value; })} /></Field>}
                 {(slide.kind === "steps" || slide.kind === "compare") && <Field label={slide.kind === "steps" ? "Langkah (satu per baris)" : "Kolom kanan (satu per baris)"}><textarea rows={4} className={inputClass} value={(slide.items ?? []).join("\n")} onChange={(e) => editSlide((s) => { s.items = lines(e.target.value); })} /></Field>}

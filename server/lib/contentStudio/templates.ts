@@ -19,6 +19,11 @@ const ICONS: Record<string, string> = {
   check: "M5 12l5 5 9-10",
   arrow: "M5 12h14M13 6l6 6-6 6",
   x: "M6 6l12 12M18 6L6 18",
+  spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
+  play: "M8 5v14l11-7z",
+  help: "M12 22a10 10 0 100-20 10 10 0 000 20zM9.5 9a2.5 2.5 0 115 0c0 1.7-2.5 2-2.5 4M12 17h.01",
+  bell: "M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 004 0",
+  grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
 };
 const icon = (name: string, size: number, stroke = 2, color = "currentColor") =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name]}"/></svg>`;
@@ -121,18 +126,24 @@ function mockQueue(): string {
 }
 
 function mockHub(): string {
-  const petals = [[-190, -130], [190, -130], [-190, 130], [190, 130]]
-    .map(([cx, cy], g) => {
-      const rings = Array.from({ length: 9 }, (_, i) => `<ellipse cx="${460 + cx}" cy="${320 + cy}" rx="${52 + i * 22}" ry="${44 + i * 18}" fill="none" stroke="rgba(138,138,255,${0.6 - i * 0.04})" stroke-width="1.6"/>`).join("");
-      return `<g class="pop" style="transform-origin:460px 320px;--d:${0.2 + g * 0.12}s">${rings}</g>`;
-    }).join("");
-  const nodes: [string, number, number, number, boolean, number][] = [
-    ["chart", 50, 40, 110, true, 0.9], ["qr", 425, 14, 76, false, 1.0], ["card", 660, 110, 62, false, 1.1], ["swap", 770, 200, 92, true, 1.2],
-    ["image", 130, 200, 96, false, 1.3], ["camera", 170, 440, 108, true, 1.4], ["user", 650, 430, 86, true, 1.5], ["ticket", 700, 545, 80, false, 1.6],
+  const cx = 460, cy = 320;
+  const orbits: [number, number][] = [[230, 150], [330, 215], [420, 265]]; // rx, ry
+  const rings = orbits
+    .map(([rx, ry], i) => `<g class="pop" style="transform-origin:${cx}px ${cy}px;--d:${0.15 + i * 0.15}s"><ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="rgba(138,138,255,${0.55 - i * 0.12})" stroke-width="2"${i === 1 ? ' stroke-dasharray="4 10"' : ""}/></g>`)
+    .join("");
+  // [icon, orbit, angle°, size, tint, delay]
+  const nodes: [string, number, number, number, string, number][] = [
+    ["image", 0, 200, 92, "n1", 1.0], ["swap", 0, 340, 92, "n2", 1.1],
+    ["chart", 1, 235, 100, "n3", 1.2], ["card", 1, 300, 72, "n4", 1.3], ["camera", 1, 130, 100, "n2", 1.4], ["user", 1, 35, 88, "n1", 1.5],
+    ["qr", 2, 270, 84, "n4", 1.6], ["ticket", 2, 5, 84, "n3", 1.7],
   ];
-  return `<div class="mock hub"><svg class="lines" viewBox="0 0 920 640">${petals}<line x1="463" y1="92" x2="463" y2="195" stroke="#5b57ff" stroke-width="4"/></svg>
-    ${nodes.map(([n, l, t, sz, g, d], i) => `<div class="node pop ${g ? "g" : ""}" style="left:${l}px;top:${t}px;width:${sz}px;height:${sz}px;--d:${d}s"><span class="float" style="display:grid;animation-delay:-${i * 0.6}s">${icon(n, sz * 0.5, 1.9)}</span></div>`).join("")}
-    <div class="core pop" style="--d:.1s"><div style="display:grid;place-items:center;gap:10px"><svg width="86" height="86" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#fff" fill-opacity=".95"/><circle cx="32" cy="32" r="12" fill="#4f4fe8"/><circle cx="32" cy="32" r="5" fill="#fff"/></svg><b>Dashboard</b></div></div></div>`;
+  const chips = nodes.map(([n, o, deg, sz, tint, d], i) => {
+    const [rx, ry] = orbits[o], r = (deg * Math.PI) / 180;
+    const left = Math.round(cx + rx * Math.cos(r) - sz / 2), top = Math.round(cy + ry * Math.sin(r) - sz / 2);
+    return `<div class="node ${tint} pop" style="left:${left}px;top:${top}px;width:${sz}px;height:${sz}px;--d:${d}s"><span class="float" style="display:grid;animation-delay:-${i * 0.6}s">${icon(n, Math.round(sz * 0.48), 1.9)}</span></div>`;
+  }).join("");
+  return `<div class="mock hub"><svg class="lines" viewBox="0 0 920 640">${rings}</svg>${chips}
+    <div class="core pop" style="--d:.1s"><div style="display:grid;place-items:center;gap:10px"><svg width="80" height="80" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#fff" fill-opacity=".95"/><circle cx="32" cy="32" r="12" fill="#4f4fe8"/><circle cx="32" cy="32" r="5" fill="#fff"/></svg><b>Dashboard</b></div></div></div>`;
 }
 
 const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit" }> = {
@@ -175,6 +186,8 @@ function mainFor(s: Slide, deck: Deck, reel: boolean): string {
       return `${eyebrow(s)}${heading(s, "m")}<div class="cmp">
         <div class="col bad sl" ${D(0.3)}><h4>${esc(s.labelBefore || "Tanpa sistem")}</h4><ul>${(s.itemsBefore ?? []).map((t) => `<li><span${s.labelBefore ? ' class="neu"' : ""}>${s.labelBefore ? icon("check", 22, 3.4) : icon("x", 22, 3)}</span>${esc(t)}</li>`).join("")}</ul></div>
         <div class="col good sl" ${D(0.5)}><h4>${esc(s.labelAfter || "Dengan STUDIODO")}</h4><ul>${(s.items ?? []).map((t) => `<li><span>${icon("check", 22, 3.4)}</span>${esc(t)}</li>`).join("")}</ul></div></div>${note(s)}`;
+    case "badge":
+      return ""; // rendered by slideHtml (no header/footer)
     case "cta":
       return `${eyebrow(s)}${heading(s, "xl")}${bodyP(s)}${stage(s, reel)}
         <div class="in ctawrap" ${D(0.6)}><div class="btn">${esc(deck.handle === "studiodo.id" ? "Coba gratis di studiodo.id" : "Coba gratis")}${icon("arrow", 34, 2.6)}</div><div class="ctaurl">studiodo.id</div></div>`;
@@ -193,6 +206,15 @@ function slideHtml(s: Slide, deck: Deck, ctx: RenderCtx): string {
     ? `animation:sceneIn .5s ease both${last ? "" : ",sceneOut .5s ease forwards"};animation-delay:${ctx.startSec === 0 ? "0s" : `${(ctx.startSec ?? 0) - 0.25}s`}${last ? "" : `,${(ctx.sceneEnd ?? 0) - 0.3}s`};`
     : "";
   const bg = s.bgImage ? `<div class="bgimg" style="background-image:url('${esc(s.bgImage)}')"></div><div class="scrim"></div>` : "";
+  if (s.kind === "badge") {
+    // Highlight cover: icon only, kept inside the centre safe zone (Instagram crops it to a circle).
+    const name = s.icon && ICONS[s.icon] ? s.icon : "spark";
+    return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s:0s">
+      <div class="mesh"><i></i><i></i><i></i></div>${bg}
+      <div class="bdgrings"><i class="pop" style="width:700px;height:700px;--d:.25s"></i><i class="pop" style="width:900px;height:900px;--d:.4s"></i><i class="pop" style="width:1120px;height:1120px;--d:.55s"></i></div>
+      <div class="bdgmain"><div class="bdg pop"><span class="float" style="display:grid">${icon(name, 250, 1.6)}</span></div></div>
+    </section>`;
+  }
   return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s:${ctx.startSec ?? 0}s;${sceneAnim}">
     <div class="mesh"><i></i><i></i><i></i></div>${bg}
     <div class="hd"><img src="${logo}" alt="STUDIODO">${pager}</div>
@@ -210,8 +232,11 @@ const FIT_SCRIPT = `
     if(reel||st.dataset.fit==='fit'){const k=Math.min(reel?1.55:1,(sw-100)/w,sh/h);m.style.transform='scale('+k+')';}
     else{st.style.alignItems='flex-start';st.style.overflow='hidden';st.style.webkitMaskImage='linear-gradient(#000 82%,transparent)';const k=Math.min(1,(sw-100)/w)*(st.dataset.k?+st.dataset.k:1);m.style.transformOrigin='top center';m.style.transform='scale('+k+')';}
   });};
-  const ready=document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve();
-  ready.then(()=>{run();if(!window.__live)document.getAnimations().forEach(a=>a.pause());window.__ready=true;});
+  // Fit once right away (does not depend on fonts), again on load, and once more when fonts settle (or after 2.5 s at most).
+  const safe=()=>{try{run();}catch(e){}};
+  safe(); window.addEventListener('load',safe);
+  const fonts=document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve();
+  Promise.race([fonts,new Promise(r=>setTimeout(r,2500))]).then(()=>{safe();if(!window.__live)document.getAnimations().forEach(a=>a.pause());window.__ready=true;});
   window.__seek=(ms)=>{document.getAnimations().forEach(a=>{a.pause();a.currentTime=ms;});};
 })();`;
 

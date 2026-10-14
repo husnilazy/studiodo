@@ -1,7 +1,7 @@
 // Content Studio: Instagram decks (carousel / reel) rendered from HTML templates in STUDIODO's own visual language.
 
 export type Mockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip";
-export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta";
+export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge";
 export type Tone = "light" | "dark" | "indigo" | "mint";
 
 export type Slide = {
@@ -19,13 +19,14 @@ export type Slide = {
   stat?: { value: number; suffix?: string; prefix?: string; label: string };
   bgImage?: string; // full-bleed photo behind the slide (asset:<file>)
   images?: string[]; // uploaded asset names (asset:<file>) used by gallery/strip mockups
+  icon?: string; // badge slides: icon name (see ICONS in templates.ts)
   seconds?: number; // reel scene length
 };
 
 export type Deck = {
   id: string;
   title: string; // internal name
-  format: "carousel" | "reel";
+  format: "carousel" | "reel" | "highlight";
   tone: Tone;
   handle: string; // shown on the closing slide
   caption: string;
@@ -38,4 +39,5 @@ export type Deck = {
 export const FORMATS = {
   carousel: { width: 1080, height: 1350 },
   reel: { width: 1080, height: 1920 },
+  highlight: { width: 1080, height: 1920 }, // Instagram Highlight cover; only the centred circle is visible
 } as const;
