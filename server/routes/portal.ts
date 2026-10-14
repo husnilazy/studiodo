@@ -12,7 +12,8 @@ import { logEvent } from "../lib/platformEvents.js";
 import { createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
 import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
-import { reconcileOrder, settleOrder } from "../lib/billing.js";
+import { reconcileOrder, sendInvoiceEmail, settleOrder } from "../lib/billing.js";
+import { buildInvoice, invoiceUrl } from "../lib/invoice.js";
 import { portalBaseUrl } from "../lib/urls.js";
 import { deliver, passwordChangedMail } from "../lib/emails.js";
 import { TENANT_CATEGORIES, cleanPrefsPatch, getPrefs, setPrefs } from "../lib/emailPrefs.js";
@@ -294,6 +295,8 @@ portalRouter.post("/billing/checkout", async (req, res) => {
   // Where the gateway sends the tenant back after paying. Defaults to the public website so the payer is never
   // left stranded on the gateway's page when PORTAL_BASE_URL was not configured.
   const finishUrl = `${portalBaseUrl()}/portal/tagihan?status=selesai`;
+  const unfinishUrl = `${portalBaseUrl()}/portal/tagihan?status=belum`;
+  const errorUrl = `${portalBaseUrl()}/portal/tagihan?status=gagal`;
   const itemName = `${plan.name} · ${items.length} booth (${periodDays} hari)`;
 
   for (const gw of gateways) {
@@ -305,7 +308,7 @@ portalRouter.post("/billing/checkout", async (req, res) => {
       let providerRef: string | null = null;
       if (gw.provider === "midtrans") {
         const snap = await createSnapTransaction({ serverKey: gw.secretKey!, production: gw.environment === "production" }, {
-          orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl,
+          orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl, unfinishUrl, errorUrl,
         });
         redirectUrl = snap.redirectUrl;
         snapToken = snap.token;
@@ -314,11 +317,12 @@ portalRouter.post("/billing/checkout", async (req, res) => {
         redirectUrl = invoice.redirectUrl;
         providerRef = invoice.invoiceId;
       }
-      await db.insert(billingOrders).values({
+      const [created] = await db.insert(billingOrders).values({
         orderId, provider: gw.provider, providerRef, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
         items, boothCount: items.length, discountPercent: quote.discountPercent,
         snapToken, redirectUrl,
-      });
+      }).returning({ id: billingOrders.id });
+      void sendInvoiceEmail(created.id); // the invoice lands in the registered inbox right away, with a pay link
       logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, ${items.length} booth, Rp ${amount.toLocaleString("id-ID")}${quote.discountPercent > 0 ? ` (diskon ${quote.discountPercent}%)` : ""}`, actorType: "tenant_admin", actorLabel: admin.email });
       return res.status(201).json({ redirectUrl, orderId, provider: gw.provider });
     } catch (e) {
@@ -326,6 +330,13 @@ portalRouter.post("/billing/checkout", async (req, res) => {
     }
   }
   res.status(502).json({ error: "Gagal membuat pembayaran. Coba lagi beberapa saat lagi, atau hubungi admin STUDIODO." });
+});
+
+// GET /api/portal/billing/orders/:orderId — the full invoice for one of this tenant's orders (plus the login-free link).
+portalRouter.get("/billing/orders/:orderId", async (req, res) => {
+  const [order] = await db.select().from(billingOrders).where(and(eq(billingOrders.orderId, req.params.orderId), eq(billingOrders.tenantId, req.tenantId!)));
+  if (!order) return res.status(404).json({ error: "Invoice tidak ditemukan" });
+  res.json({ invoice: await buildInvoice(order), shareUrl: invoiceUrl(order.orderId) });
 });
 
 // POST /api/portal/billing/orders/:orderId/check — "I paid but nothing changed": asks the gateway directly instead of

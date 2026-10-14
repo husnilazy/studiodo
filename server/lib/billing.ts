@@ -1,4 +1,6 @@
-import { deliverToTenant, receiptMail } from "./emails.js";
+import { deliverToTenant } from "./emails.js";
+import { buildInvoice, invoiceUrl } from "./invoice.js";
+import { invoiceMail } from "./invoiceEmail.js";
 import crypto from "node:crypto";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -24,16 +26,20 @@ const PROVIDER_LABEL: Record<string, string> = { midtrans: "Midtrans", xendit: "
  *  - failed/expired → only moves an order that is still pending
  * Returns what happened, for the webhook's log line.
  */
-/** Payment receipt to the tenant's admins. Best-effort and after the money path has committed, so it can never fail a payment. */
-async function sendReceipt(order: Order) {
+/**
+ * Emails the invoice for an order to the tenant's registered admin address(es): the "menunggu pembayaran" invoice right
+ * after checkout, and the "lunas" receipt once paid (same template, the status decides the wording). Always sent — it is
+ * a transactional document, not an optional category. Best-effort and after the money path has committed, so it can
+ * never fail a checkout or a payment.
+ */
+export async function sendInvoiceEmail(orderId: string): Promise<void> {
   try {
-    const [tenant] = await db.select({ ownerName: tenants.ownerName }).from(tenants).where(eq(tenants.id, order.tenantId));
-    await deliverToTenant(order.tenantId, receiptMail({
-      ownerName: tenant?.ownerName ?? null, orderId: order.orderId, planName: order.planName, boothCount: order.boothCount ?? 1,
-      periodDays: order.periodDays, amount: Number(order.amount), discountPercent: order.discountPercent ?? 0, paidAt: new Date(),
-    }), "kuitansi pembayaran", { key: "receipts", label: "Kuitansi pembayaran" });
+    const [order] = await db.select().from(billingOrders).where(eq(billingOrders.id, orderId));
+    if (!order) return;
+    const view = await buildInvoice(order);
+    await deliverToTenant(order.tenantId, invoiceMail(view, invoiceUrl(order.orderId)), view.status === "paid" ? "kuitansi pembayaran" : "invoice langganan");
   } catch (error) {
-    console.error("[STUDIODO] kuitansi gagal dikirim:", error instanceof Error ? error.message : error);
+    console.error("[STUDIODO] invoice gagal dikirim:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -107,7 +113,7 @@ export async function settleOrder(order: Order, outcome: OrderOutcome, paymentTy
         actorType: "system", metadata: { orderId: order.orderId },
       });
     }
-    void sendReceipt(order);
+    void sendInvoiceEmail(order.id);
     return "paid";
   }
 
