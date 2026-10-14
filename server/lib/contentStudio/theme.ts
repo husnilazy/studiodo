@@ -34,6 +34,7 @@ export function wordmark(variant: "ink" | "white"): string {
 }
 
 export const BASE_CSS = `
+:root{color-scheme:only light}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#000;overflow:hidden}
 @property --n{syntax:"<integer>";initial-value:0;inherits:false}

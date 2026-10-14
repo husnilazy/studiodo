@@ -1,6 +1,7 @@
 import type { Deck } from "./types.js";
 import { MORE_DECKS } from "./decks_more.js";
 import { BATCH3_DECKS } from "./decks_batch3.js";
+import { BATCH4_DECKS } from "./decks_batch4.js";
 
 const TAGS = ["#studiodo", "#photobooth", "#bisnisphotobooth", "#photoboothindonesia", "#usahaphotobooth", "#selfphotostudio"];
 
@@ -78,6 +79,7 @@ export const BUILTIN_DECKS: Deck[] = [
   },
   ...MORE_DECKS,
   ...BATCH3_DECKS,
+  ...BATCH4_DECKS,
 ];
 
 export type Idea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };

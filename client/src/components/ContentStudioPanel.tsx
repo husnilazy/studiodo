@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ContentPlanPanel } from "@/components/ContentPlanPanel";
 import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, type CsSlide, type CsSlideKind, type CsTone } from "@/lib/superadminApi";
 
 // Superadmin → Konten Instagram. Decks (carousel / reel) are rendered by the server PC from the same HTML templates the
@@ -24,6 +25,7 @@ export function ContentStudioPanel() {
   const [decks, setDecks] = useState<CsDeck[] | null>(null);
   const [ideas, setIdeas] = useState<CsIdea[]>([]);
   const [env, setEnv] = useState<{ chrome: string | null; ffmpeg: boolean } | null>(null);
+  const [view, setView] = useState<"studio" | "plan">("studio");
   const [tab, setTab] = useState<"decks" | "ideas">("decks");
   const [hideBuilt, setHideBuilt] = useState(false);
   const [draft, setDraft] = useState<CsDeck | null>(null);
@@ -143,6 +145,15 @@ export function ContentStudioPanel() {
   if (!decks) return <p className="text-sm text-fg/50">Memuat…</p>;
   return (
     <div className="grid gap-4">
+      <div className="flex w-fit gap-1 rounded-full bg-fg/10 p-1 text-xs font-bold">
+        {([["studio", "Studio desain"], ["plan", "Rencana & jadwal"]] as const).map(([v, l]) => (
+          <button key={v} onClick={() => setView(v)} className={`rounded-full px-5 py-2 ${view === v ? "bg-fg text-canvas" : "text-fg/60"}`}>{l}</button>
+        ))}
+      </div>
+      {view === "plan" && (
+        <ContentPlanPanel decks={decks} onOpenDeck={(id) => { const d = decks.find((x) => x.id === id); if (d) { open(d); setView("studio"); } }} />
+      )}
+      {view === "studio" && <>
       {env && (!env.chrome || !env.ffmpeg) && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700">
           {!env.chrome && <p>Chrome/Edge tidak ditemukan di PC server, jadi render PNG/MP4 belum bisa jalan. Pasang Google Chrome atau isi CHROME_PATH di .env lalu restart server.</p>}
@@ -325,6 +336,7 @@ export function ContentStudioPanel() {
           )}
         </aside>
       </div>
+      </>}
     </div>
   );
 }

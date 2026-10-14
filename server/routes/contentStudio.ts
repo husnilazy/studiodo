@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { IDEA_BACKLOG } from "../lib/contentStudio/decks.js";
 import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startRender } from "../lib/contentStudio/render.js";
+import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
 // Superadmin → Konten Instagram: mounted under /api/superadmin/content-studio (auth applied by the parent router).
@@ -78,3 +79,24 @@ contentStudioAdminRouter.post("/assets", async (req, res) => {
   catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyimpan" }); }
 });
 contentStudioAdminRouter.delete("/assets/:name", async (req, res) => { await deleteAsset(req.params.name); res.json({ ok: true }); });
+
+// ---- content plan: order, schedule and per-post checklist ----
+contentStudioAdminRouter.get("/plan", async (_req, res) => res.json(await loadPlan()));
+
+contentStudioAdminRouter.put("/plan", async (req, res) => {
+  const plan = parsePlan(req.body);
+  if (typeof plan === "string") return res.status(400).json({ error: plan });
+  res.json(await savePlan(plan));
+});
+
+// POST { startDate, days, time } -> the stored plan re-dated (posted items keep their date). The editor shows it, then saves.
+contentStudioAdminRouter.post("/plan/reschedule", async (req, res) => {
+  const base = parsePlan(req.body?.plan);
+  if (typeof base === "string") return res.status(400).json({ error: base });
+  try {
+    const { startDate, days, time } = req.body ?? {};
+    res.json(await savePlan(reschedule(base, { startDate: String(startDate), days: Array.isArray(days) ? days.map(Number) : [], time: String(time ?? "19:00") })));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyusun jadwal" });
+  }
+});

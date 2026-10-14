@@ -217,7 +217,7 @@ const FIT_SCRIPT = `
 
 function doc(deck: Deck, inner: string, autoplay: boolean): string {
   const { width, height } = FORMATS[deck.format];
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${fontFaces()}${BASE_CSS}</style></head>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><style>${fontFaces()}${BASE_CSS}</style></head>
 <body><div class="stagebox ${deck.format}" style="--W:${width}px;--H:${height}px">${inner}</div>
 <script>${FIT_SCRIPT}${autoplay ? "" : ""}</script></body></html>`;
 }

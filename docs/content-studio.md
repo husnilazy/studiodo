@@ -68,3 +68,17 @@ Tidak perlu coding atau build ulang untuk deck baru. Coding hanya untuk jenis sl
 - Kode: `server/lib/contentStudio/*`, `server/routes/contentStudio.ts`, `client/src/components/ContentStudioPanel.tsx`.
 - Deck tersimpan di `storage/content-studio/decks.json`, foto di `storage/content-studio/assets` (folder `storage` tidak masuk git, jadi ikutkan backup).
 - Butuh Chrome/Edge di PC server (`CHROME_PATH` untuk lokasi khusus) dan ffmpeg (sudah ada lewat `ffmpeg-static`).
+
+## Rencana & jadwal (tab kedua di panel)
+
+Manajemen konten untuk launching: urutan prioritas, tanggal tayang, status, dan checklist.
+
+- **Rencana awal**: 32 post dalam 4 fase (Perkenalan → Prioritas inti → Perluas topik → Pendalaman), 4 post per minggu (Sen, Rab, Jum, Min, jam 19.00), kira-kira 8 minggu. Semua deck bawaan masuk tepat sekali.
+- **Per post**: status (Ide, Draf, Siap posting, Terjadwal di IG, Sudah tayang), checklist 6 langkah, tanggal/jam, catatan, tombol **Buka di Studio**, serta naik/turun prioritas.
+- **Jadwal**: atur tanggal mulai, hari, dan jam, lalu **Susun ulang jadwal**. Post yang sudah tayang tidak berubah. Mengubah urutan tidak mengubah tanggal sampai jadwal disusun ulang.
+- **Cek profil**: checklist 9 langkah sebelum tayang pertama + saran bio.
+- **Salin jadwal (teks)** untuk dibagikan ke tim.
+- Tersimpan otomatis di `storage/content-studio/plan.json`.
+- Format `story` dan post tambahan bisa dibuat manual (tanpa deck).
+
+Deck seri perkenalan: `carousel-perkenalan-studiodo`, `reel-perkenalan-studiodo`, `carousel-fitur-lengkap`, `carousel-untuk-siapa`, `carousel-cara-mulai` (`server/lib/contentStudio/decks_batch4.ts`).
