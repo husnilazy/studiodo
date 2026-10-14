@@ -10,11 +10,13 @@
   Options:
       -SkipMigrate   do not run database migrations
       -SkipClient    do not rebuild the web client (Superadmin / tenant admin UI)
+  -SkipEncryptKeys  do not encrypt kiosk keys that are still stored as plain text (safe to re-run; skipping just leaves them readable)
       -ServiceName   Windows service name (default StudiodoServer)
 #>
 param(
   [switch]$SkipMigrate,
   [switch]$SkipClient,
+  [switch]$SkipEncryptKeys,
   [string]$ServiceName = "StudiodoServer"
 )
 
@@ -42,6 +44,7 @@ $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $svc) { Fail "Layanan '$ServiceName' tidak ditemukan. Cek nama dengan: Get-Service *studiodo*" }
 Ok "layanan $ServiceName ditemukan (status: $($svc.Status))"
 
+Write-Host "    Disarankan: buat cadangan database dulu (Neon: npx neonctl branches create --name pre-deploy-$(Get-Date -Format yyyyMMdd) --project-id <id> --parent main)" -ForegroundColor DarkYellow
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 Ok "branch aktif: $branch"
 $dirty = git status --porcelain | Where-Object { $_ -notmatch "_tmp_acct\.ts" }
@@ -103,18 +106,45 @@ for ($i = 1; $i -le 15; $i++) {
 if (-not $healthy) { Fail "Server tidak menjawab /api/health dalam 30 detik. Cek logs\ dan: Get-Service $ServiceName" }
 Ok "server menjawab"
 
-# the routes added in this release must exist (404 JSON from our API vs. an old build)
-foreach ($path in @("/api/public/marketplace", "/api/public/email-unsubscribe?token=x", "/api/pos/catalog")) {
+if ($SkipEncryptKeys) {
+  Step 8 "Enkripsi key kiosk dilewati (-SkipEncryptKeys)"
+} else {
+  Step 8 "Enkripsi key kiosk di database (yang masih teks biasa)"
+  Run "Enkripsi key kiosk" { node ./node_modules/tsx/dist/cli.mjs server/scripts/encryptKioskKeys.ts --apply }
+  Ok "key kiosk terenkripsi"
+}
+
+# the routes added in this release must exist. Each probe sends a deliberately bad request and looks for the exact answer only
+# the NEW build gives (an old build answers with its SPA page or a different error code).
+function Probe($method, $path, $body, $expectCode, $label) {
   try {
-    $r = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:$port$path" -TimeoutSec 8 -ErrorAction Stop
-    Ok "$path -> $($r.StatusCode)"
+    $req = @{ UseBasicParsing = $true; Uri = "http://localhost:$port$path"; Method = $method; TimeoutSec = 10; ErrorAction = "Stop" }
+    if ($body) { $req.Body = $body; $req.ContentType = "application/json" }
+    $r = Invoke-WebRequest @req
+    $text = $r.Content
   } catch {
-    $code = $_.Exception.Response.StatusCode.value__
-    if ($code -eq 400 -or ($code -eq 401 -and $path -like "/api/pos/*")) { Ok "$path -> $code (rute baru aktif)" } else { Warn "$path -> $code (periksa apakah build terbaru yang berjalan)" }
+    $text = ""
+    try { $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream()); $text = $reader.ReadToEnd() } catch { }
   }
+  if ($text -match [regex]::Escape($expectCode)) { Ok "$label" } else { Warn "$label -> jawaban tak terduga (build lama masih berjalan?)" }
+}
+Probe "GET"  "/api/pos/catalog" $null "admin_auth_required" "rute POS aktif"
+Probe "GET"  "/api/public/invoice/SDO-TEST-1?token=x" $null "tidak ditemukan" "rute invoice aktif"
+Probe "POST" "/api/kiosk-keys/upgrade-binding" "{}" "kiosk_auth_required" "aktivasi/upgrade perangkat aktif"
+Probe "POST" "/api/superadmin/login/2fa" '{"challenge":"x","code":"000000"}' "challenge_expired" "2FA superadmin aktif"
+
+# a browser page from a stranger's site must not be able to write to the API (CORS allowlist)
+try {
+  Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:$port/api/auth/login" -Method POST -Headers @{ Origin = "https://evil.example" } -Body "{}" -ContentType "application/json" -TimeoutSec 8 -ErrorAction Stop | Out-Null
+  Warn "POST dari origin asing TIDAK ditolak (CORS belum aktif?)"
+} catch {
+  if ($_.Exception.Response.StatusCode.value__ -eq 403) { Ok "origin asing ditolak (403)" } else { Warn "tes CORS: status $($_.Exception.Response.StatusCode.value__)" }
 }
 
 Write-Host ""
 Write-Host "Selesai. Langkah berikutnya:" -ForegroundColor Green
 Write-Host "  1. Buka Superadmin -> Email -> 'Kirim email uji ke saya' untuk memastikan Resend bekerja."
 Write-Host "  2. Buka studiodo.id/portal dan cek bel notifikasi serta Akun & keamanan."
+Write-Host "  3. Buka Admin Pusat -> Pengaturan -> Keamanan akun: AKTIFKAN 2FA lalu simpan kode pemulihannya."
+Write-Host "  4. Admin Pusat -> Pengaturan -> Pembayaran langganan: tekan 'Tes koneksi' Midtrans."
+Write-Host "  5. Rilis kiosk 0.1.19 (scripts\release-kiosk.ps1 -Publish). Instalasi baru WAJIB memakai versi ini."
