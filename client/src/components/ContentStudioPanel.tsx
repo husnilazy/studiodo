@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContentPlanPanel } from "@/components/ContentPlanPanel";
+import { IconPanel } from "@/components/IconPanel";
+import { TriptychPanel } from "@/components/TriptychPanel";
 import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, type CsSlide, type CsSlideKind, type CsTone } from "@/lib/superadminApi";
 
 // Superadmin → Konten Instagram. Decks (carousel / reel) are rendered by the server PC from the same HTML templates the
@@ -7,7 +9,7 @@ import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, 
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"], ["badge", "Cover Sorotan (ikon)"]];
-const ICON_OPTIONS: [string, string][] = [["user", "Orang (Kenalan)"], ["grid", "Kisi (Fitur)"], ["play", "Mulai"], ["help", "Tanya (FAQ)"], ["bell", "Lonceng (Update)"], ["ticket", "Tiket (Event/Promo)"], ["qr", "QR (Bayar)"], ["image", "Foto (Hasil)"], ["camera", "Kamera"], ["chart", "Grafik"], ["card", "Kartu"], ["spark", "Kilau"], ["check", "Centang"]];
+const ICON_OPTIONS: [string, string][] = [["app", "Ikon logo STUDIODO"], ["user", "Orang (Kenalan)"], ["grid", "Kisi (Fitur)"], ["play", "Mulai"], ["help", "Tanya (FAQ)"], ["bell", "Lonceng (Update)"], ["ticket", "Tiket (Event/Promo)"], ["qr", "QR (Bayar)"], ["image", "Foto (Hasil)"], ["camera", "Kamera"], ["chart", "Grafik"], ["card", "Kartu"], ["spark", "Kilau"], ["check", "Centang"]];
 const MOCKUPS: [CsMockup, string][] = [["none", "Tanpa mockup"], ["dashboard", "Dashboard"], ["qris", "Kiosk QRIS"], ["gallery", "Galeri HP"], ["booth", "Kiosk sesi foto"], ["strip", "Strip foto"], ["queue", "Antrian"], ["hub", "Hub dashboard (diagram)"], ["qris-l", "Kiosk QRIS · landscape"], ["booth-l", "Kiosk sesi foto · landscape"], ["gallery-l", "Galeri di monitor · landscape"], ["print-l", "Hasil cetak 4R · landscape"]];
 const TONES: [CsTone, string][] = [["light", "Terang"], ["dark", "Gelap"], ["indigo", "Indigo"], ["mint", "Mint"]];
 const SIZES = { carousel: { w: 1080, h: 1350 }, reel: { w: 1080, h: 1920 }, highlight: { w: 1080, h: 1920 } } as const;
@@ -26,7 +28,7 @@ export function ContentStudioPanel() {
   const [decks, setDecks] = useState<CsDeck[] | null>(null);
   const [ideas, setIdeas] = useState<CsIdea[]>([]);
   const [env, setEnv] = useState<{ chrome: string | null; ffmpeg: boolean } | null>(null);
-  const [view, setView] = useState<"studio" | "plan">("studio");
+  const [view, setView] = useState<"studio" | "plan" | "trio" | "icon">("studio");
   const [tab, setTab] = useState<"decks" | "ideas">("decks");
   const [hideBuilt, setHideBuilt] = useState(false);
   const [draft, setDraft] = useState<CsDeck | null>(null);
@@ -147,13 +149,15 @@ export function ContentStudioPanel() {
   return (
     <div className="grid gap-4">
       <div className="flex w-fit gap-1 rounded-full bg-fg/10 p-1 text-xs font-bold">
-        {([["studio", "Studio desain"], ["plan", "Rencana & jadwal"]] as const).map(([v, l]) => (
+        {([["studio", "Studio desain"], ["plan", "Rencana & jadwal"], ["trio", "Pembuka Feed (3 tile)"], ["icon", "Ikon logo"]] as const).map(([v, l]) => (
           <button key={v} onClick={() => setView(v)} className={`rounded-full px-5 py-2 ${view === v ? "bg-fg text-canvas" : "text-fg/60"}`}>{l}</button>
         ))}
       </div>
       {view === "plan" && (
         <ContentPlanPanel decks={decks} onOpenDeck={(id) => { const d = decks.find((x) => x.id === id); if (d) { open(d); setView("studio"); } }} />
       )}
+      {view === "trio" && <TriptychPanel />}
+      {view === "icon" && <IconPanel />}
       {view === "studio" && <>
       {env && (!env.chrome || !env.ffmpeg) && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700">

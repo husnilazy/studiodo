@@ -7,6 +7,8 @@ import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { resolveFfmpeg } from "../ffmpeg.js";
 import { BUILTIN_DECKS } from "./decks.js";
 import { buildReelDoc, buildSlideDoc, SLIDE_SETTLE_MS } from "./templates.js";
+import { buildIconDoc, type FileKind } from "./appicon.js";
+import { buildTriptychDoc, COVER_SEC, DURATION_SEC, geometry, sanitizeTriptych, TILE_H, TILE_W, type Seam, type TriptychOptions } from "./triptych.js";
 import { FORMATS, type Deck } from "./types.js";
 
 // Content Studio storage lives next to the other local files: storage/content-studio/{assets,jobs,decks.json}.
@@ -145,7 +147,7 @@ export function renderEnvironment(): { chrome: string | null; ffmpeg: boolean } 
 
 // ---- jobs (in memory; outputs on disk, pruned after a day) ----
 export type Job = {
-  id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides"; status: "running" | "done" | "error";
+  id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon"; status: "running" | "done" | "error";
   progress: number; label: string; files: { name: string; size: number }[]; error?: string; startedAt: number;
 };
 const jobs = new Map<string, Job>();
@@ -270,6 +272,146 @@ async function renderMp4Slides(job: Job, deck: Deck, dir: string) {
   } finally {
     await browser.close();
   }
+}
+
+// ---- "Pembuka Feed": three seamless tiles rendered from one wide canvas ----
+const TRIO_NAMES = ["feed-1-kiri-logo", "feed-2-tengah-coming-soon", "feed-3-kanan-all-in-one"];
+
+/** One ffmpeg pass: the wide canvas is split and cropped into the three tile videos. */
+function startTrioEncoder(outs: string[], pitch: number, canvasW: number) {
+  const ffmpeg = resolveFfmpeg();
+  if (!ffmpeg) throw new Error("ffmpeg tidak ditemukan di server");
+  const crops = outs.map((_, i) => `[b${i}]crop=${TILE_W}:${TILE_H}:${i * pitch}:0[o${i}]`).join(";");
+  const split = `[0:v]scale=${canvasW}:${TILE_H}:flags=lanczos:out_color_matrix=bt709,format=yuv420p,split=${outs.length}${outs.map((_, i) => `[b${i}]`).join("")}`;
+  const args = ["-y", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-", "-filter_complex", `${split};${crops}`];
+  outs.forEach((out, i) => args.push(
+    "-map", `[o${i}]`, "-c:v", "libx264", "-preset", "medium", "-crf", "15", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", String(FPS),
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-movflags", "+faststart", "-an", out));
+  const proc = spawn(ffmpeg, args, { stdio: ["pipe", "ignore", "pipe"] });
+  let stderr = "";
+  proc.stderr.on("data", (c) => { stderr = (stderr + c).slice(-1500); });
+  const closed = new Promise<void>((resolve, reject) => {
+    proc.on("error", reject);
+    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr}`))));
+  });
+  closed.catch(() => undefined);
+  proc.stdin.on("error", () => undefined);
+  return { proc, closed };
+}
+
+const trioNotes = (seam: Seam) => [
+  "URUTAN UNGGAH (penting)",
+  "Grid Instagram menampilkan postingan TERBARU di kiri atas. Supaya urutannya benar, unggah dari KANAN ke KIRI:",
+  "  1. feed-3-kanan-all-in-one   (unggah PERTAMA)",
+  "  2. feed-2-tengah-coming-soon",
+  "  3. feed-1-kiri-logo          (unggah TERAKHIR, jadi paling kiri)",
+  "",
+  seam === "panorama"
+    ? "MODE PANORAMA: ketiga PNG menyambung persis jika diletakkan berdampingan (tanpa tumpang-tindih). Catatan: grid profil Instagram memotong +-36 px kiri-kanan tiap postingan (3:4), jadi di grid sambungan bisa terlihat bergeser sedikit. Kalau ingin mulus di grid, render ulang dengan mode 'Grid 3:4'."
+    : "MODE GRID 3:4: tiap tile bertumpang-tindih 72 px supaya bagian yang terlihat di grid Instagram (dipotong 36 px kiri-kanan) menyambung. Jika ketiga PNG diletakkan berdampingan akan terlihat tumpang-tindih; itu normal. Untuk PNG yang menyambung persis, pakai mode 'Panorama'.",
+  "",
+  "Untuk MP4: pilih cover dari file PNG dengan nama yang sama (Edit sampul > Tambah dari galeri), karena frame pertama video belum lengkap. Jangan memangkas sendiri.",
+  "",
+  "USULAN CAPTION",
+  "Kiri (logo): STUDIODO. Platform photobooth all-in-one. Coming soon. Ikuti untuk kabar terbaru!",
+  "Tengah: Coming soon. Kami sedang menyiapkan sesuatu untuk bisnis photobooth kamu.",
+  "Kanan: All-in-One Photobooth App & Software: kiosk, pembayaran QRIS, kasir, dan galeri hasil dalam satu platform. studiodo.id",
+].join("\n");
+
+async function renderTriptych(job: Job, o: TriptychOptions, mode: "trio-png" | "trio-mp4", dir: string) {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    const { pitch, canvasW } = geometry(o.seam);
+    await page.setViewport({ width: canvasW, height: TILE_H, deviceScaleFactor: 1 });
+    await page.setContent(buildTriptychDoc(o), { waitUntil: "load" });
+    await page.waitForFunction("window.__ready === true", { timeout: 20000 });
+
+    // Stills (also the covers for the videos)
+    job.label = "Membuat gambar tile…";
+    await page.evaluate(`window.__seek(${COVER_SEC * 1000})`);
+    for (let i = 0; i < 3; i++) {
+      await page.screenshot({ path: path.join(dir, `${TRIO_NAMES[i]}.png`), clip: { x: i * pitch, y: 0, width: TILE_W, height: TILE_H } });
+    }
+    await page.screenshot({ path: path.join(dir, "panorama-lengkap.png") });
+    await writeFile(path.join(dir, "URUTAN-UNGGAH.txt"), trioNotes(o.seam), "utf8");
+    job.progress = mode === "trio-png" ? 0.99 : 0.05;
+    if (mode === "trio-png") return;
+
+    const frames = Math.ceil(DURATION_SEC * FPS);
+    const enc = startTrioEncoder(TRIO_NAMES.map((n) => path.join(dir, `${n}.mp4`)), pitch, canvasW);
+    for (let f = 0; f < frames; f++) {
+      await page.evaluate(`window.__seek(${((f / FPS) * 1000).toFixed(2)})`);
+      const shot = (await page.screenshot({ type: "jpeg", quality: 95 })) as Uint8Array;
+      if (!enc.proc.stdin.write(shot)) await new Promise<void>((r) => enc.proc.stdin.once("drain", () => r()));
+      job.progress = 0.05 + ((f + 1) / frames) * 0.93;
+      job.label = `Frame ${f + 1} / ${frames}`;
+    }
+    enc.proc.stdin.end();
+    job.label = "Menyelesaikan 3 video…";
+    await enc.closed;
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function startTriptychRender(input: unknown, mode: "trio-png" | "trio-mp4"): Promise<Job> {
+  if ([...jobs.values()].some((j) => j.status === "running")) throw new Error("Masih ada render yang berjalan, tunggu selesai dulu");
+  await pruneOldJobs();
+  const opts = sanitizeTriptych(input);
+  const job: Job = { id: crypto.randomUUID(), deckId: "pembuka-feed", mode, status: "running", progress: 0, label: "Menyiapkan Chrome…", files: [], startedAt: Date.now() };
+  jobs.set(job.id, job);
+  const dir = path.join(jobsDir(), job.id);
+  await mkdir(dir, { recursive: true });
+  (async () => {
+    try {
+      await renderTriptych(job, opts, mode, dir);
+      await finish(job, dir);
+    } catch (e) {
+      job.status = "error";
+      job.error = e instanceof Error ? e.message : String(e);
+      console.error("[content-studio] render pembuka feed gagal:", job.error);
+    }
+  })();
+  return job;
+}
+
+// ---- STUDIODO app icon: transparent PNGs + profile pictures (dark / white) ----
+async function renderIcons(job: Job, dir: string) {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 1 });
+    const files: [FileKind, string][] = [
+      ["logo-silver", "logo-studiodo-silver.png"], ["avatar-silver", "foto-profil-studiodo-silver.png"],
+      ["icon-dark", "icon-studiodo-dark.png"], ["icon-white", "icon-studiodo-white.png"],
+      ["avatar-dark", "foto-profil-studiodo-dark.png"], ["avatar-white", "foto-profil-studiodo-white.png"],
+    ];
+    for (let k = 0; k < files.length; k++) {
+      const [kind, name] = files[k];
+      job.label = name;
+      await page.setContent(buildIconDoc(kind), { waitUntil: "load" });
+      await page.waitForFunction("document.fonts.ready.then(() => true)", { timeout: 20000 });
+      await page.screenshot({ path: path.join(dir, name), omitBackground: kind.startsWith("icon-") || kind === "logo-silver" });
+      job.progress = (k + 1) / files.length;
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function startIconRender(): Promise<Job> {
+  if ([...jobs.values()].some((j) => j.status === "running")) throw new Error("Masih ada render yang berjalan, tunggu selesai dulu");
+  await pruneOldJobs();
+  const job: Job = { id: crypto.randomUUID(), deckId: "ikon-logo", mode: "icon", status: "running", progress: 0, label: "Menyiapkan Chrome…", files: [], startedAt: Date.now() };
+  jobs.set(job.id, job);
+  const dir = path.join(jobsDir(), job.id);
+  await mkdir(dir, { recursive: true });
+  (async () => {
+    try { await renderIcons(job, dir); await finish(job, dir); }
+    catch (e) { job.status = "error"; job.error = e instanceof Error ? e.message : String(e); console.error("[content-studio] render ikon gagal:", job.error); }
+  })();
+  return job;
 }
 
 export async function startRender(deckIn: Deck, mode: "png" | "mp4" | "mp4-slides"): Promise<Job> {

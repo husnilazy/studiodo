@@ -95,3 +95,22 @@ Deck seri perkenalan: `carousel-perkenalan-studiodo`, `reel-perkenalan-studiodo`
 - **Carousel**: dua pilihan. **MP4 per slide (HD)** menghasilkan satu video beranimasi 5 detik per slide (1080×1350), cocok diunggah sebagai slide video dalam carousel Instagram. **MP4 Reel gabungan (HD)** mengubah seluruh carousel menjadi satu Reel 9:16 (tiap slide jadi scene ±4,2 detik).
 - Encode H.264 High, CRF 15, warna BT.709 (warna brand tetap akurat di HP). Tanpa audio: tambahkan musik langsung di Instagram.
 - Cover Sorotan hanya PNG. Render video butuh Chrome + ffmpeg di PC server dan memakan ±1 menit per deck.
+
+## Pembuka Feed (3 tile menyambung)
+
+Tab ketiga di panel: tiga postingan yang menyatu jadi satu gambar bergerak di baris pertama grid profil (logo silver → COMING SOON → All-in-One Photobooth App & Software). Gelap, tipografi bergerak, dan kolase mockup produk yang longgar di sekelilingnya: printer yang mencetak strip, QRIS, dashboard admin, sesi foto, galeri, notifikasi pembayaran, kartu statistik, dan strip foto yang bergerak. Ukurannya berbeda-beda (besar-kecil), miring, melayang pelan, masuk dengan gerakan berbeda, dan beberapa melintasi sambungan antar-tile. Satu sapuan cahaya melintasi ketiga tile.
+
+- **Mode sambungan**: *Panorama* (default): tile persis berdampingan, ketiga PNG menyambung sempurna. *Grid 3:4*: tile bertumpang-tindih 72 px supaya bagian yang terlihat di grid Instagram (dipotong 36 px kiri-kanan) menyambung; PNG-nya sendiri tampak tumpang-tindih jika dijejer.
+- **Logo** di tile kiri: silver metalik tanpa kotak (default, dengan sapuan cahaya), atau ikon kaca putih/gelap. Teks bisa diubah (judul coming soon, judul kanan, daftar fitur, tombol).
+- **Output**: 3 PNG tile (`feed-1-kiri-logo`, `feed-2-tengah-coming-soon`, `feed-3-kanan-all-in-one`), `panorama-lengkap.png`, `URUTAN-UNGGAH.txt`, dan (mode MP4) 3 video HD 9 detik dari satu proses ffmpeg. Pakai PNG sebagai cover video.
+- **Urutan unggah**: kanan → tengah → kiri (postingan terbaru tampil di kiri atas).
+- Kode: `server/lib/contentStudio/triptych.ts` (daftar kartu kolase ada di array `cards`).
+
+## Logo STUDIODO
+
+Tab keempat: **logo silver metalik** (wordmark tanpa kotak + "Photobooth Apps", dengan gradasi logam ala titanium dan sapuan cahaya) serta ikon aplikasi kaca (squircle) versi gelap dan putih. Render 6 PNG: `logo-studiodo-silver.png` (transparan), `foto-profil-studiodo-silver.png`, `icon-studiodo-dark/white.png` (transparan), dan `foto-profil-studiodo-dark/white.png`. Logo silver juga dipakai di Pembuka Feed dan di slide Cover Sorotan dengan ikon `app` (deck `highlight-covers`, "Kenalan"; di tema terang/mint dipakai versi grafit). Kode: `server/lib/contentStudio/appicon.ts`.
+
+## Animasi "keluar dari printer" dan ilustrasi foto
+
+- Semua mockup (dashboard, kiosk QRIS, galeri, dst.) muncul dengan gerak seperti kertas keluar dari slot printer: meluncur bertahap (gaya printer termal) dari slot di atas area mockup, lalu isinya terisi. Berlaku untuk carousel, Reel, dan video.
+- Foto placeholder di mockup memakai ilustrasi orang datar yang sama dengan landing page (`portraits.ts`), bukan siluet abu-abu. Foto asli yang diunggah tetap menggantikannya.

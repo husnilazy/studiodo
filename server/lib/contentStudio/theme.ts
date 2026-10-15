@@ -47,7 +47,7 @@ html,body{background:#000;overflow:hidden}
 .t-indigo{--bg:#4a46e0;--fg:#fff;--muted:rgba(255,255,255,.78);--accent:#ffffff;--accent2:#c9ccff;--card:rgba(255,255,255,.16);--cb:rgba(255,255,255,.34);--shadow:0 30px 80px rgba(20,18,110,.4);--ink:#fff;--onink:#2c2aa0;--c1:#8a8aff;--c2:#b78bff;--c3:#ffc2dc;--soft:rgba(255,255,255,.14);--pop:#ffd3e4;--tick:#4a46e0;--logo:white}
 .t-mint{--bg:#e8f9f4;--fg:#0b1020;--muted:#44566a;--accent:#4f4fe8;--accent2:#9aa6ff;--card:rgba(255,255,255,.7);--cb:rgba(255,255,255,.95);--shadow:0 24px 70px rgba(30,110,100,.18);--ink:#0b1020;--onink:#fff;--c1:#b8f0e6;--c2:#c7ceff;--c3:#ffe3b8;--soft:rgba(11,16,32,.06);--pop:#4f4fe8;--logo:ink}
 
-.slide{position:absolute;inset:0;display:flex;flex-direction:column;padding:84px 84px 72px;color:var(--fg);background:var(--bg);overflow:hidden}
+.slide{--s:var(--s0,0s);position:absolute;inset:0;display:flex;flex-direction:column;padding:84px 84px 72px;color:var(--fg);background:var(--bg);overflow:hidden}
 .t-indigo.slide{background:linear-gradient(160deg,#5b57f0 0%,#4a46e0 45%,#3a37c4 100%)}
 .t-mint.slide{background:linear-gradient(160deg,#eafcf6 0%,#dfe6ff 100%)}
 .t-dark.slide{background:radial-gradient(120% 70% at 50% 0%,#17163f 0%,#0a0d18 60%)}
@@ -111,6 +111,17 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .stagebox:not(.reel) .stage[data-fit="crop"]{align-items:flex-start;overflow:hidden;-webkit-mask-image:linear-gradient(#000 82%,transparent);mask-image:linear-gradient(#000 82%,transparent)}
 .stagebox:not(.reel) .stage[data-fit="crop"] .mock{transform-origin:top center}
 .stagebox:not(.reel) .stage[data-fit="fit"]{overflow:hidden}
+/* ---- every mockup prints out of a slot (thermal-printer steps, then a soft settle) ---- */
+.stage{clip-path:inset(0 -80px -140px -80px)}
+.paper{--s:calc(var(--s0,0s) + .9s);animation:printout 1.7s both;animation-delay:calc(var(--s0,0s) + var(--d,0s));will-change:transform}
+@keyframes printout{
+  0%{transform:translateY(calc(var(--drop,760px) * -1));animation-timing-function:steps(15,end)}
+  82%{transform:translateY(-10px);animation-timing-function:cubic-bezier(.2,1.5,.4,1)}
+  100%{transform:none}}
+.stage::before,.stage::after{content:"";position:absolute;pointer-events:none;z-index:3;animation:slotIn .5s both;animation-delay:calc(var(--s0,0s) + var(--d,0s) - .25s)}
+.stage::before{left:7%;right:7%;top:0;height:26px;border-radius:0 0 18px 18px;background:linear-gradient(#1f2748,#0b1020);border:1px solid rgba(255,255,255,.2);border-top:none;box-shadow:0 14px 28px rgba(0,0,0,.3)}
+.stage::after{left:11%;right:11%;top:24px;height:4px;border-radius:4px;background:rgba(154,166,255,.85);filter:blur(1.2px)}
+@keyframes slotIn{from{opacity:0}to{opacity:1}}
 /* ---- landscape kiosk / monitor mockups ---- */
 .mon{width:880px;display:grid;justify-items:center}
 .mon .bez{width:100%;border-radius:30px;background:#0b1020;padding:16px;box-shadow:0 40px 90px rgba(11,16,32,.35)}

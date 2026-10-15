@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { IDEA_BACKLOG } from "../lib/contentStudio/decks.js";
-import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startRender } from "../lib/contentStudio/render.js";
+import { buildIconPreviewDoc } from "../lib/contentStudio/appicon.js";
+import { buildTriptychDoc, DEFAULT_TRIPTYCH, sanitizeTriptych } from "../lib/contentStudio/triptych.js";
+import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTriptychRender } from "../lib/contentStudio/render.js";
 import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
@@ -99,4 +101,20 @@ contentStudioAdminRouter.post("/plan/reschedule", async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyusun jadwal" });
   }
+});
+
+// ---- Pembuka Feed: three seamless animated tiles for the top row of the profile grid ----
+contentStudioAdminRouter.get("/triptych/defaults", (_req, res) => res.json(DEFAULT_TRIPTYCH));
+contentStudioAdminRouter.post("/triptych/preview", (req, res) => res.json({ html: buildTriptychDoc(sanitizeTriptych(req.body?.options), true) }));
+contentStudioAdminRouter.post("/triptych/render", async (req, res) => {
+  const mode = req.body?.mode === "mp4" ? "trio-mp4" : "trio-png";
+  try { res.json(await startTriptychRender(req.body?.options, mode)); }
+  catch (e) { res.status(409).json({ error: e instanceof Error ? e.message : "Gagal memulai render" }); }
+});
+
+// ---- STUDIODO app icon ----
+contentStudioAdminRouter.get("/icon/preview", (_req, res) => res.json({ html: buildIconPreviewDoc() }));
+contentStudioAdminRouter.post("/icon/render", async (_req, res) => {
+  try { res.json(await startIconRender()); }
+  catch (e) { res.status(409).json({ error: e instanceof Error ? e.message : "Gagal memulai render" }); }
 });

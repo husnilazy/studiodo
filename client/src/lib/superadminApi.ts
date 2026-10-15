@@ -569,13 +569,20 @@ export type CsSlide = {
 };
 export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
-export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
+export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
 export type CsPlanStatus = "ide" | "draf" | "siap" | "terjadwal" | "terposting";
 export type CsPlanItem = { id: string; title: string; phase: string; pillar: string; format: "carousel" | "reel" | "story"; deckId?: string; date?: string; time?: string; status: CsPlanStatus; checks: string[]; notes?: string };
 export type CsPlan = { startDate: string; days: number[]; time: string; items: CsPlanItem[]; profileChecks: string[]; updatedAt?: string };
 
+export type CsTriptych = { seam: "panorama" | "grid"; logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; comingSub: string; headline: string; features: string; cta: string };
+
 export const contentStudioApi = {
+  iconPreview: () => request<{ html: string }>("/content-studio/icon/preview"),
+  iconRender: () => request<CsJob>("/content-studio/icon/render", { method: "POST" }),
+  triptychDefaults: () => request<CsTriptych>("/content-studio/triptych/defaults"),
+  triptychPreview: (options: CsTriptych) => request<{ html: string }>("/content-studio/triptych/preview", { method: "POST", body: JSON.stringify({ options }) }),
+  triptychRender: (options: CsTriptych, mode: "png" | "mp4") => request<CsJob>("/content-studio/triptych/render", { method: "POST", body: JSON.stringify({ options, mode }) }),
   plan: () => request<CsPlan>("/content-studio/plan"),
   savePlan: (plan: CsPlan) => request<CsPlan>("/content-studio/plan", { method: "PUT", body: JSON.stringify(plan) }),
   reschedule: (plan: CsPlan, opts: { startDate: string; days: number[]; time: string }) => request<CsPlan>("/content-studio/plan/reschedule", { method: "POST", body: JSON.stringify({ plan, ...opts }) }),

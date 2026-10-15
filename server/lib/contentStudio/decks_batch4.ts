@@ -89,7 +89,7 @@ export const BATCH4_DECKS: Deck[] = [
     caption: "Cover Sorotan (Highlights) Instagram, 1080x1920. Unggah satu per satu sebagai cover sorotan: Instagram memotong menjadi lingkaran di tengah, jadi ikon sudah berada di area aman. Ganti 'Tema dasar' di sebelah kanan untuk varian warna lain.",
     hashtags: [],
     slides: [
-      { kind: "badge", title: "Kenalan", icon: "user" },
+      { kind: "badge", title: "Kenalan", icon: "app" },
       { kind: "badge", title: "Fitur", icon: "grid" },
       { kind: "badge", title: "Cara Mulai", icon: "play" },
       { kind: "badge", title: "FAQ", icon: "help" },

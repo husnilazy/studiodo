@@ -1,3 +1,5 @@
+import { APP_ICON_CSS, silverLogoHtml } from "./appicon.js";
+import { portraitSvg } from "./portraits.js";
 import { BASE_CSS, fontFaces, wordmark } from "./theme.js";
 import { FORMATS, type Deck, type Mockup, type Slide, type Tone } from "./types.js";
 
@@ -25,11 +27,11 @@ const ICONS: Record<string, string> = {
   bell: "M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 004 0",
   grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
 };
-const icon = (name: string, size: number, stroke = 2, color = "currentColor") =>
+export const icon = (name: string, size: number, stroke = 2, color = "currentColor") =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name]}"/></svg>`;
 
 // ---- deterministic fake QR (never scannable; it's a visual) ----
-function qrCells(): string {
+export function qrCells(): string {
   let seed = 7;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   const N = 21;
@@ -62,11 +64,11 @@ const photo = (i: number, images: string[] | undefined, extra = "") => {
   const img = images?.[i % Math.max(images.length, 1)];
   return img
     ? `<div class="ph" style="background-image:url('${esc(img)}');${extra}"></div>`
-    : `<div class="ph s" style="background:${PHOTO_BG[i % PHOTO_BG.length]};${extra}"></div>`;
+    : `<div class="ph" style="${extra}">${portraitSvg(i)}</div>`;
 };
 
 // ---- mockups ----
-function mockDashboard(): string {
+export function mockDashboard(): string {
   const bars = [38, 56, 44, 70, 62, 88, 100];
   return `<div class="mock win"><div class="bar"><i></i><i></i><i></i><span>STUDIODO · Dashboard</span></div>
     <div class="tiles">
@@ -83,7 +85,7 @@ function mockDashboard(): string {
     </div>`;
 }
 
-function mockQris(reel: boolean): string {
+export function mockQris(reel: boolean): string {
   return `<div class="mock kiosk"><div class="scr">
     <span class="chip">Pembayaran</span>
     <h3>Scan QRIS untuk mulai</h3>
@@ -94,7 +96,7 @@ function mockQris(reel: boolean): string {
   </div></div>`;
 }
 
-function mockGallery(images?: string[]): string {
+export function mockGallery(images?: string[]): string {
   return `<div class="mock phone"><div class="scr">
     <h3>Foto kamu sudah siap</h3>
     <div class="grid2">${[0, 1, 2, 3].map((i) => photo(i, images, `animation:pop .6s cubic-bezier(.3,1.5,.5,1) both;animation-delay:calc(var(--s,0s) + ${0.5 + i * 0.15}s)`)).join("")}</div>
@@ -102,11 +104,11 @@ function mockGallery(images?: string[]): string {
   </div></div>`;
 }
 
-function mockBooth(images?: string[]): string {
+export function mockBooth(images?: string[]): string {
   return `<div class="mock kiosk"><div class="scr" style="background:linear-gradient(170deg,#c7ceff,#eceeff)">
     <span class="chip">Sesi foto</span>
     <div style="position:relative;width:100%;aspect-ratio:3/4;border-radius:26px;overflow:hidden;background:${PHOTO_BG[0]}">
-      ${images?.[0] ? `<div style="position:absolute;inset:0;background:url('${esc(images[0])}') center/cover"></div>` : `<div class="ph s" style="position:absolute;inset:0;aspect-ratio:auto;border-radius:0;background:${PHOTO_BG[1]}"></div>`}
+      ${images?.[0] ? `<div style="position:absolute;inset:0;background:url('${esc(images[0])}') center/cover"></div>` : photo(1, images, "position:absolute;inset:0;aspect-ratio:auto;border-radius:0")}
       <div class="cnt3 pop" style="--d:.6s">3</div>
     </div>
     <div class="bigbtn in" ${D(0.3)}>Mulai Foto</div>
@@ -164,7 +166,7 @@ function mockQrisL(reel: boolean): string {
   </div></div><div class="neck"></div><div class="base"></div></div>`;
 }
 
-function mockBoothL(images?: string[]): string {
+export function mockBoothL(images?: string[]): string {
   return `<div class="mock mon"><div class="bez"><div class="lscr" style="grid-template-columns:1.25fr 1fr">
     <div class="l-left" style="padding:28px"><div class="cam" style="background:${PHOTO_BG[0]}">${lphoto(1, images, "position:absolute;inset:0;aspect-ratio:auto;border-radius:0")}<div class="cnt3 pop" style="--d:.6s">3</div></div></div>
     <div class="l-right" style="gap:16px;align-content:center;justify-items:center">
@@ -210,7 +212,7 @@ const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) =
 const stage = (s: Slide, reel: boolean, d = 0.36) => {
   if (!s.mockup || s.mockup === "none") return "";
   const m = MOCKS[s.mockup];
-  return `<div class="stage in" data-fit="${m.fit}" data-k="${m.k}" style="--d:${d}s;--k:${m.k}">${m.html(s, reel)}</div>`;
+  return `<div class="stage" data-fit="${m.fit}" data-k="${m.k}" style="--d:${d}s;--k:${m.k}"><div class="paper">${m.html(s, reel)}</div></div>`;
 };
 const note = (s: Slide) => (s.note ? `<div class="pill in" ${D(0.7)}>${rich(s.note)}</div>` : "");
 const eyebrow = (s: Slide) => (s.eyebrow ? `<div class="eyebrow in"><span class="dot"></span>${esc(s.eyebrow)}</div>` : "");
@@ -259,6 +261,13 @@ function slideHtml(s: Slide, deck: Deck, ctx: RenderCtx): string {
   const bg = s.bgImage ? `<div class="bgimg" style="background-image:url('${esc(s.bgImage)}')"></div><div class="scrim"></div>` : "";
   if (s.kind === "badge") {
     // Highlight cover: icon only, kept inside the centre safe zone (Instagram crops it to a circle).
+    if (s.icon === "app") {
+      const metal = tone === "light" || tone === "mint" ? "graphite" : "silver";
+      return `<section class="slide t-${tone}" style="--s:0s">
+      <div class="mesh"><i></i><i></i><i></i></div>${bg}
+      <div class="bdgmain"><div class="pop" style="--d:.2s;animation:pop .8s cubic-bezier(.3,1.4,.5,1) both"><div class="float">${silverLogoHtml(720, metal, "--sweep-delay:1.2s")}</div></div></div>
+    </section>`;
+    }
     const name = s.icon && ICONS[s.icon] ? s.icon : "spark";
     return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s:0s">
       <div class="mesh"><i></i><i></i><i></i></div>${bg}
@@ -266,7 +275,7 @@ function slideHtml(s: Slide, deck: Deck, ctx: RenderCtx): string {
       <div class="bdgmain"><div class="bdg pop"><span class="float" style="display:grid">${icon(name, 250, 1.6)}</span></div></div>
     </section>`;
   }
-  return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s:${ctx.startSec ?? 0}s;${sceneAnim}">
+  return `<section class="slide t-${tone}${s.bgImage ? " has-bg" : ""}" style="--s0:${ctx.startSec ?? 0}s;${sceneAnim}">
     <div class="mesh"><i></i><i></i><i></i></div>${bg}
     <div class="hd"><img src="${logo}" alt="STUDIODO">${pager}</div>
     <div class="main k-${s.kind}">${mainFor(s, deck, ctx.reel)}</div>
@@ -279,9 +288,10 @@ const FIT_SCRIPT = `
 (()=>{
   const run=()=>{document.querySelectorAll('.stage').forEach(st=>{
     const m=st.querySelector('.mock'); if(!m) return; const reel=document.querySelector('.stagebox').classList.contains('reel');
-    m.style.transform='none'; const w=m.offsetWidth,h=m.offsetHeight,sw=st.clientWidth,sh=st.clientHeight;
-    if(reel||st.dataset.fit==='fit'){const k=Math.min(reel?1.55:1,(sw-100)/w,sh/h);m.style.transform='scale('+k+')';}
-    else{st.style.alignItems='flex-start';st.style.overflow='hidden';st.style.webkitMaskImage='linear-gradient(#000 82%,transparent)';const k=Math.min(1,(sw-100)/w)*(st.dataset.k?+st.dataset.k:1);m.style.transformOrigin='top center';m.style.transform='scale('+k+')';}
+    m.style.transform='none'; const w=m.offsetWidth,h=m.offsetHeight,sw=st.clientWidth,sh=st.clientHeight; let k,top;
+    if(reel||st.dataset.fit==='fit'){k=Math.min(reel?1.55:1,(sw-100)/w,sh/h);m.style.transform='scale('+k+')';top=m.offsetTop+(h-h*k)/2;}
+    else{st.style.alignItems='flex-start';st.style.overflow='hidden';st.style.webkitMaskImage='linear-gradient(#000 82%,transparent)';k=Math.min(1,(sw-100)/w)*(st.dataset.k?+st.dataset.k:1);m.style.transformOrigin='top center';m.style.transform='scale('+k+')';top=m.offsetTop;}
+    st.style.setProperty('--drop',Math.ceil(top+h*k+24)+'px'); // paper starts fully above the slot
   });};
   // Fit once right away (does not depend on fonts), again on load, and once more when fonts settle (or after 2.5 s at most).
   const safe=()=>{try{run();}catch(e){}};
@@ -293,7 +303,7 @@ const FIT_SCRIPT = `
 
 function doc(deck: Deck, inner: string, autoplay: boolean): string {
   const { width, height } = FORMATS[deck.format];
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><style>${fontFaces()}${BASE_CSS}</style></head>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><style>${fontFaces()}${BASE_CSS}${APP_ICON_CSS}</style></head>
 <body><div class="stagebox ${deck.format}" style="--W:${width}px;--H:${height}px">${inner}</div>
 <script>${FIT_SCRIPT}${autoplay ? "" : ""}</script></body></html>`;
 }
