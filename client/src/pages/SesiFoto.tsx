@@ -58,8 +58,12 @@ const SLOT_VIDEO_BITRATE = 6_000_000;
 // The "video" output is the whole photo session recorded in one take (not 2 s clips): HD, and a bitrate that keeps a
 // few minutes of footage to a size that uploads in reasonable time (the server re-encodes it to a phone-friendly MP4).
 const SESSION_VIDEO_BITRATE = 4_500_000;
-const GIF_MAX_SNAPSHOTS = 90; // time-lapse GIF length cap (frames)
-const GIF_TIMELAPSE_DELAY_MS = 150;
+const GIF_TIMELAPSE_DELAY_MS = 150; // GIF frame spacing (~6.7 fps)
+const RAW_RECORD_WIDTH = 960; // the continuous live-view take is recorded this wide (slots are small, so this is plenty)
+const RAW_RECORD_BITRATE = 3_000_000;
+const SEGMENT_MAX_MS = 10_000; // each slot plays at most this much footage, ending at its shot
+const SEGMENT_TAIL_MS = 500; // a moment after the shot stays in the segment
+const COMPOSE_HARD_LIMIT_MS = 15_000;
 
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -172,9 +176,9 @@ export default function SesiFoto() {
   const pendingClipsRef = useRef<Promise<void>[]>([]);
   const slotClipMsRef = useRef<number[]>([]);
   // One continuous recording of the whole session (the package's "video"); null until the first countdown starts.
-  const sessionRecRef = useRef<{ recorder: MediaRecorder; chunks: Blob[]; mimeType: string; stopDrawing?: () => void; done: Promise<Blob | null>; composite: boolean } | null>(null);
-  // Time-lapse snapshots of the framed session (the GIF), filled while the composite video records.
-  const sessionGifFramesRef = useRef<GifFrame[] | null>(null);
+  const sessionRecRef = useRef<{ recorder: MediaRecorder; chunks: Blob[]; mimeType: string; stopDrawing?: () => void; done: Promise<Blob | null>; startedAt: number } | null>(null);
+  // When each photo was taken, in ms from the start of the session recording (index = photo number).
+  const shotTimesRef = useRef<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -519,6 +523,7 @@ export default function SesiFoto() {
     const slotJustCaptured = currentSlot;
     const localUrl = URL.createObjectURL(blob);
     setPhotoAtSlot(slotJustCaptured, localUrl);
+    if (sessionRecRef.current) shotTimesRef.current[slotJustCaptured] = Math.round(performance.now() - sessionRecRef.current.startedAt);
     setCapturedSlot(slotJustCaptured);
     setTimeout(() => setCapturedSlot(null), 1600);
     setSyncingSlots((slots) => new Set(slots).add(slotJustCaptured));
@@ -684,7 +689,7 @@ export default function SesiFoto() {
   // per-shot time — capture stays exactly as smooth as a single format.
   const captureSlotClip = async (slotIndex: number, durationMs: number) => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
-    if (sessionRecRef.current?.composite) return; // the framed session recording already covers GIF and video
+    if (sessionRecRef.current) return; // the session recording already covers GIF and video
     const isTether = cameraMode === "tether";
     if (isTether && !liveViewUrl) return;
     if (!isTether && !videoRef.current) return;
@@ -703,23 +708,23 @@ export default function SesiFoto() {
     await Promise.all(tasks);
   };
 
-  // --- Whole-session video, recorded INSIDE the frame ---------------------------------------------------------------
-  // Started with the first countdown and stopped when the session completes, so the customer's video is the entire
-  // session in one take. With a frame (template) the picture is composed live onto a canvas: photos already taken sit in
-  // their slots, the slot of the shot in progress shows the live camera, and the frame is drawn on top — so the strip
-  // fills up in the video exactly like it does for the customer, and the file is finished the moment the session is.
-  // Without a frame it records the plain camera. Tether (DSLR) uses polled live-view frames drawn to the canvas.
+  // --- Session recording → video & GIF with every slot moving at once --------------------------------------------------
+  // While the session runs, the live view is recorded in one continuous take (downscaled, unframed) and the moment each
+  // photo is taken is noted. When the session ends, composeSimultaneous() cuts that take into one segment per photo
+  // (from just after the previous shot up to this shot, at most SEGMENT_MAX_MS) and plays ALL segments at the same time,
+  // each inside its own slot of the frame — the same frame the photos use. That one pass is recorded as the video and
+  // sampled as the GIF, so the kiosk result, the customer's page and the admin list all show the identical output.
   const startSessionRecording = () => {
-    if (sessionRecRef.current || typeof MediaRecorder === "undefined" || !selectedPackage?.hasVideo) return;
+    if (sessionRecRef.current || typeof MediaRecorder === "undefined" || (!selectedPackage?.hasVideo && !selectedPackage?.hasGif)) return;
     if (skipCombineRef.current || retakeTargetRef.current !== null) return;
+    // No frame means nothing to compose into: those sessions keep the old per-shot clips.
+    if (!template?.slots?.length || typeof HTMLCanvasElement.prototype.captureStream !== "function") return;
     const isTether = cameraMode === "tether";
+    if (isTether && !liveViewUrl) return;
     const cleanups: (() => void)[] = [];
     const stopDrawing = () => { while (cleanups.length) cleanups.pop()!(); };
-    let stream: MediaStream | undefined;
-    let composite = false;
 
-    // Latest live-view frame for tether cameras (crossOrigin so the canvas stays readable).
-    let tetherFrame: HTMLImageElement | null = null;
+    let tetherFrame: HTMLImageElement | null = null; // latest live-view frame for tether cameras (crossOrigin keeps the canvas readable)
     if (isTether && liveViewUrl) {
       let busy = false;
       const poll = () => {
@@ -735,34 +740,98 @@ export default function SesiFoto() {
       const timer = window.setInterval(poll, 66);
       cleanups.push(() => window.clearInterval(timer));
     }
-    const liveSource = (): { el: CanvasImageSource; w: number; h: number } | null => {
-      if (isTether) return tetherFrame ? { el: tetherFrame, w: tetherFrame.naturalWidth, h: tetherFrame.naturalHeight } : null;
-      const video = videoRef.current;
-      return video && video.videoWidth ? { el: video, w: video.videoWidth, h: video.videoHeight } : null;
-    };
+    const source = (): CanvasImageSource | null => (isTether ? tetherFrame : videoRef.current && videoRef.current.videoWidth ? videoRef.current : null);
 
+    const aspect = liveAspect && liveAspect > 0.3 && liveAspect < 3.5 ? liveAspect : 16 / 9;
+    const rawW = RAW_RECORD_WIDTH;
+    const rawH = Math.max(2, Math.round(rawW / aspect) & ~1);
+    const canvas = document.createElement("canvas");
+    canvas.width = rawW;
+    canvas.height = rawH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { stopDrawing(); return; }
+    const timer = window.setInterval(() => {
+      const frame = source();
+      if (frame) ctx.drawImage(frame, 0, 0, rawW, rawH);
+    }, 33);
+    cleanups.push(() => window.clearInterval(timer));
+
+    try {
+      const mimeType = pickVideoMime();
+      const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType, videoBitsPerSecond: RAW_RECORD_BITRATE });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+      const done = new Promise<Blob | null>((resolve) => {
+        recorder.onstop = () => { stopDrawing(); resolve(chunks.length > 0 ? new Blob(chunks, { type: mimeType }) : null); };
+        recorder.onerror = () => { stopDrawing(); resolve(null); };
+      });
+      shotTimesRef.current = [];
+      recorder.start(500);
+      sessionRecRef.current = { recorder, chunks, mimeType, stopDrawing, done, startedAt: performance.now() };
+    } catch (error) {
+      stopDrawing();
+      console.error("Gagal memulai rekaman sesi", error);
+    }
+  };
+  const stopSessionRecording = async (): Promise<Blob | null> => {
+    const rec = sessionRecRef.current;
+    if (!rec) return null;
+    sessionRecRef.current = null;
+    await new Promise((resolve) => window.setTimeout(resolve, SEGMENT_TAIL_MS + 300)); // the last shot's tail is part of its segment
+    if (rec.recorder.state !== "inactive") rec.recorder.stop();
+    return rec.done;
+  };
+
+  /** Plays every photo's segment of the session recording at once inside the frame; returns the video and GIF frames of that pass. */
+  const composeSimultaneous = async (raw: Blob, wantGif: boolean): Promise<{ video: Blob | null; gifFrames: GifFrame[] }> => {
     const tpl = template;
-    if (tpl?.slots?.length && tpl.frameDataUrl && typeof HTMLCanvasElement.prototype.captureStream === "function") {
+    if (!tpl?.slots?.length) return { video: null, gifFrames: [] };
+    const state = useKioskSession.getState();
+    const shots = shotTimesRef.current;
+    const url = URL.createObjectURL(raw);
+    const videos: HTMLVideoElement[] = [];
+    try {
+      const frameImage = await loadImage(tpl.frameDataUrl).catch(() => null);
+      const photoImages = new Map<number, HTMLImageElement>();
+      await Promise.all(state.photoUrls.map(async (photoUrl, index) => { if (photoUrl) { const image = await loadImage(photoUrl).catch(() => null); if (image) photoImages.set(index, image); } }));
+
+      // Segment per template slot: [startMs, endMs] of the raw take that belongs to that slot's photo.
+      const times = shots.map((t, index) => ({ t, index })).filter((x) => typeof x.t === "number") as { t: number; index: number }[];
+      const segments = tpl.slots.map((_, slotIndex) => {
+        const shot = state.templatePhotoMap[slotIndex] ?? slotIndex;
+        const end = shots[shot];
+        if (typeof end !== "number") return null;
+        const previous = Math.max(-1, ...times.filter((x) => x.t < end).map((x) => x.t));
+        let start = Math.max(previous >= 0 ? previous + 400 : 0, end - SEGMENT_MAX_MS, 0);
+        if (end - start < 1500) start = Math.max(0, end - 2500);
+        return { shot, start, end: end + SEGMENT_TAIL_MS };
+      });
+      const longest = Math.max(0, ...segments.map((seg) => (seg ? seg.end - seg.start : 0)));
+      if (longest <= 0) return { video: null, gifFrames: [] };
+
+      // One <video> per segment, all on the same recording, each parked at its own start.
+      const players = await Promise.all(segments.map(async (seg) => {
+        if (!seg) return null;
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "auto";
+        video.src = url;
+        await new Promise<void>((resolve) => { video.onloadedmetadata = () => resolve(); video.onerror = () => resolve(); });
+        video.currentTime = seg.start / 1000;
+        await new Promise<void>((resolve) => { video.onseeked = () => resolve(); window.setTimeout(resolve, 1500); });
+        videos.push(video);
+        return video;
+      }));
+
       const outW = Math.max(2, Math.min(720, tpl.canvasWidth) & ~1);
       const outH = Math.max(2, Math.round((outW * tpl.canvasHeight) / tpl.canvasWidth) & ~1);
       const canvas = document.createElement("canvas");
       canvas.width = outW;
       canvas.height = outH;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      let frameImage: HTMLImageElement | null = null;
-      void loadImage(tpl.frameDataUrl).then((image) => { frameImage = image; }).catch(() => undefined);
-      const photoCache = new Map<string, HTMLImageElement>();
-      const photoFor = (url: string) => {
-        const cached = photoCache.get(url);
-        if (cached) return cached.complete && cached.naturalWidth ? cached : null;
-        const image = new Image();
-        image.crossOrigin = "anonymous";
-        image.src = url;
-        photoCache.set(url, image);
-        return null;
-      };
-      const cover = (src: CanvasImageSource, sw: number, sh: number, x: number, y: number, w: number, h: number, mirror: boolean) => {
+      if (!ctx) return { video: null, gifFrames: [] };
+      const cover = (src: CanvasImageSource, sw: number, sh: number, x: number, y: number, w: number, h: number) => {
         if (!sw || !sh) return;
         const scale = Math.max(w / sw, h / sh);
         const cw = w / scale, ch = h / scale;
@@ -770,107 +839,69 @@ export default function SesiFoto() {
         ctx.beginPath();
         ctx.rect(x, y, w, h);
         ctx.clip();
-        if (mirror) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, w, h); }
+        if (state.mirrorLiveView) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, w, h); }
         else ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, x, y, w, h);
         ctx.restore();
       };
-      const drawFrame = () => {
-        const state = useKioskSession.getState();
+      const draw = (elapsedMs: number) => {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, outW, outH);
         ctx.filter = FILTER_CSS[state.filter] ?? "none";
         tpl.slots.forEach((slot, i) => {
-          const shot = state.templatePhotoMap[i] ?? i;
           const x = slot.x * outW, y = slot.y * outH, w = slot.w * outW, h = slot.h * outH;
-          const url = state.photoUrls[shot];
-          if (url) {
-            const photo = photoFor(url);
-            if (photo) cover(photo, photo.naturalWidth, photo.naturalHeight, x, y, w, h, state.mirrorLiveView);
-          } else if (shot === state.currentSlot) {
-            const live = liveSource();
-            if (live) cover(live.el, live.w, live.h, x, y, w, h, state.mirrorLiveView);
+          const seg = segments[i];
+          const video = players[i];
+          if (seg && video && video.videoWidth) {
+            if (!video.paused && video.currentTime * 1000 >= seg.end) video.pause(); // freeze on the shot moment
+            void elapsedMs;
+            cover(video, video.videoWidth, video.videoHeight, x, y, w, h);
+          } else {
+            const photo = photoImages.get(segments[i]?.shot ?? state.templatePhotoMap[i] ?? i);
+            if (photo) cover(photo, photo.naturalWidth, photo.naturalHeight, x, y, w, h);
           }
         });
         ctx.filter = "none";
         if (frameImage) ctx.drawImage(frameImage, 0, 0, outW, outH);
       };
-      // GIF = the session in fast-forward: a snapshot of the framed canvas every ~0.4 s, thinned (every other one dropped,
-      // interval doubled) whenever more than GIF_MAX_SNAPSHOTS pile up, so a long session never costs unbounded memory.
-      const wantGif = Boolean(selectedPackage?.hasGif);
+
+      // GIF samples: smaller canvas, ~6 fps
       const gifW = Math.min(GIF_MAX_WIDTH, outW);
       const gifH = Math.max(2, Math.round((gifW * outH) / outW));
       const small = wantGif ? document.createElement("canvas") : null;
       if (small) { small.width = gifW; small.height = gifH; }
       const smallCtx = small?.getContext("2d", { willReadFrequently: true }) ?? null;
-      const snapshots: GifFrame[] = [];
-      sessionGifFramesRef.current = wantGif ? snapshots : null;
-      let sampleEvery = 12;
-      let ticks = 0;
-      const sample = () => {
-        if (!smallCtx || !small) return;
-        smallCtx.drawImage(canvas, 0, 0, gifW, gifH);
-        snapshots.push({ data: smallCtx.getImageData(0, 0, gifW, gifH).data, width: gifW, height: gifH });
-        if (snapshots.length > GIF_MAX_SNAPSHOTS) {
-          const kept = snapshots.filter((_, index) => index % 2 === 0);
-          snapshots.length = 0;
-          snapshots.push(...kept);
-          sampleEvery *= 2;
-        }
-      };
-      drawFrame();
-      sample();
-      const timer = window.setInterval(() => {
-        drawFrame();
-        ticks += 1;
-        if (ticks % sampleEvery === 0) sample();
-      }, 33);
-      cleanups.push(() => window.clearInterval(timer));
-      composite = true;
-      stream = canvas.captureStream(30);
-    } else if (isTether && liveViewUrl) {
-      // Tether without a frame: draw the live-view frames onto a canvas and record that.
-      const canvas = document.createElement("canvas");
-      canvas.width = 1280;
-      canvas.height = 854;
-      const ctx = canvas.getContext("2d");
-      if (!ctx || typeof canvas.captureStream !== "function") { stopDrawing(); return; }
-      const timer = window.setInterval(() => {
-        const live = liveSource();
-        if (!live) return;
-        if (canvas.width !== live.w || canvas.height !== live.h) { canvas.width = Math.min(1920, live.w); canvas.height = Math.round(canvas.width * (live.h / live.w)); }
-        ctx.drawImage(live.el, 0, 0, canvas.width, canvas.height);
-      }, 66);
-      cleanups.push(() => window.clearInterval(timer));
-      stream = canvas.captureStream(15);
-    } else {
-      stream = streamRef.current ?? undefined; // plain webcam, no frame
-    }
-    if (!stream) { stopDrawing(); return; }
+      const gifFrames: GifFrame[] = [];
 
-    try {
       const mimeType = pickVideoMime();
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: SESSION_VIDEO_BITRATE });
+      const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType, videoBitsPerSecond: SESSION_VIDEO_BITRATE });
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
-      const done = new Promise<Blob | null>((resolve) => {
-        recorder.onstop = () => { stopDrawing(); resolve(chunks.length > 0 ? new Blob(chunks, { type: mimeType }) : null); };
-        recorder.onerror = () => { stopDrawing(); resolve(null); };
+      const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); recorder.onerror = () => resolve(); });
+
+      draw(0);
+      recorder.start(500);
+      await Promise.all(players.map((video) => video?.play().catch(() => undefined)));
+      const startedAt = performance.now();
+      let lastGif = -1000;
+      await new Promise<void>((resolve) => {
+        const timer = window.setInterval(() => {
+          const elapsed = performance.now() - startedAt;
+          draw(elapsed);
+          if (smallCtx && small && elapsed - lastGif >= GIF_TIMELAPSE_DELAY_MS) {
+            lastGif = elapsed;
+            smallCtx.drawImage(canvas, 0, 0, gifW, gifH);
+            gifFrames.push({ data: smallCtx.getImageData(0, 0, gifW, gifH).data, width: gifW, height: gifH });
+          }
+          if (elapsed >= longest + 400 || elapsed > COMPOSE_HARD_LIMIT_MS) { window.clearInterval(timer); resolve(); }
+        }, 33);
       });
-      recorder.start(1000);
-      sessionRecRef.current = { recorder, chunks, mimeType, stopDrawing, done, composite };
-    } catch (error) {
-      stopDrawing();
-      console.error("Gagal memulai rekaman video sesi", error);
+      recorder.stop();
+      await stopped;
+      return { video: chunks.length > 0 ? new Blob(chunks, { type: mimeType }) : null, gifFrames };
+    } finally {
+      videos.forEach((video) => { video.pause(); video.removeAttribute("src"); video.load(); });
+      URL.revokeObjectURL(url);
     }
-  };
-  const stopSessionRecording = async (): Promise<Blob | null> => {
-    const rec = sessionRecRef.current;
-    if (!rec) return null;
-    sessionRecRef.current = null;
-    // Let the finished strip stay on screen for a moment before the clip ends.
-    await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    if (rec.recorder.state !== "inactive") rec.recorder.stop();
-    return rec.done;
   };
   useEffect(() => () => {
     const rec = sessionRecRef.current;
@@ -892,14 +923,23 @@ export default function SesiFoto() {
       setSavingStage("Menyelesaikan rekaman…");
       // The last clip is still recording (it runs through the shot + a short tail) — let every clip finish first.
       await Promise.all(pendingClipsRef.current);
-      const sessionVideoBlob = await stopSessionRecording();
-      const sessionGifFrames = sessionGifFramesRef.current;
-      sessionGifFramesRef.current = null;
+      const rawSession = await stopSessionRecording();
+      let sessionVideoBlob: Blob | null = null;
       let sessionGifBlob: Blob | null = null;
-      if (selectedPackage.hasGif && sessionGifFrames && sessionGifFrames.length > 1) {
-        setSavingStage("Membuat GIF…");
+      if (rawSession && rawSession.size > 0) {
+        setSavingStage("Menyusun video ke dalam frame…");
         await yieldToUi();
-        sessionGifBlob = await encodeGifAsync(sessionGifFrames, GIF_TIMELAPSE_DELAY_MS).catch((error) => { console.error("Gagal membuat GIF sesi", error); return null; });
+        try {
+          const composed = await composeSimultaneous(rawSession, Boolean(selectedPackage.hasGif));
+          if (selectedPackage.hasVideo && composed.video && composed.video.size > 0) sessionVideoBlob = composed.video;
+          if (selectedPackage.hasGif && composed.gifFrames.length > 1) {
+            setSavingStage("Membuat GIF…");
+            await yieldToUi();
+            sessionGifBlob = await encodeGifAsync(composed.gifFrames, GIF_TIMELAPSE_DELAY_MS).catch((error) => { console.error("Gagal membuat GIF sesi", error); return null; });
+          }
+        } catch (error) {
+          console.error("Gagal menyusun video sesi", error);
+        }
       }
       await yieldToUi();
       setSavingStage("Menyiapkan frame…");

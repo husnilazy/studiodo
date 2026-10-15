@@ -37,17 +37,23 @@ export default function Idle() {
 
   const layout = resolveIdleLayout(config);
   const alignLeft = layout === "left";
-  const logoScale = { transform: `scale(${Math.max(0.6, Math.min(1.8, config.logoScale / 100))})` };
-  const origin = alignLeft || layout === "fullbleed" ? "origin-left" : "";
+  // Everything on this screen is sized from the screen itself (vh / vw / vmin), never from rem: rem follows the kiosk's
+  // scaled root font size, which made the logo, title and button oversized and spilling past the edges on a Full HD display.
+  const logoFactor = Math.max(0.6, Math.min(1.8, config.logoScale / 100));
+  const logoStyle = { height: `clamp(40px, ${(13 * logoFactor).toFixed(1)}vh, ${Math.round(150 * logoFactor)}px)`, width: "auto", maxWidth: layout === "split" ? "42vw" : alignLeft ? "55vw" : "80vw", maxHeight: "30vh" };
+  const titleSize = { fontSize: "clamp(40px, min(11vh, 9vw), 136px)" };
+  const subtitleSize = { fontSize: "clamp(16px, min(2.8vh, 3.2vw), 30px)" };
+  const ctaSize = { fontSize: "clamp(16px, min(2.8vh, 3.6vw), 28px)", minHeight: "clamp(52px, 8vh, 88px)", padding: "0 clamp(24px, 4vh, 56px)" };
+  const gap = { marginTop: "clamp(12px, 3vh, 36px)" };
 
   // The pieces are the same in every layout; only how they are composed differs (see lib/kioskStyles.ts).
   const logo = config.idleLogoVideoUrl ? (
     <Positionable id="logo" type="image" label="Logo">
-      <video src={config.idleLogoVideoUrl} autoPlay muted loop playsInline className={`mb-6 h-28 max-w-[80vw] object-contain ${origin}`} style={logoScale} />
+      <video src={config.idleLogoVideoUrl} autoPlay muted loop playsInline className="object-contain" style={{ ...logoStyle, marginBottom: "clamp(10px, 2.5vh, 28px)" }} />
     </Positionable>
   ) : config.logoUrl ? (
     <Positionable id="logo" type="image" label="Logo">
-      <img src={config.logoUrl} alt={config.brandName} className={`mb-6 h-20 max-w-[70vw] object-contain ${origin}`} style={logoScale} />
+      <img src={config.logoUrl} alt={config.brandName} className="object-contain" style={{ ...logoStyle, marginBottom: "clamp(10px, 2.5vh, 28px)" }} />
     </Positionable>
   ) : null;
 
@@ -56,7 +62,8 @@ export default function Idle() {
   const heading = showHeading ? (
     <Positionable id="heading" type="text" label="Judul Brand">
       <motion.h1
-        className={`kinetic-title font-display font-semibold ${layout === "center" || layout === "split" ? "text-6xl md:text-8xl" : "text-6xl md:text-[6.5rem]"}`}
+        className="kinetic-title max-w-full font-display font-semibold"
+        style={titleSize}
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7 }}
@@ -69,7 +76,8 @@ export default function Idle() {
   const subheading = showSubheading ? (
     <Positionable id="subheading" type="text" label="Tagline">
       <motion.p
-        className={`mt-5 max-w-xl text-lg md:text-2xl ${layout === "fullbleed" ? "text-white/80" : "text-muted"} ${alignLeft || layout === "fullbleed" ? "" : "mx-auto"}`}
+        className={`max-w-[min(36rem,80vw)] ${layout === "fullbleed" ? "text-white/80" : "text-muted"} ${alignLeft || layout === "fullbleed" ? "" : "mx-auto"}`}
+        style={{ ...subtitleSize, marginTop: "clamp(8px, 1.8vh, 20px)" }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.25, duration: 0.6 }}
@@ -81,12 +89,12 @@ export default function Idle() {
 
   const cta = (wide: boolean) => (
     <Positionable id="cta" type="system-button" label="Teks Ajakan">
-      <motion.div className={`relative ${wide ? "w-full" : "mt-12"}`} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+      <motion.div className={`relative ${wide ? "w-full" : ""}`} style={wide ? undefined : gap} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
         {config.animationsEnabled && layout === "center" && <span className="absolute inset-0 animate-ping-soft rounded-full bg-accent/40" />}
-        <div className={`k-btn k-btn-accent k-btn-lg relative gap-3 text-xl md:text-2xl ${wide ? "w-full" : ""}`}>
-          <Icon name="camera" className="h-7 w-7" />
+        <div className={`k-btn k-btn-accent k-btn-lg relative gap-3 ${wide ? "w-full" : ""}`} style={ctaSize}>
+          <Icon name="camera" className="h-[1.3em] w-[1.3em]" />
           {config.idleStartText || "Sentuh layar untuk mulai"}
-          {(alignLeft || wide) && <Icon name="arrow-right" className="h-6 w-6" />}
+          {(alignLeft || wide) && <Icon name="arrow-right" className="h-[1.2em] w-[1.2em]" />}
         </div>
       </motion.div>
     </Positionable>
@@ -99,8 +107,8 @@ export default function Idle() {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 40 }}
-          className={`glass-panel absolute z-10 flex max-w-[90vw] items-center gap-3 rounded-full px-7 py-3.5 text-center text-sm font-semibold md:text-base ${
-            layout === "fullbleed" ? "left-1/2 top-8 -translate-x-1/2 text-white" : alignLeft ? "bottom-8 left-[8vw]" : "bottom-8"
+          className={`glass-panel absolute z-10 flex max-w-[90vw] items-center gap-3 rounded-full px-[3vh] py-[1.4vh] text-center text-[clamp(12px,1.9vh,18px)] font-semibold ${
+            layout === "fullbleed" ? "left-1/2 top-[3vh] -translate-x-1/2 text-white" : alignLeft ? "bottom-[4vh] left-[8vw]" : "bottom-[4vh]"
           }`}
         >
           <Icon name="sparkles" className="h-5 w-5 shrink-0 text-accent" />
@@ -147,7 +155,7 @@ export default function Idle() {
           )}
           {!cover && <div className="pointer-events-none absolute -right-[12vw] top-1/2 aspect-square w-[46vw] -translate-y-1/2 rounded-full border border-fg/10" />}
           {!cover && <div className="pointer-events-none absolute -right-[4vw] top-1/2 aspect-square w-[30vw] -translate-y-1/2 rounded-full bg-accent/10" />}
-          <div className="relative z-10 flex max-w-[44rem] flex-col items-start text-left">
+          <div className="relative z-10 flex max-w-[min(44rem,70vw)] flex-col items-start text-left">
             {logo}
             {heading}
             {subheading}
@@ -167,11 +175,11 @@ export default function Idle() {
         <div {...a11y} className={`${rootClass} flex-col justify-end`}>
           {cover ?? <div className="absolute inset-0 bg-[radial-gradient(60rem_40rem_at_70%_10%,color-mix(in_srgb,var(--accent)_55%,transparent),transparent_70%),linear-gradient(180deg,var(--kiosk-background),color-mix(in_srgb,var(--accent)_18%,var(--kiosk-background)))]" />}
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/35" />
-          <div className="relative z-10 flex flex-col items-start gap-1 px-[6vw] pb-[7vh] text-left text-white">
+          <div className="relative z-10 flex max-w-full flex-col items-start px-[6vw] pb-[6vh] text-left text-white">
             {logo}
             {heading}
             {subheading}
-            <div className="mt-8 w-full max-w-3xl">{cta(true)}</div>
+            <div className="w-full max-w-[min(48rem,88vw)]" style={gap}>{cta(true)}</div>
           </div>
           {promo}
           {banner}

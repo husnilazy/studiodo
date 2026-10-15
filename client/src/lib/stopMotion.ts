@@ -11,7 +11,7 @@ import type { LocalTemplate } from "./templateStore";
 export const STOP_MOTION_CATEGORY = "__stopmotion";
 
 const MAX_WIDTH = 1080; // HD: a 4:5 / 2:3 frame comes out at up to 1080x1920
-const INTRO_MS = 600; // empty frame first, so the first photo "arrives" instead of already being there
+const INTRO_MS = 0; // no blank lead-in: the first frame is already the first photo (it is also the thumbnail admin lists show)
 const OUTRO_EXTRA_MS = 900; // the last photo stays a little longer before the loop restarts
 const VIDEO_BITRATE = 12_000_000;
 
