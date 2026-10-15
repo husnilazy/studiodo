@@ -1,16 +1,17 @@
 import { Router } from "express";
 import { IDEA_BACKLOG } from "../lib/contentStudio/decks.js";
 import { buildIconPreviewDoc } from "../lib/contentStudio/appicon.js";
+import { buildTeaserDoc, sanitizeTeaser } from "../lib/contentStudio/teaser.js";
 import { buildTriptychDoc, DEFAULT_TRIPTYCH, sanitizeTriptych } from "../lib/contentStudio/triptych.js";
-import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTriptychRender } from "../lib/contentStudio/render.js";
+import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTeaserRender, startTriptychRender } from "../lib/contentStudio/render.js";
 import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
 // Superadmin → Konten Instagram: mounted under /api/superadmin/content-studio (auth applied by the parent router).
 export const contentStudioAdminRouter = Router();
 
-const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge"];
-const TONES = ["light", "dark", "indigo", "mint"];
+const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge", "hook", "chat", "note"];
+const TONES = ["light", "dark", "indigo", "mint", "peach"];
 
 function parseDeck(input: any): Deck | string {
   if (!input || typeof input !== "object") return "Deck tidak valid";
@@ -116,5 +117,12 @@ contentStudioAdminRouter.post("/triptych/render", async (req, res) => {
 contentStudioAdminRouter.get("/icon/preview", (_req, res) => res.json({ html: buildIconPreviewDoc() }));
 contentStudioAdminRouter.post("/icon/render", async (_req, res) => {
   try { res.json(await startIconRender()); }
+  catch (e) { res.status(409).json({ error: e instanceof Error ? e.message : "Gagal memulai render" }); }
+});
+
+// ---- Teaser Reel: one continuous 1080x1920 motion graphic ----
+contentStudioAdminRouter.post("/teaser/preview", (req, res) => res.json({ html: buildTeaserDoc(sanitizeTeaser(req.body?.options), true) }));
+contentStudioAdminRouter.post("/teaser/render", async (req, res) => {
+  try { res.json(await startTeaserRender(req.body?.options)); }
   catch (e) { res.status(409).json({ error: e instanceof Error ? e.message : "Gagal memulai render" }); }
 });

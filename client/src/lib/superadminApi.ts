@@ -560,16 +560,16 @@ export const superadminApi = {
 
 // ---- Konten Instagram (Content Studio) ----
 export type CsMockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
-export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge";
-export type CsTone = "light" | "dark" | "indigo" | "mint";
+export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
+export type CsTone = "light" | "dark" | "indigo" | "mint" | "peach";
 export type CsSlide = {
   kind: CsSlideKind; tone?: CsTone; eyebrow?: string; title: string; body?: string; mockup?: CsMockup; note?: string;
   items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
-  images?: string[]; bgImage?: string; icon?: string; seconds?: number;
+  images?: string[]; bgImage?: string; icon?: string; emoji?: string; chat?: { from: "them" | "us"; text: string }[]; seconds?: number;
 };
 export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
-export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
+export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
 export type CsPlanStatus = "ide" | "draf" | "siap" | "terjadwal" | "terposting";
 export type CsPlanItem = { id: string; title: string; phase: string; pillar: string; format: "carousel" | "reel" | "story"; deckId?: string; date?: string; time?: string; status: CsPlanStatus; checks: string[]; notes?: string };
@@ -577,7 +577,11 @@ export type CsPlan = { startDate: string; days: number[]; time: string; items: C
 
 export type CsTriptych = { seam: "panorama" | "grid"; logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; comingSub: string; headline: string; features: string; cta: string };
 
+export type CsTeaser = { logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; beats: string; headline: string; features: string; cta: string };
+
 export const contentStudioApi = {
+  teaserPreview: (options: CsTeaser) => request<{ html: string }>("/content-studio/teaser/preview", { method: "POST", body: JSON.stringify({ options }) }),
+  teaserRender: (options: CsTeaser) => request<CsJob>("/content-studio/teaser/render", { method: "POST", body: JSON.stringify({ options }) }),
   iconPreview: () => request<{ html: string }>("/content-studio/icon/preview"),
   iconRender: () => request<CsJob>("/content-studio/icon/render", { method: "POST" }),
   triptychDefaults: () => request<CsTriptych>("/content-studio/triptych/defaults"),

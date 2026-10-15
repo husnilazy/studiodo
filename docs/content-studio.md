@@ -114,3 +114,26 @@ Tab keempat: **logo silver metalik** (wordmark tanpa kotak + "Photobooth Apps", 
 
 - Semua mockup (dashboard, kiosk QRIS, galeri, dst.) muncul dengan gerak seperti kertas keluar dari slot printer: meluncur bertahap (gaya printer termal) dari slot di atas area mockup, lalu isinya terisi. Berlaku untuk carousel, Reel, dan video.
 - Foto placeholder di mockup memakai ilustrasi orang datar yang sama dengan landing page (`portraits.ts`), bukan siluet abu-abu. Foto asli yang diunggah tetap menggantikannya.
+
+## Teaser Reel (motion graphic penuh, 1080×1920)
+
+Tab "Teaser Reel (penuh)": satu motion graphic utuh ±19 detik untuk Reels, dari awal sampai akhir, dengan empat adegan yang menyambung dan sapuan cahaya sebagai transisi:
+
+1. **Logo** (0–3,9 dtk): kilatan kamera, cincin riak, wordmark silver menyapu masuk dengan slogan "Photobooth Apps".
+2. **COMING SOON** (3,4–7,7 dtk): huruf besar masuk dengan blur, dikelilingi kartu produk yang melayang (notifikasi pembayaran, QR, statistik, strip foto bergerak, printer).
+3. **Alur produk, 4 langkah** (7,3–14 dtk): *Bayar QRIS* → *Foto & cetak* (printer mencetak strip) → *Hasil di HP* (galeri + QR) → *Pantau dashboard* (angka berhitung). Penunjuk langkah 01/04 dan titik progres di bawah.
+4. **All-in-One** (13,6–19,2 dtk): judul, daftar fitur, tombol ajakan, dan logo penutup.
+
+Teks tiap adegan bisa diubah di panel (judul coming soon, empat langkah, judul penutup, fitur, tombol, gaya logo). Render menghasilkan `teaser-studiodo-1080x1920.mp4` (H.264 HD, 30 fps, tanpa audio) dan `teaser-cover-1080x1920.png`. Kode: `server/lib/contentStudio/teaser.ts`; kartu kolase dipakai ulang dari `triptych.ts`.
+
+## Konten casual untuk pemula
+
+Tiga jenis slide tambahan untuk konten santai (tone `peach` = hangat):
+
+- `hook` — judul dengan stabilo (`**kata**` jadi bagian ber-highlight), `eyebrow` jadi sticker miring, `emoji` besar.
+- `chat` — obrolan ala DM: `chat: [{ "from": "them" | "us", "text": "..." }]`. Di editor: satu pesan per baris, awali `Q:` (penanya) atau `A:` (STUDIODO).
+- `note` — catatan tempel warna-warni dari `items`.
+
+Delapan deck pemula siap pakai ada di `decks_batch5.ts` (id `carousel-bingung-pilih-aplikasi`, `carousel-aplikasi-ngapain-sih`, dst). Rencana yang sudah tersimpan tidak otomatis menambah item baru; pakai "+ Tambah" di tab Rencana.
+
+Tata letak tab Studio desain: tombol "+ Carousel / + Reel / Impor deck (JSON)" ada di atas, daftar deck scroll di kotaknya sendiri, dan kolom preview/editor bergulir terpisah.

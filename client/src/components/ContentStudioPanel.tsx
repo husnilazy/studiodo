@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContentPlanPanel } from "@/components/ContentPlanPanel";
 import { IconPanel } from "@/components/IconPanel";
+import { TeaserPanel } from "@/components/TeaserPanel";
 import { TriptychPanel } from "@/components/TriptychPanel";
 import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, type CsSlide, type CsSlideKind, type CsTone } from "@/lib/superadminApi";
 
@@ -8,10 +9,10 @@ import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, 
 // preview uses: PNG per carousel slide, MP4 (30 fps, 1080×1920) for reels. See server/lib/contentStudio.
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
-const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"], ["badge", "Cover Sorotan (ikon)"]];
+const KINDS: [CsSlideKind, string][] = [["cover", "Cover"], ["feature", "Fitur + mockup"], ["steps", "Langkah-langkah"], ["stat", "Angka besar"], ["compare", "Sebelum vs sesudah"], ["cta", "Ajakan (CTA)"], ["badge", "Cover Sorotan (ikon)"], ["hook", "Hook santai (stabilo + emoji)"], ["chat", "Obrolan (chat)"], ["note", "Catatan tempel"]];
 const ICON_OPTIONS: [string, string][] = [["app", "Ikon logo STUDIODO"], ["user", "Orang (Kenalan)"], ["grid", "Kisi (Fitur)"], ["play", "Mulai"], ["help", "Tanya (FAQ)"], ["bell", "Lonceng (Update)"], ["ticket", "Tiket (Event/Promo)"], ["qr", "QR (Bayar)"], ["image", "Foto (Hasil)"], ["camera", "Kamera"], ["chart", "Grafik"], ["card", "Kartu"], ["spark", "Kilau"], ["check", "Centang"]];
 const MOCKUPS: [CsMockup, string][] = [["none", "Tanpa mockup"], ["dashboard", "Dashboard"], ["qris", "Kiosk QRIS"], ["gallery", "Galeri HP"], ["booth", "Kiosk sesi foto"], ["strip", "Strip foto"], ["queue", "Antrian"], ["hub", "Hub dashboard (diagram)"], ["qris-l", "Kiosk QRIS · landscape"], ["booth-l", "Kiosk sesi foto · landscape"], ["gallery-l", "Galeri di monitor · landscape"], ["print-l", "Hasil cetak 4R · landscape"]];
-const TONES: [CsTone, string][] = [["light", "Terang"], ["dark", "Gelap"], ["indigo", "Indigo"], ["mint", "Mint"]];
+const TONES: [CsTone, string][] = [["light", "Terang"], ["dark", "Gelap"], ["indigo", "Indigo"], ["mint", "Mint"], ["peach", "Hangat (peach)"]];
 const SIZES = { carousel: { w: 1080, h: 1350 }, reel: { w: 1080, h: 1920 }, highlight: { w: 1080, h: 1920 } } as const;
 const PREVIEW_W = 400;
 
@@ -28,7 +29,7 @@ export function ContentStudioPanel() {
   const [decks, setDecks] = useState<CsDeck[] | null>(null);
   const [ideas, setIdeas] = useState<CsIdea[]>([]);
   const [env, setEnv] = useState<{ chrome: string | null; ffmpeg: boolean } | null>(null);
-  const [view, setView] = useState<"studio" | "plan" | "trio" | "icon">("studio");
+  const [view, setView] = useState<"studio" | "plan" | "trio" | "teaser" | "icon">("studio");
   const [tab, setTab] = useState<"decks" | "ideas">("decks");
   const [hideBuilt, setHideBuilt] = useState(false);
   const [draft, setDraft] = useState<CsDeck | null>(null);
@@ -149,7 +150,7 @@ export function ContentStudioPanel() {
   return (
     <div className="grid gap-4">
       <div className="flex w-fit gap-1 rounded-full bg-fg/10 p-1 text-xs font-bold">
-        {([["studio", "Studio desain"], ["plan", "Rencana & jadwal"], ["trio", "Pembuka Feed (3 tile)"], ["icon", "Ikon logo"]] as const).map(([v, l]) => (
+        {([["studio", "Studio desain"], ["plan", "Rencana & jadwal"], ["trio", "Pembuka Feed (3 tile)"], ["teaser", "Teaser Reel (penuh)"], ["icon", "Logo"]] as const).map(([v, l]) => (
           <button key={v} onClick={() => setView(v)} className={`rounded-full px-5 py-2 ${view === v ? "bg-fg text-canvas" : "text-fg/60"}`}>{l}</button>
         ))}
       </div>
@@ -157,6 +158,7 @@ export function ContentStudioPanel() {
         <ContentPlanPanel decks={decks} onOpenDeck={(id) => { const d = decks.find((x) => x.id === id); if (d) { open(d); setView("studio"); } }} />
       )}
       {view === "trio" && <TriptychPanel />}
+      {view === "teaser" && <TeaserPanel />}
       {view === "icon" && <IconPanel />}
       {view === "studio" && <>
       {env && (!env.chrome || !env.ffmpeg) && (
@@ -165,37 +167,42 @@ export function ContentStudioPanel() {
           {!env.ffmpeg && <p>ffmpeg tidak ditemukan; MP4 belum bisa dibuat (PNG tetap bisa).</p>}
         </div>
       )}
-      <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_340px]">
+      <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_340px] xl:items-start">
         {/* ---- left: decks / ideas ---- */}
-        <aside className="rounded-2xl border border-fg/10 bg-fg/5 p-3">
+        <aside className="flex min-h-0 flex-col rounded-2xl border border-fg/10 bg-fg/5 p-3 xl:sticky xl:top-2 xl:max-h-[calc(100dvh-200px)]">
           <div className="mb-3 flex gap-1 rounded-full bg-fg/10 p-1 text-xs font-semibold">
             {(["decks", "ideas"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded-full py-1.5 ${tab === t ? "bg-fg text-canvas" : "text-fg/60"}`}>{t === "decks" ? "Deck" : `Ide (${ideas.length - builtCount} baru)`}</button>
             ))}
           </div>
           {tab === "decks" ? (
-            <div className="grid gap-2">
-              {decks.map((d) => (
-                <button key={d.id} onClick={() => open(d)} className={`rounded-xl border p-3 text-left text-sm transition ${draft?.id === d.id ? "border-accent bg-accent/10" : "border-fg/10 hover:border-fg/30"}`}>
-                  <span className="block font-semibold leading-snug">{d.title}</span>
-                  <span className="mt-1 block text-[11px] text-fg/50">{d.format === "reel" ? "Reel · MP4" : "Carousel · PNG"} · {d.slides.length} slide{d.updatedAt ? " · diedit" : ""}</span>
-                </button>
-              ))}
-              {draft && !decks.some((d) => d.id === draft.id) && <div className="rounded-xl border border-dashed border-accent p-3 text-sm font-semibold">{draft.title} <span className="text-[11px] font-normal text-fg/50">(belum disimpan)</span></div>}
-              <div className="mt-1 grid grid-cols-2 gap-2">
-                <button onClick={() => addDeck("carousel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Carousel</button>
-                <button onClick={() => addDeck("reel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Reel</button>
-              </div>
-              <button onClick={() => setImportOpen((v) => !v)} className="rounded-full border border-dashed border-fg/30 py-2 text-xs font-semibold hover:bg-fg/10">{importOpen ? "Tutup impor" : "Impor deck (JSON)"}</button>
-              {importOpen && (
-                <div className="grid gap-2">
-                  <textarea rows={8} className={inputClass} placeholder="Tempel JSON deck di sini…" value={importText} onChange={(e) => setImportText(e.target.value)} />
-                  <button disabled={!importText.trim()} onClick={importDeck} className="rounded-full bg-fg py-2 text-xs font-bold text-canvas disabled:opacity-40">Muat deck</button>
+            <>
+              {/* actions stay on top, the long deck list scrolls underneath */}
+              <div className="mb-3 grid gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => addDeck("carousel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Carousel</button>
+                  <button onClick={() => addDeck("reel")} className="rounded-full border border-fg/20 py-2 text-xs font-semibold hover:bg-fg/10">+ Reel</button>
                 </div>
-              )}
-            </div>
+                <button onClick={() => setImportOpen((v) => !v)} className="rounded-full border border-dashed border-fg/30 py-2 text-xs font-semibold hover:bg-fg/10">{importOpen ? "Tutup impor" : "Impor deck (JSON)"}</button>
+                {importOpen && (
+                  <div className="grid gap-2">
+                    <textarea rows={6} className={inputClass} placeholder="Tempel JSON deck di sini…" value={importText} onChange={(e) => setImportText(e.target.value)} />
+                    <button disabled={!importText.trim()} onClick={importDeck} className="rounded-full bg-fg py-2 text-xs font-bold text-canvas disabled:opacity-40">Muat deck</button>
+                  </div>
+                )}
+              </div>
+              <div className="grid max-h-[55vh] min-h-0 flex-1 content-start gap-2 overflow-auto pr-1 xl:max-h-none">
+                {draft && !decks.some((d) => d.id === draft.id) && <div className="rounded-xl border border-dashed border-accent p-3 text-sm font-semibold">{draft.title} <span className="text-[11px] font-normal text-fg/50">(belum disimpan)</span></div>}
+                {decks.map((d) => (
+                  <button key={d.id} onClick={() => open(d)} className={`rounded-xl border p-3 text-left text-sm transition ${draft?.id === d.id ? "border-accent bg-accent/10" : "border-fg/10 hover:border-fg/30"}`}>
+                    <span className="block font-semibold leading-snug">{d.title}</span>
+                    <span className="mt-1 block text-[11px] text-fg/50">{d.format === "reel" ? "Reel · MP4" : d.format === "highlight" ? "Sorotan · PNG" : "Carousel · PNG"} · {d.slides.length} slide{d.updatedAt ? " · diedit" : ""}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           ) : (
-            <div className="grid max-h-[70vh] gap-3 overflow-auto pr-1">
+            <div className="grid max-h-[55vh] min-h-0 flex-1 content-start gap-3 overflow-auto pr-1 xl:max-h-none">
               {grouped.map(([pillar, list]) => (
                 <div key={pillar}>
                   <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-fg/40">{pillar}</p>
@@ -216,7 +223,7 @@ export function ContentStudioPanel() {
         </aside>
 
         {/* ---- center: preview ---- */}
-        <section className="min-w-0 rounded-2xl border border-fg/10 bg-fg/5 p-4">
+        <section className="min-w-0 rounded-2xl border border-fg/10 bg-fg/5 p-4 xl:sticky xl:top-2 xl:max-h-[calc(100dvh-200px)] xl:overflow-auto">
           {!draft || !slide ? <p className="text-sm text-fg/50">Pilih atau buat deck.</p> : (
             <div className="grid justify-items-center gap-3">
               <div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -264,7 +271,7 @@ export function ContentStudioPanel() {
         </section>
 
         {/* ---- right: editor ---- */}
-        <aside className="grid content-start gap-4">
+        <aside className="grid content-start gap-4 xl:max-h-[calc(100dvh-200px)] xl:overflow-auto xl:pr-1">
           {draft && slide && (
             <>
               <div className="grid gap-3 rounded-2xl border border-fg/10 bg-fg/5 p-4">
@@ -297,11 +304,13 @@ export function ContentStudioPanel() {
                 </div>
                 {slide.kind !== "badge" && <Field label="Label kecil (eyebrow)"><input className={inputClass} value={slide.eyebrow ?? ""} onChange={(e) => editSlide((s) => { s.eyebrow = e.target.value; })} /></Field>}
                 <Field label={slide.kind === "badge" ? "Nama sorotan (untuk nama file)" : "Judul  ( | = baris baru, *kata* = warna aksen )"}><textarea rows={2} className={inputClass} value={slide.title} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} /></Field>
-                {!["compare", "badge"].includes(slide.kind) && <Field label="Teks pendukung"><textarea rows={2} className={inputClass} value={slide.body ?? ""} onChange={(e) => editSlide((s) => { s.body = e.target.value; })} /></Field>}
+                {!["compare", "badge", "chat"].includes(slide.kind) && <Field label="Teks pendukung"><textarea rows={2} className={inputClass} value={slide.body ?? ""} onChange={(e) => editSlide((s) => { s.body = e.target.value; })} /></Field>}
                 {slide.kind === "badge" && <Field label="Ikon"><select className={inputClass} value={slide.icon ?? "spark"} onChange={(e) => editSlide((s) => { s.icon = e.target.value; })}>{ICON_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
-                {["cover", "feature", "steps", "cta"].includes(slide.kind) && <Field label="Mockup"><select className={inputClass} value={slide.mockup ?? "none"} onChange={(e) => editSlide((s) => { s.mockup = e.target.value as CsMockup; })}>{MOCKUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
-                {["feature", "stat", "compare"].includes(slide.kind) && <Field label="Catatan di bawah (pill)"><input className={inputClass} value={slide.note ?? ""} onChange={(e) => editSlide((s) => { s.note = e.target.value; })} /></Field>}
-                {(slide.kind === "steps" || slide.kind === "compare") && <Field label={slide.kind === "steps" ? "Langkah (satu per baris)" : "Kolom kanan (satu per baris)"}><textarea rows={4} className={inputClass} value={(slide.items ?? []).join("\n")} onChange={(e) => editSlide((s) => { s.items = lines(e.target.value); })} /></Field>}
+                {["cover", "feature", "steps", "cta", "hook", "note"].includes(slide.kind) && <Field label="Mockup"><select className={inputClass} value={slide.mockup ?? "none"} onChange={(e) => editSlide((s) => { s.mockup = e.target.value as CsMockup; })}>{MOCKUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
+                {["feature", "stat", "compare", "hook", "chat", "note"].includes(slide.kind) && <Field label="Catatan di bawah (pill)"><input className={inputClass} value={slide.note ?? ""} onChange={(e) => editSlide((s) => { s.note = e.target.value; })} /></Field>}
+                {slide.kind === "hook" && <Field label="Emoji sticker (satu emoji)"><input className={inputClass} value={slide.emoji ?? ""} onChange={(e) => editSlide((s) => { s.emoji = e.target.value; })} /></Field>}
+                {slide.kind === "chat" && <Field label="Obrolan (satu pesan per baris: Q: penanya, A: STUDIODO)"><textarea rows={7} className={inputClass} value={(slide.chat ?? []).map((m) => `${m.from === "us" ? "A" : "Q"}: ${m.text}`).join("\n")} onChange={(e) => editSlide((s) => { s.chat = lines(e.target.value).map((l) => (/^a\s*:/i.test(l) ? { from: "us" as const, text: l.replace(/^a\s*:\s*/i, "") } : { from: "them" as const, text: l.replace(/^q\s*:\s*/i, "") })); })} /></Field>}
+                {(slide.kind === "steps" || slide.kind === "compare" || slide.kind === "note") && <Field label={slide.kind === "steps" ? "Langkah (satu per baris)" : slide.kind === "note" ? "Catatan tempel (satu per baris)" : "Kolom kanan (satu per baris)"}><textarea rows={4} className={inputClass} value={(slide.items ?? []).join("\n")} onChange={(e) => editSlide((s) => { s.items = lines(e.target.value); })} /></Field>}
                 {slide.kind === "compare" && (
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Judul kolom kiri"><input className={inputClass} placeholder="Tanpa sistem" value={slide.labelBefore ?? ""} onChange={(e) => editSlide((s) => { s.labelBefore = e.target.value; })} /></Field>

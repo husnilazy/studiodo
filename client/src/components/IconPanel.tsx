@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFitWidth } from "@/lib/useFitWidth";
 import { contentStudioApi, type CsJob } from "@/lib/superadminApi";
 
 // Superadmin → Konten Instagram → Ikon logo: the STUDIODO app icon (glass squircle) in dark and white, as transparent PNGs and profile pictures.
@@ -10,7 +11,8 @@ export function IconPanel() {
   const [env, setEnv] = useState<{ chrome: string | null; ffmpeg: boolean } | null>(null);
   const [job, setJob] = useState<CsJob | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const W = 880, scale = W / 1040;
+  const [boxRef, W] = useFitWidth<HTMLDivElement>(880);
+  const scale = W / 1040;
 
   useEffect(() => {
     contentStudioApi.status().then((e) => setEnv(e ?? null)).catch(() => undefined);
@@ -40,8 +42,10 @@ export function IconPanel() {
     <section className="max-w-[920px] rounded-2xl border border-fg/10 bg-fg/5 p-4">
       <p className="text-sm font-bold">Ikon logo STUDIODO</p>
       <p className="mb-3 text-xs text-fg/50">Logo silver metalik tanpa kotak (dipakai di tile pertama Pembuka Feed dan cover Sorotan "Kenalan"), plus ikon kaca versi gelap dan putih untuk keperluan ikon aplikasi.</p>
-      <div className="overflow-hidden rounded-2xl border border-fg/15 shadow-xl" style={{ width: W, maxWidth: "100%", height: 520 * scale }}>
+      <div ref={boxRef} className="w-full" style={{ maxWidth: 880 }}>
+      <div className="overflow-hidden rounded-2xl border border-fg/15 shadow-xl" style={{ width: W, height: 520 * scale }}>
         {html && <iframe title="Ikon logo" srcDoc={html} sandbox="allow-scripts" style={{ width: 1040, height: 520, border: 0, transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />}
+      </div>
       </div>
       <div className="mt-4 w-full max-w-[640px] rounded-xl border border-fg/10 bg-canvas p-3">
         <div className="flex flex-wrap items-center gap-2">

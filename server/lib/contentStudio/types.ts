@@ -1,8 +1,8 @@
 // Content Studio: Instagram decks (carousel / reel) rendered from HTML templates in STUDIODO's own visual language.
 
 export type Mockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
-export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge";
-export type Tone = "light" | "dark" | "indigo" | "mint";
+export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
+export type Tone = "light" | "dark" | "indigo" | "mint" | "peach";
 
 export type Slide = {
   kind: SlideKind;
@@ -19,6 +19,8 @@ export type Slide = {
   stat?: { value: number; suffix?: string; prefix?: string; label: string };
   bgImage?: string; // full-bleed photo behind the slide (asset:<file>)
   images?: string[]; // uploaded asset names (asset:<file>) used by gallery/strip mockups
+  emoji?: string; // hook slides: big tilted sticker emoji
+  chat?: { from: "them" | "us"; text: string }[]; // chat slides: a DM-style conversation
   icon?: string; // badge slides: icon name (see ICONS in templates.ts)
   seconds?: number; // reel scene length
 };

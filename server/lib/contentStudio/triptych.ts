@@ -64,14 +64,14 @@ export function sanitizeTriptych(input: any): TriptychOptions {
 const COLORS_SOON = ["#d9dcff", "#e6c4ff", "#ffbfdc", "#ffd3b0"];
 
 /** radial glow with eased stops that ends exactly at the circle edge (closest-side): no visible rim, no banding. */
-function soft(rgb: string): string {
+export function soft(rgb: string): string {
   const stops: [number, number][] = [[0, 1], [10, 0.88], [22, 0.68], [36, 0.45], [50, 0.26], [64, 0.12], [78, 0.04], [100, 0]];
   return `radial-gradient(circle closest-side,${stops.map(([p, a]) => `rgba(${rgb},${a}) ${p}%`).join(",")})`;
 }
 
-const GRAIN = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`;
+export const GRAIN = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`;
 
-const css = (canvasW: number) => `
+export const triptychCss = (canvasW: number) => `
 html,body{margin:0;background:#000;overflow:hidden}
 .cv{position:absolute;left:0;top:0;width:${canvasW}px;height:${TILE_H}px;overflow:hidden;font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:#fff;--cw:${canvasW}px;background:#0a0b24}
 .cv *{box-sizing:border-box}
@@ -152,27 +152,41 @@ const arrow = `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" strok
 const fit = (ls: string[], width: number, max: number, min: number, k: number) => Math.round(Math.max(min, Math.min(max, width / (Math.max(...ls.map((l) => l.length), 1) * k))));
 
 // ------------------------------------------------------------------ mockup pieces
-const printer = (look: number) => {
+export const printer = (look: number) => {
   const ph = [0, 1, 2].map((k) => `<div class="tp-pr-ph">${portraitSvg(look + k)}</div>`).join("");
   return `<div class="tp-pr"><div class="tp-pr-box"><div class="tp-pr-strip">${ph}<div class="tp-pr-lab">STUDIODO</div></div></div><div class="tp-pr-body"></div><div class="tp-pr-slot"></div><div class="tp-pr-led"></div><div class="tp-pr-name">STUDIODO</div></div>`;
 };
-const toast = (title: string, sub: string) =>
+export const toast = (title: string, sub: string) =>
   `<div class="tp-toast"><span class="ck">${icon("check", 30, 3.4, "#0f766e")}</span><div><b>${esc(title)}</b><i>${esc(sub)}</i></div></div>`;
-const stat = (label: string, to: number, delta: string) =>
+export const stat = (label: string, to: number, delta: string) =>
   `<div class="tp-stat"><small>${esc(label)}</small><strong><span class="count" style="--to:${to}"></span></strong><em>${esc(delta)}</em></div>`;
-const qrCard = () => `<div class="tp-qrc"><div class="qr">${qrCells()}</div><div class="l">Scan QRIS</div></div>`;
-const scroller = () => {
+export const qrCard = () => `<div class="tp-qrc"><div class="qr">${qrCells()}</div><div class="l">Scan QRIS</div></div>`;
+export const scroller = () => {
   const frames = Array.from({ length: 12 }, (_, i) => `<div class="tp-sf"><div>${portraitSvg(i)}</div></div>`).join(""); // 4 looks x3 -> -480px = one period
   return `<div class="tp-scroll"><div class="tp-scroll-track">${frames}</div></div>`;
 };
 
-type Card = {
+export type Card = {
+  innerAt?: number; // when the card's own inner animations start (default: just after its entrance)
   html: string; w: number; h: number; // natural size
   tile: number; x: number; y: number; // top-left of the scaled box, relative to the tile
   sc: number; rot: number; enter: "rise" | "pop" | "drop" | "swing" | "fade"; at: number;
   bob?: [number, number, number]; // amplitude px, period s, phase s
   z?: number; op?: number;
 };
+
+/** One collage card: position -> entrance -> bob -> scale, each layer owning exactly one transform. `pitch` 0 = absolute x. */
+export function renderCard(c: Card, pitch: number): string {
+  const left = c.tile * pitch + c.x;
+  const [amp, per, ph] = c.bob ?? [8, 7, 0];
+  return `<div class="tp-pos" style="left:${left}px;top:${c.y}px;width:${Math.round(c.w * c.sc)}px;height:${Math.round(c.h * c.sc)}px;transform:rotate(${c.rot}deg);z-index:${c.z ?? 2};${c.op ? `opacity:${c.op}` : ""}">
+      <div class="tp-a" style="animation-name:tpe-${c.enter};animation-delay:${c.at}s;animation-duration:1.15s;animation-timing-function:cubic-bezier(.2,.9,.25,1.1)">
+        <div class="tp-bob" style="--dy:${-amp}px;--bt:${per}s;animation-delay:${ph}s">
+          <div class="t-dark tp-sc" style="width:${c.w}px;height:${c.h}px;transform:scale(${c.sc});--s:${(c.innerAt ?? c.at + 0.2).toFixed(2)}s">${c.html}</div>
+        </div>
+      </div>
+    </div>`;
+}
 
 export function buildTriptychDoc(optsIn: TriptychOptions, live = false): string {
   const o = sanitizeTriptych(optsIn);
@@ -214,17 +228,7 @@ export function buildTriptychDoc(optsIn: TriptychOptions, live = false): string 
     { html: mockGallery(), w: 470, h: 880, tile: 2, x: 440, y: 985, sc: 0.4, rot: 2, enter: "pop", at: 3.7, bob: [6, 8, -2], z: 1 },
   ];
 
-  const cardHtml = cards.map((c) => {
-    const left = c.tile * pitch + c.x;
-    const [amp, per, ph] = c.bob ?? [8, 7, 0];
-    return `<div class="tp-pos" style="left:${left}px;top:${c.y}px;width:${Math.round(c.w * c.sc)}px;height:${Math.round(c.h * c.sc)}px;transform:rotate(${c.rot}deg);z-index:${c.z ?? 2};${c.op ? `opacity:${c.op}` : ""}">
-      <div class="tp-a" style="animation-name:tpe-${c.enter};animation-delay:${c.at}s;animation-duration:1.15s;animation-timing-function:cubic-bezier(.2,.9,.25,1.1)">
-        <div class="tp-bob" style="--dy:${-amp}px;--bt:${per}s;animation-delay:${ph}s">
-          <div class="t-dark tp-sc" style="width:${c.w}px;height:${c.h}px;transform:scale(${c.sc});--s:${(c.at + 0.2).toFixed(2)}s">${c.html}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join("");
+  const cardHtml = cards.map((c) => renderCard(c, pitch)).join("");
 
   const comingLines = coming.map((ln, li) => {
     const chars = [...ln].map((ch, ci) => {
@@ -282,5 +286,5 @@ export function buildTriptychDoc(optsIn: TriptychOptions, live = false): string 
   window.__seek=(ms)=>{document.getAnimations().forEach(a=>{a.pause();a.currentTime=ms;});};
 })();`;
 
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><style>${fontFaces()}${BASE_CSS}${APP_ICON_CSS}${css(canvasW)}</style></head><body>${body}<script>${live ? "window.__live=true;" : ""}${script}</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><style>${fontFaces()}${BASE_CSS}${APP_ICON_CSS}${triptychCss(canvasW)}</style></head><body>${body}<script>${live ? "window.__live=true;" : ""}${script}</script></body></html>`;
 }

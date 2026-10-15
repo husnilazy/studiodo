@@ -45,6 +45,9 @@ html,body{background:#000;overflow:hidden}
 .t-light{--bg:#fafafd;--fg:#0b1020;--muted:#5b6478;--accent:#4f4fe8;--accent2:#9aa6ff;--card:rgba(255,255,255,.72);--cb:rgba(255,255,255,.95);--shadow:0 24px 70px rgba(60,70,140,.16);--ink:#0b1020;--onink:#fff;--c1:#c7ceff;--c2:#ffd3e4;--c3:#b8f0e6;--soft:rgba(11,16,32,.06);--pop:#4f4fe8;--logo:ink}
 .t-dark{--bg:#0a0d18;--fg:#f1f2ff;--muted:#a3abc6;--accent:#8a8aff;--accent2:#5b5bd6;--card:rgba(255,255,255,.07);--cb:rgba(255,255,255,.16);--shadow:0 30px 80px rgba(0,0,0,.55);--ink:#f1f2ff;--onink:#0a0d18;--c1:#4f4fe8;--c2:#7a4fd0;--c3:#d8679e;--soft:rgba(255,255,255,.07);--pop:#9a96ff;--tick:#6a67ff;--logo:white}
 .t-indigo{--bg:#4a46e0;--fg:#fff;--muted:rgba(255,255,255,.78);--accent:#ffffff;--accent2:#c9ccff;--card:rgba(255,255,255,.16);--cb:rgba(255,255,255,.34);--shadow:0 30px 80px rgba(20,18,110,.4);--ink:#fff;--onink:#2c2aa0;--c1:#8a8aff;--c2:#b78bff;--c3:#ffc2dc;--soft:rgba(255,255,255,.14);--pop:#ffd3e4;--tick:#4a46e0;--logo:white}
+.t-peach{--bg:#fff7ef;--fg:#1d1733;--muted:#6a5f76;--accent:#4f4fe8;--accent2:#9aa6ff;--card:rgba(255,255,255,.82);--cb:#ffffff;--shadow:0 22px 56px rgba(120,80,60,.16);--ink:#1d1733;--onink:#fff;--c1:#ffd9bf;--c2:#ffc9de;--c3:#d8dcff;--soft:rgba(29,23,51,.06);--pop:#ff6f91;--logo:ink}
+.t-peach.slide{background:linear-gradient(160deg,#fff9f2 0%,#ffeede 100%)}
+.t-dark,.t-indigo{--hl:rgba(255,255,255,.22)}.t-light,.t-peach{--hl:#ffc8de}.t-mint{--hl:#ffe3b8}
 .t-mint{--bg:#e8f9f4;--fg:#0b1020;--muted:#44566a;--accent:#4f4fe8;--accent2:#9aa6ff;--card:rgba(255,255,255,.7);--cb:rgba(255,255,255,.95);--shadow:0 24px 70px rgba(30,110,100,.18);--ink:#0b1020;--onink:#fff;--c1:#b8f0e6;--c2:#c7ceff;--c3:#ffe3b8;--soft:rgba(11,16,32,.06);--pop:#4f4fe8;--logo:ink}
 
 .slide{--s:var(--s0,0s);position:absolute;inset:0;display:flex;flex-direction:column;padding:84px 84px 72px;color:var(--fg);background:var(--bg);overflow:hidden}
@@ -230,6 +233,28 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .t-indigo .bdgrings i{border-color:#fff}
 .t-dark .bdg{background:linear-gradient(150deg,#6a67ff,#4f4fe8);box-shadow:0 0 90px rgba(138,138,255,.35),inset 0 0 0 8px rgba(255,255,255,.5)}
 .has-bg .bdg{background:rgba(255,255,255,.2);box-shadow:var(--shadow),inset 0 0 0 4px rgba(255,255,255,.62)}
+/* ---- casual kinds: hook (marker highlight + sticker + emoji), chat (DM bubbles), note (sticky notes) ---- */
+h1.hk b{background:linear-gradient(transparent 58%,var(--hl) 58% 93%,transparent 93%);-webkit-background-clip:border-box;background-clip:border-box;-webkit-text-fill-color:currentColor;color:inherit;animation:none;padding:0 .1em;margin:0 -.1em}
+.sticker{align-self:flex-start;transform:rotate(-4deg);padding:14px 30px;border-radius:14px;background:var(--ink);color:var(--onink);font-weight:800;font-size:28px;letter-spacing:.05em;box-shadow:0 14px 30px rgba(0,0,0,.22)}
+.emo-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.emo{font-size:270px;line-height:1;filter:drop-shadow(0 22px 26px rgba(0,0,0,.22))}
+.emo span span{display:inline-block;transform:rotate(-7deg)}
+.chat{align-self:stretch;border-radius:44px;background:var(--card);border:1px solid var(--cb);box-shadow:var(--shadow);overflow:hidden}
+.chat-top{display:flex;align-items:center;gap:20px;padding:26px 34px;background:var(--soft);border-bottom:1px solid rgba(127,127,160,.15)}
+.chat-top b{display:block;font-family:"Sora";font-size:30px;letter-spacing:-.02em}.chat-top small{display:block;margin-top:2px;font-size:20px;font-weight:700;color:#1faa77}
+.chat-body{display:flex;flex-direction:column;gap:22px;padding:34px 30px 40px}
+.bub{max-width:80%;padding:24px 32px;font-size:35px;line-height:1.35;font-weight:600}
+.bub.them{align-self:flex-start;background:#fff;color:#1d1733;border-radius:36px 36px 36px 8px;box-shadow:0 8px 22px rgba(60,50,110,.12)}
+.bub.us{align-self:flex-end;background:linear-gradient(135deg,#6a67ff,#4f4fe8);color:#fff;border-radius:36px 36px 8px 36px;box-shadow:0 10px 26px rgba(79,79,232,.35)}
+.notes{display:grid;gap:24px;padding-top:16px}
+.chat.dense .bub{font-size:29px;padding:18px 26px}.chat.dense .chat-body{gap:15px;padding:24px 26px 30px}.chat.dense .chat-top{padding:20px 30px}
+.sticky{position:relative;display:flex;align-items:center;gap:26px;padding:34px 38px;border-radius:10px;color:#1d1733;font-size:37px;font-weight:700;line-height:1.28;box-shadow:0 16px 30px rgba(40,30,80,.18);transform:rotate(var(--r,0deg));animation:stickyIn .8s cubic-bezier(.2,.9,.25,1.1) both;animation-delay:calc(var(--s,0s) + var(--d,0s))}
+.sticky::before{content:"";position:absolute;left:50%;top:-16px;width:120px;height:34px;transform:translateX(-50%) rotate(-3deg);background:rgba(255,255,255,.55);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.sticky .tk{flex:none;width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.7);display:grid;place-items:center}
+.sticky .tk path{stroke-dasharray:34;stroke-dashoffset:34;animation:tickDraw .5s ease both;animation-delay:calc(var(--s,0s) + var(--d,0s) + .5s)}
+@keyframes stickyIn{from{opacity:0;transform:translateX(90px) rotate(calc(var(--r,0deg) + 8deg))}to{opacity:1;transform:rotate(var(--r,0deg))}}
+@keyframes tickDraw{to{stroke-dashoffset:0}}
+.reel .bub{font-size:42px}.reel .sticky{font-size:44px;padding:42px 46px}.reel .emo{font-size:340px}
 /* ---- photo background: dark scrim, light text ---- */
 .bgimg{position:absolute;inset:0;background-size:cover;background-position:center;z-index:0}
 .scrim{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(8,10,22,.78) 0%,rgba(8,10,22,.5) 42%,rgba(8,10,22,.85) 100%)}

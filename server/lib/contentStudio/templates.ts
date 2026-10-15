@@ -239,6 +239,23 @@ function mainFor(s: Slide, deck: Deck, reel: boolean): string {
       return `${eyebrow(s)}${heading(s, "m")}<div class="cmp">
         <div class="col bad sl" ${D(0.3)}><h4>${esc(s.labelBefore || "Tanpa sistem")}</h4><ul>${(s.itemsBefore ?? []).map((t) => `<li><span${s.labelBefore ? ' class="neu"' : ""}>${s.labelBefore ? icon("check", 22, 3.4) : icon("x", 22, 3)}</span>${esc(t)}</li>`).join("")}</ul></div>
         <div class="col good sl" ${D(0.5)}><h4>${esc(s.labelAfter || "Dengan STUDIODO")}</h4><ul>${(s.items ?? []).map((t) => `<li><span>${icon("check", 22, 3.4)}</span>${esc(t)}</li>`).join("")}</ul></div></div>${note(s)}`;
+    case "hook": {
+      const sticker = s.eyebrow ? `<div class="sticker in">${esc(s.eyebrow)}</div>` : "";
+      const emo = s.emoji ? `<div class="emo-wrap"><div class="emo pop" ${D(0.7)}><span class="float"><span>${esc(s.emoji)}</span></span></div></div>` : "";
+      return `${sticker}${heading(s, "xl hk")}${bodyP(s)}${emo}${stage(s, reel)}${note(s)}`;
+    }
+    case "chat": {
+      const msgs = (s.chat ?? []).map((m, i) => `<div class="bub ${m.from === "us" ? "us" : "them"} pop" ${D(0.55 + i * 0.9)}>${esc(m.text)}</div>`).join("");
+      const av = `<svg viewBox="0 0 64 64" width="58" height="58"><circle cx="32" cy="32" r="30" fill="#4f4fe8"/><circle cx="32" cy="32" r="12" fill="#fff"/><circle cx="32" cy="32" r="5" fill="#4f4fe8"/></svg>`;
+      const dense = (s.chat ?? []).reduce((n, m) => n + m.text.length, 0) > 230 ? " dense" : "";
+      return `${eyebrow(s)}${s.title ? heading(s, "m") : ""}<div class="chat${dense} in" ${D(0.2)}><div class="chat-top">${av}<div><b>STUDIODO</b><small>● online</small></div></div><div class="chat-body">${msgs}</div></div>${note(s)}`;
+    }
+    case "note": {
+      const cols = ["#ffd3e4", "#ffe3b8", "#d5ccff", "#b8f0e6", "#bfd8ff"];
+      const rots = [-1.6, 1.2, -0.8, 1.6, -1.1];
+      const list = (s.items ?? []).map((it, i) => `<div class="sticky" style="--d:${(0.35 + i * 0.22).toFixed(2)}s;--r:${rots[i % 5]}deg;background:${cols[i % 5]}"><span class="tk">${icon("check", 34, 3.6, "#1d1733")}</span><span>${rich(it)}</span></div>`).join("");
+      return `${eyebrow(s)}${heading(s, "m")}<div class="notes">${list}</div>${bodyP(s)}${stage(s, reel, 0.9)}${note(s)}`;
+    }
     case "badge":
       return ""; // rendered by slideHtml (no header/footer)
     case "cta":

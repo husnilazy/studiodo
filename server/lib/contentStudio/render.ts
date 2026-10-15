@@ -8,6 +8,7 @@ import { resolveFfmpeg } from "../ffmpeg.js";
 import { BUILTIN_DECKS } from "./decks.js";
 import { buildReelDoc, buildSlideDoc, SLIDE_SETTLE_MS } from "./templates.js";
 import { buildIconDoc, type FileKind } from "./appicon.js";
+import { buildTeaserDoc, sanitizeTeaser, TEASER_COVER_SEC, TEASER_DURATION_SEC, TEASER_H, TEASER_W, type TeaserOptions } from "./teaser.js";
 import { buildTriptychDoc, COVER_SEC, DURATION_SEC, geometry, sanitizeTriptych, TILE_H, TILE_W, type Seam, type TriptychOptions } from "./triptych.js";
 import { FORMATS, type Deck } from "./types.js";
 
@@ -147,7 +148,7 @@ export function renderEnvironment(): { chrome: string | null; ffmpeg: boolean } 
 
 // ---- jobs (in memory; outputs on disk, pruned after a day) ----
 export type Job = {
-  id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon"; status: "running" | "done" | "error";
+  id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error";
   progress: number; label: string; files: { name: string; size: number }[]; error?: string; startedAt: number;
 };
 const jobs = new Map<string, Job>();
@@ -410,6 +411,40 @@ export async function startIconRender(): Promise<Job> {
   (async () => {
     try { await renderIcons(job, dir); await finish(job, dir); }
     catch (e) { job.status = "error"; job.error = e instanceof Error ? e.message : String(e); console.error("[content-studio] render ikon gagal:", job.error); }
+  })();
+  return job;
+}
+
+// ---- Teaser Reel: one continuous 1080x1920 motion graphic ----
+async function renderTeaser(job: Job, o: TeaserOptions, dir: string) {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: TEASER_W, height: TEASER_H, deviceScaleFactor: 1 });
+    await page.setContent(buildTeaserDoc(o), { waitUntil: "load" });
+    await page.waitForFunction("window.__ready === true", { timeout: 20000 });
+    job.label = "Membuat cover…";
+    await page.evaluate(`window.__seek(${TEASER_COVER_SEC * 1000})`);
+    await page.screenshot({ path: path.join(dir, "teaser-cover-1080x1920.png") });
+    const frames = Math.ceil(TEASER_DURATION_SEC * FPS);
+    await recordFrames(page, path.join(dir, "teaser-studiodo-1080x1920.mp4"), frames, (f) => { job.progress = ((f + 1) / frames) * 0.97; job.label = `Frame ${f + 1} / ${frames}`; });
+    job.label = "Menyelesaikan video…";
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function startTeaserRender(input: unknown): Promise<Job> {
+  if ([...jobs.values()].some((j) => j.status === "running")) throw new Error("Masih ada render yang berjalan, tunggu selesai dulu");
+  await pruneOldJobs();
+  const opts = sanitizeTeaser(input);
+  const job: Job = { id: crypto.randomUUID(), deckId: "teaser-reel", mode: "teaser", status: "running", progress: 0, label: "Menyiapkan Chrome…", files: [], startedAt: Date.now() };
+  jobs.set(job.id, job);
+  const dir = path.join(jobsDir(), job.id);
+  await mkdir(dir, { recursive: true });
+  (async () => {
+    try { await renderTeaser(job, opts, dir); await finish(job, dir); }
+    catch (e) { job.status = "error"; job.error = e instanceof Error ? e.message : String(e); console.error("[content-studio] render teaser gagal:", job.error); }
   })();
   return job;
 }

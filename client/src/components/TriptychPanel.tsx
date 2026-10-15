@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFitWidth } from "@/lib/useFitWidth";
 import { contentStudioApi, type CsJob, type CsTriptych } from "@/lib/superadminApi";
 
 // Superadmin → Konten Instagram → Pembuka Feed: three seamless animated tiles for the top row of the profile grid.
@@ -33,7 +34,8 @@ export function TriptychPanel() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const pitch = opts.seam === "grid" ? 1008 : 1080;
   const canvasW = pitch * 2 + 1080;
-  const scale = PREVIEW_W / canvasW;
+  const [boxRef, boxW] = useFitWidth<HTMLDivElement>(PREVIEW_W);
+  const scale = boxW / canvasW;
   const set = <K extends keyof CsTriptych>(k: K, v: CsTriptych[K]) => setOpts((o) => ({ ...o, [k]: v }));
 
   useEffect(() => { contentStudioApi.status().then((e) => setEnv(e ?? null)).catch(() => undefined); }, []);
@@ -83,10 +85,12 @@ export function TriptychPanel() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-fg/15 bg-black shadow-xl" style={{ width: PREVIEW_W, maxWidth: "100%", height: CANVAS_H * scale, position: "relative" }}>
+        <div ref={boxRef} className="w-full" style={{ maxWidth: PREVIEW_W }}>
+        <div className="overflow-hidden rounded-2xl border border-fg/15 bg-black shadow-xl" style={{ width: boxW, height: CANVAS_H * scale, position: "relative" }}>
           {html && <iframe key={replay} title="Pembuka Feed" srcDoc={html} sandbox="allow-scripts" style={{ width: canvasW, height: CANVAS_H, border: 0, transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />}
           {guides && guideX.map((x) => <div key={x} style={{ position: "absolute", left: x * scale, top: 0, bottom: 0, borderLeft: "2px dashed rgba(255,255,255,.7)", pointerEvents: "none" }} />)}
           {guides && ["Kiri", "Tengah", "Kanan"].map((l, i) => <span key={l} style={{ position: "absolute", left: (i * pitch + 60) * scale, bottom: 6 }} className="rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white">{i + 1} · {l}</span>)}
+        </div>
         </div>
         <p className="mt-2 text-[11px] text-fg/45">
           {opts.seam === "panorama"

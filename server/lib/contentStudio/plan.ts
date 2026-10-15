@@ -31,6 +31,7 @@ const planFile = () => path.join(process.cwd(), "storage", "content-studio", "pl
 
 const PHASES = {
   intro: "1 · Perkenalan (launching)",
+  newbie: "1b · Konten pemula (casual)",
   core: "2 · Prioritas inti",
   grow: "3 · Perluas topik",
   depth: "4 · Pendalaman",
@@ -47,6 +48,14 @@ const SEED: [string, string, string, "carousel" | "reel", string][] = [
   ["carousel-checklist-mulai-usaha", "Checklist mulai usaha photobooth", "Edukasi", "carousel", PHASES.intro],
   ["carousel-bayar-qris", "Bayar QRIS otomatis", "Pembayaran", "carousel", PHASES.intro],
 
+  ["carousel-bingung-pilih-aplikasi", "Bingung pilih aplikasi? (pemula)", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-aplikasi-ngapain-sih", "Aplikasi photobooth ngapain sih?", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-mitos-fakta-pemula", "5 mitos usaha photobooth", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-urutan-beli-alat", "Urutan beli alat biar nggak boncos", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-hari-pertama-buka", "Hari pertama buka booth", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-di-balik-satu-sesi", "Di balik satu sesi foto", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-manual-vs-aplikasi", "Manual vs aplikasi", "Pemula", "carousel", PHASES.newbie],
+  ["carousel-faq-pemula-santai", "FAQ pemula, dijawab santai", "Pemula", "carousel", PHASES.newbie],
   ["carousel-dashboard-realtime", "Dashboard & monitor booth", "Operasional", "carousel", PHASES.core],
   ["reel-alur-customer", "Reel: Alur customer bayar-foto-hasil", "Pengalaman booth", "reel", PHASES.core],
   ["carousel-hasil-digital", "Hasil digital & galeri QR", "Hasil digital", "carousel", PHASES.core],
