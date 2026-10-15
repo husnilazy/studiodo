@@ -31,6 +31,12 @@ function snapAxis(start: number, size: number): { value: number; snapped: boolea
   return { value: start, snapped: false };
 }
 
+/** Keeps [start, start+size] inside [0, limit] (size 0 = not measured yet: leave as is). Never applied in the editor. */
+function keepOnScreen(start: number, size: number, limit: number, editing: boolean) {
+  if (editing || size <= 0) return start;
+  return Math.max(0, Math.min(start, limit - size));
+}
+
 function useViewport() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   useEffect(() => {
@@ -72,6 +78,15 @@ export default function Positionable({ id, type, label, children, className }: P
     setOrigin((current) => (Math.abs(current.left - next.left) < 0.5 && Math.abs(current.top - next.top) < 0.5 ? current : next));
   });
 
+  // Size of the element as drawn (scale included), so a saved position can never push it off the screen.
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setBox((current) => (Math.abs(current.w - rect.width) < 1 && Math.abs(current.h - rect.height) < 1 ? current : { w: rect.width, h: rect.height }));
+  });
+
   useEffect(() => {
     if (!ctx) return;
     ctx.register({ id, type, label });
@@ -98,8 +113,9 @@ export default function Positionable({ id, type, label, children, className }: P
         }
       : {
           position: "absolute",
-          left: (override.xPct / 100) * viewport.width - origin.left,
-          top: (override.yPct / 100) * viewport.height - origin.top,
+          // On the kiosk (not in the editor) the saved top-left is kept inside the screen, whatever the element's size is there.
+          left: keepOnScreen((override.xPct / 100) * viewport.width, box.w, viewport.width, ctx.editMode) - origin.left,
+          top: keepOnScreen((override.yPct / 100) * viewport.height, box.h, viewport.height, ctx.editMode) - origin.top,
           width: "max-content",
           maxWidth: viewport.width,
           zIndex: override.zIndex,
@@ -113,7 +129,7 @@ export default function Positionable({ id, type, label, children, className }: P
   if (!ctx.editMode) {
     if (override?.hidden) return null;
     if (!override) return <>{children}</>;
-    return <div style={style} className={className}>{children}</div>;
+    return <div ref={wrapperRef} style={style} className={className}>{children}</div>;
   }
 
   const isSelected = ctx.selectedId === id;

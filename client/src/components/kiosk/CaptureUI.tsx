@@ -13,8 +13,10 @@ const CONFETTI = ["#ff4d8d", "#ffd23f", "#2ee6a6", "#4cc9ff", "#ffffff", "#ff8c4
 /** Full-view countdown number. Shown centered over the live view; each style has its own look. */
 export function CountdownOverlay({ value, total, styleId }: { value: number | null; total: number; styleId: KioskStyleId }) {
   const progress = value === null ? 0 : value / Math.max(1, total);
+  // The bold styles keep the countdown small and in the top corner: the middle of the picture belongs to the face.
+  const corner = styleId === "fun" || styleId === "playful";
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden">
+    <div className={`pointer-events-none absolute inset-0 z-30 flex overflow-hidden ${corner ? "items-start justify-end p-[4vmin] pt-[11vmin]" : "items-center justify-center"}`}>
       <AnimatePresence mode="popLayout">
         {value !== null && (
           <motion.div key={value} className={styleId === "minimal" ? "absolute bottom-[26%] left-[8%]" : "relative flex items-center justify-center"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
@@ -44,8 +46,8 @@ export function CountdownOverlay({ value, total, styleId }: { value: number | nu
             )}
 
             {styleId === "playful" && (
-              <motion.div className="flex h-[24vmin] w-[24vmin] items-center justify-center rounded-[2.5rem] border-[5px] border-fg bg-surface shadow-[10px_10px_0_var(--kiosk-text)]" initial={{ scale: 0.3, rotate: -18, opacity: 0 }} animate={{ scale: 1, rotate: value % 2 ? -5 : 5, opacity: 1 }} exit={{ scale: 0.5, rotate: 14, opacity: 0 }} transition={{ type: "spring", stiffness: 380, damping: 16 }}>
-                <span className="font-display text-[16vmin] font-extrabold leading-none text-accent">{value}</span>
+              <motion.div className="flex h-[14vmin] w-[14vmin] items-center justify-center rounded-[1.5rem] border-[4px] border-fg bg-surface shadow-[5px_5px_0_var(--kiosk-text)]" initial={{ scale: 0.3, rotate: -18, opacity: 0 }} animate={{ scale: 1, rotate: value % 2 ? -5 : 5, opacity: 1 }} exit={{ scale: 0.5, rotate: 14, opacity: 0 }} transition={{ type: "spring", stiffness: 380, damping: 16 }}>
+                <span className="font-display text-[9vmin] font-extrabold leading-none text-accent">{value}</span>
               </motion.div>
             )}
 
@@ -54,12 +56,12 @@ export function CountdownOverlay({ value, total, styleId }: { value: number | nu
                 {CONFETTI.concat(CONFETTI).map((color, i) => {
                   const angle = (i / 12) * Math.PI * 2;
                   return (
-                    <motion.span key={i} className="absolute h-[2vmin] w-[2vmin] rounded-full" style={{ background: color, border: "2px solid rgba(36,16,70,0.85)" }} initial={{ x: 0, y: 0, scale: 0, opacity: 1 }} animate={{ x: Math.cos(angle) * 22 + "vmin", y: Math.sin(angle) * 22 + "vmin", scale: [0, 1.3, 1], opacity: [1, 1, 0] }} transition={{ duration: 0.9, ease: "easeOut" }} />
+                    <motion.span key={i} className="absolute h-[1.2vmin] w-[1.2vmin] rounded-full" style={{ background: color, border: "2px solid rgba(36,16,70,0.85)" }} initial={{ x: 0, y: 0, scale: 0, opacity: 1 }} animate={{ x: Math.cos(angle) * 11 + "vmin", y: Math.sin(angle) * 11 + "vmin", scale: [0, 1.3, 1], opacity: [1, 1, 0] }} transition={{ duration: 0.9, ease: "easeOut" }} />
                   );
                 })}
-                <motion.div className="relative flex h-[32vmin] w-[32vmin] items-center justify-center" initial={{ scale: 0.2, rotate: -40 }} animate={{ scale: [0.2, 1.18, 1], rotate: [-40, 8, 0] }} exit={{ scale: 1.8, opacity: 0 }} transition={{ duration: 0.55, ease: "easeOut" }}>
-                  <motion.span className="absolute inset-0 bg-[#ffd23f]" style={{ clipPath: "polygon(50% 0%, 61% 14%, 79% 9%, 82% 28%, 98% 35%, 88% 51%, 98% 66%, 80% 72%, 79% 91%, 61% 86%, 50% 100%, 39% 86%, 21% 91%, 20% 72%, 2% 66%, 12% 51%, 2% 35%, 18% 28%, 21% 9%, 39% 14%)", filter: "drop-shadow(6px 6px 0 rgba(36,16,70,0.9))" }} animate={{ rotate: 360 }} transition={{ duration: 6, repeat: Infinity, ease: "linear" }} />
-                  <span className="relative font-display text-[18vmin] font-extrabold leading-none text-accent" style={{ WebkitTextStroke: "0.8vmin #241046", paintOrder: "stroke fill" }}>{value}</span>
+                <motion.div className="relative flex h-[17vmin] w-[17vmin] items-center justify-center" initial={{ scale: 0.2, rotate: -40 }} animate={{ scale: [0.2, 1.18, 1], rotate: [-40, 8, 0] }} exit={{ scale: 1.8, opacity: 0 }} transition={{ duration: 0.55, ease: "easeOut" }}>
+                  <motion.span className="absolute inset-0 bg-[#ffd23f]" style={{ clipPath: "polygon(50% 0%, 61% 14%, 79% 9%, 82% 28%, 98% 35%, 88% 51%, 98% 66%, 80% 72%, 79% 91%, 61% 86%, 50% 100%, 39% 86%, 21% 91%, 20% 72%, 2% 66%, 12% 51%, 2% 35%, 18% 28%, 21% 9%, 39% 14%)", filter: "drop-shadow(3px 3px 0 rgba(36,16,70,0.9))" }} animate={{ rotate: 360 }} transition={{ duration: 6, repeat: Infinity, ease: "linear" }} />
+                  <span className="relative font-display text-[10vmin] font-extrabold leading-none text-accent" style={{ WebkitTextStroke: "0.5vmin #241046", paintOrder: "stroke fill" }}>{value}</span>
                 </motion.div>
               </>
             )}
