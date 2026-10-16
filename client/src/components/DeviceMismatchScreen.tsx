@@ -21,8 +21,17 @@ export default function DeviceMismatchScreen() {
       <p className="max-w-md text-fg/50">
         Kiosk key ini sudah terpasang di komputer lain — satu key hanya bisa dipakai di satu device.
         Minta admin buka dashboard <span className="text-fg/70">Kiosk</span> dan pilih "Reset device"
-        pada key ini untuk memindahkannya ke komputer ini, atau buat kiosk key baru khusus untuk booth ini.
+        pada key ini untuk memindahkannya ke komputer ini, atau pasang kiosk key baru khusus untuk booth ini.
       </p>
+      {/* Same path as a revoked key: drop the stored key and go back to the pairing form (login → enter key). */}
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event("studiodo-kiosk-pairing-required"))}
+        className="k-btn k-btn-accent px-8"
+      >
+        Pasang key baru
+      </button>
+      <p className="max-w-sm text-xs text-fg/35">Anda akan diminta masuk dengan akun tenant, lalu menempelkan kiosk key baru.</p>
     </div>
   );
 }

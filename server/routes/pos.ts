@@ -1,6 +1,6 @@
 import { Router, type Response } from "express";
 import crypto from "node:crypto";
-import { and, asc, desc, eq, gte, like, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, like, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys, packages, templates, posOrders, posProducts, posQueueTickets, posRefunds, posSettings, posShifts, vouchers, type PosOrderItem } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
@@ -40,10 +40,21 @@ async function getSettings(tenantId: string) {
 
 /** Cash-drawer picture of one shift: sales by method, cash refunds, and what the drawer should hold. */
 async function shiftSummary(shift: typeof posShifts.$inferSelect) {
-  const [orders, refunds] = await Promise.all([
-    db.select({ method: posOrders.paymentMethod, total: posOrders.total }).from(posOrders).where(eq(posOrders.shiftId, shift.id)),
-    db.select({ amount: posRefunds.amount, method: posOrders.paymentMethod }).from(posRefunds).innerJoin(posOrders, eq(posRefunds.orderId, posOrders.id)).where(eq(posRefunds.shiftId, shift.id)),
+  return (await shiftSummaries([shift]))[0];
+}
+
+// Two queries for any number of shifts (the history list used to run two per shift: 60 round-trips to Neon for 30 shifts).
+async function shiftSummaries(shifts: (typeof posShifts.$inferSelect)[]) {
+  if (shifts.length === 0) return [];
+  const ids = shifts.map((s) => s.id);
+  const [allOrders, allRefunds] = await Promise.all([
+    db.select({ shiftId: posOrders.shiftId, method: posOrders.paymentMethod, total: posOrders.total }).from(posOrders).where(inArray(posOrders.shiftId, ids)),
+    db.select({ shiftId: posRefunds.shiftId, amount: posRefunds.amount, method: posOrders.paymentMethod }).from(posRefunds).innerJoin(posOrders, eq(posRefunds.orderId, posOrders.id)).where(inArray(posRefunds.shiftId, ids)),
   ]);
+  return shifts.map((shift) => summarizeShift(shift, allOrders.filter((o) => o.shiftId === shift.id), allRefunds.filter((r) => r.shiftId === shift.id)));
+}
+
+function summarizeShift(shift: typeof posShifts.$inferSelect, orders: { method: string; total: string | null }[], refunds: { amount: string | null; method: string }[]) {
   const byMethod: Record<string, number> = { cash: 0, qris: 0, transfer: 0, other: 0 };
   for (const o of orders) byMethod[o.method] = (byMethod[o.method] ?? 0) + num(o.total);
   const cashRefunds = refunds.filter((r) => r.method === "cash").reduce((s, r) => s + num(r.amount), 0);
@@ -158,7 +169,7 @@ posRouter.get("/shifts/current", async (req, res) => {
 
 posRouter.get("/shifts", async (req, res) => {
   const rows = await db.select().from(posShifts).where(eq(posShifts.tenantId, req.tenantId!)).orderBy(desc(posShifts.openedAt)).limit(30);
-  res.json(await Promise.all(rows.map(shiftSummary)));
+  res.json(await shiftSummaries(rows));
 });
 
 posRouter.post("/shifts/open", async (req, res) => {

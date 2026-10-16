@@ -186,13 +186,17 @@ paymentRouter.post("/qris", requireKioskAuth, requireActiveSubscription, async (
 
   if (doku) {
     try {
-      const url = await createDokuPayment(doku, tenantId, sessionId, amount);
+      // DOKU rejects a repeated invoice number, so every attempt ("Buat QRIS baru", a retry after an error) gets its own;
+      // the webhook strips the suffix again to find the session.
+      const invoice = `${sessionId}-q-${Date.now().toString(36)}`;
+      const url = await createDokuPayment(doku, tenantId, invoice, amount);
       // xenditInvoiceId doubles as the gateway reference (for DOKU: the invoice number) so /status can double-check a missed notification.
-      await db.update(sessions).set({ xenditInvoiceId: sessionId, paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
-      return res.json({ demo: false, qrString: url, invoiceId: sessionId, provider: "doku" });
+      await db.update(sessions).set({ xenditInvoiceId: invoice, paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      return res.json({ demo: false, qrString: url, invoiceId: invoice, provider: "doku" });
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
       console.error("[doku] gagal membuat checkout", err);
-      return res.status(502).json({ error: "Gagal membuat pembayaran DOKU. Periksa Client ID / Secret Key." });
+      return res.status(502).json({ error: `Gagal membuat pembayaran DOKU: ${reason}` });
     }
   }
 
@@ -474,7 +478,7 @@ paymentRouter.post("/webhook/doku/:tenantId", async (req, res) => {
   const event = req.body;
   const status = String(event?.transaction?.status ?? "").toUpperCase();
   const invoice = String(event?.order?.invoice_number ?? "");
-  const sessionId = invoice.split("-additional-")[0];
+  const sessionId = invoice.split(/-(?:additional|q)-/)[0];
   if (sessionId && status === "SUCCESS") {
     await settlePayment(tenantId, sessionId, Number(event?.order?.amount ?? NaN), "doku", "doku-webhook");
   }

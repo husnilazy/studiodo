@@ -38,10 +38,13 @@ export async function createDokuCheckout(
     ...(input.notificationUrl ? { additional_info: { override_notification_url: input.notificationUrl } } : {}),
   });
   const res = await fetch(`${base(cfg)}${target}`, { method: "POST", headers: headers(cfg, target, body), body, signal: AbortSignal.timeout(20_000) });
-  const json = (await res.json().catch(() => ({}))) as { response?: { payment?: { url?: string; token_id?: string } }; error_messages?: string[]; message?: string[] };
+  const json = (await res.json().catch(() => ({}))) as { response?: { payment?: { url?: string; token_id?: string } }; error_messages?: string[]; message?: string[] | string; error?: { message?: string; code?: string } | string };
   const url = json.response?.payment?.url;
   if (!res.ok || !url) {
-    throw new Error(json.error_messages?.join("; ") || json.message?.join?.("; ") || `DOKU menolak permintaan (HTTP ${res.status})`);
+    const detail = json.error_messages?.join("; ")
+      || (Array.isArray(json.message) ? json.message.join("; ") : json.message)
+      || (typeof json.error === "string" ? json.error : json.error?.message);
+    throw new Error(`${detail || "DOKU menolak permintaan"} (HTTP ${res.status}, ${cfg.production ? "produksi" : "sandbox"})`);
   }
   return { url, tokenId: json.response?.payment?.token_id };
 }
