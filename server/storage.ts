@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { nanoid } from "nanoid";
 import { getStorageSettings, type StorageDriver, type StorageSettings } from "./lib/storageConfig.js";
 
@@ -86,4 +87,36 @@ export async function saveUploadedFile(tenantId: string, file: UploadedFileInput
   await fs.mkdir(localDir, { recursive: true });
   await fs.writeFile(path.join(localDir, filename), file.buffer);
   return `/storage/${tenantId}/${safeFolder}/${filename}`;
+}
+
+export interface PresignedUpload {
+  uploadUrl: string;
+  /** Final public URL of the file once the PUT succeeds (the same shape saveUploadedFile returns). */
+  url: string;
+  headers: Record<string, string>;
+  expiresInSeconds: number;
+}
+
+const PRESIGN_TTL_SECONDS = 300;
+
+/**
+ * A short-lived URL the browser PUTs a file to directly (so the bytes never pass through this server — Vercel rejects request
+ * bodies over 4.5 MB). Content type and exact length are part of the signature, so the URL cannot be reused for something else.
+ * Returns null when the tenant's storage is not R2: the caller then falls back to sending the file through the API.
+ */
+export async function createPresignedUpload(tenantId: string, folder: string, file: { contentType: string; size: number; extension: string }): Promise<PresignedUpload | null> {
+  const settings = await getStorageSettings(tenantId);
+  if (settings.driver !== "r2") return null;
+  const key = [cleanPrefix(settings.r2Prefix), tenantId, cleanPrefix(folder), `${nanoid(12)}${file.extension}`].filter(Boolean).join("/");
+  const uploadUrl = await getSignedUrl(
+    buildR2Client(tenantId, settings),
+    new PutObjectCommand({ Bucket: settings.r2Bucket!, Key: key, ContentType: file.contentType, ContentLength: file.size }),
+    { expiresIn: PRESIGN_TTL_SECONDS, signableHeaders: new Set(["content-type", "content-length"]) },
+  );
+  return {
+    uploadUrl,
+    url: `${String(settings.r2PublicBaseUrl).replace(/\/$/, "")}/${key}`,
+    headers: { "Content-Type": file.contentType },
+    expiresInSeconds: PRESIGN_TTL_SECONDS,
+  };
 }

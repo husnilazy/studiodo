@@ -20,6 +20,7 @@
     "db:migrate": "node ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:push": "node ./node_modules/drizzle-kit/bin.cjs push",
     "db:studio": "node ./node_modules/drizzle-kit/bin.cjs studio",
+    "r2:cors": "node ./node_modules/tsx/dist/cli.mjs server/scripts/setR2Cors.ts",
     "tenant:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createTenant.ts",
     "superadmin:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createSuperadmin.ts",
     "test": "vitest run"
@@ -90,6 +91,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
+    "@aws-sdk/s3-request-presigner": "^3.1106.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/sora": "^5.3.0",
     "@fontsource-variable/space-grotesk": "^5.3.0",

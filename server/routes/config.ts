@@ -13,7 +13,7 @@ import { resetR2Client } from "../storage.js";
 import { resetDriveClient } from "../lib/gdrive.js";
 import { validateFlowOrder } from "../lib/kioskFlowRules.js";
 import { getKeyPlanFeatures, getTenantBoothFeatures, getTenantPlanFeatures } from "../lib/planFeatures.js";
-import { saveUploadedFile } from "../storage.js";
+import { createPresignedUpload, saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import multer from "multer";
 import { transcodeToMp4 } from "../lib/ffmpeg.js";
@@ -22,6 +22,31 @@ export const configRouter = Router();
 
 // Branding videos (idle cover / animated logo). Multipart instead of a base64 JSON body: these are tens of MB.
 const brandingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 120 * 1024 * 1024 } });
+
+// POST /api/config/upload-url — admin asks for a one-time URL to PUT a file straight to object storage (R2). Used for frame,
+// package, branding and screen-layout images/videos, which can be bigger than the 4.5 MB request body Vercel accepts.
+// Answers { direct: false } when this tenant's storage is not R2; the dashboard then sends the file through the API as before.
+const PRESIGN_FOLDERS = new Set(["branding", "templates", "packages", "layouts"]);
+const PRESIGN_TYPES: Record<string, { ext: string; max: number }> = {
+  "image/png": { ext: ".png", max: 20 * 1024 * 1024 },
+  "image/jpeg": { ext: ".jpg", max: 20 * 1024 * 1024 },
+  "image/webp": { ext: ".webp", max: 20 * 1024 * 1024 },
+  "image/gif": { ext: ".gif", max: 20 * 1024 * 1024 },
+  "video/mp4": { ext: ".mp4", max: 120 * 1024 * 1024 },
+  "video/webm": { ext: ".webm", max: 120 * 1024 * 1024 },
+};
+configRouter.post("/upload-url", requireAdminAuth, async (req, res) => {
+  const folder = String(req.body?.folder ?? "");
+  const contentType = String(req.body?.contentType ?? "").toLowerCase();
+  const size = Number(req.body?.size);
+  const rule = PRESIGN_TYPES[contentType];
+  if (!PRESIGN_FOLDERS.has(folder)) return res.status(400).json({ error: "Folder upload tidak valid" });
+  if (!rule) return res.status(400).json({ error: "Tipe file harus PNG, JPG, WebP, GIF, MP4, atau WebM" });
+  if (!Number.isInteger(size) || size <= 0) return res.status(400).json({ error: "Ukuran file tidak valid" });
+  if (size > rule.max) return res.status(413).json({ error: `File terlalu besar (maksimal ${Math.round(rule.max / 1024 / 1024)} MB)` });
+  const upload = await createPresignedUpload(req.tenantId!, folder, { contentType, size, extension: rule.ext });
+  res.json(upload ? { direct: true, ...upload } : { direct: false });
+});
 
 // POST /api/config/branding-video — admin uploads an MP4 or MOV; it is converted to a muted, web-safe H.264 MP4
 // (MOV from iPhones is usually HEVC, which kiosk browsers cannot play) and stored. Returns the absolute URL.

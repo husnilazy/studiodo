@@ -87,7 +87,66 @@ export function kioskAuthHeaders(): Record<string, string> {
   return { "x-kiosk-key": key, "x-device-id": getDeviceId(), ...(token ? { "x-device-token": token } : {}) };
 }
 
+// Big images/videos in admin saves (frame art, package photos, branding, screen-builder assets) travel as base64 data: URIs. A
+// serverless host rejects request bodies over ~4.5 MB, so those are first PUT straight to object storage with a short-lived
+// presigned URL and the save then carries the final https URL (the server already passes real URLs through unchanged).
+// Any failure — storage is not R2, bucket CORS not set up yet, offline — leaves the data: URI in place: the old path.
+const OFFLOAD_MIN_CHARS = 400_000;
+const OFFLOAD_PATHS = /^\/(packages|frames|config)(\/|$|\?)/;
+const DATA_URI = /^data:((?:image|video)\/[\w.+-]+);base64,/;
+
+function uploadFolderFor(path: string): string {
+  if (path.startsWith("/packages")) return "packages";
+  if (path.startsWith("/frames")) return "templates";
+  if (path.startsWith("/config/screen-layout")) return "layouts";
+  return "branding";
+}
+
+type PresignedUpload = { direct: boolean; uploadUrl?: string; url?: string; headers?: Record<string, string> };
+
+async function putToStorage(blob: Blob, folder: string): Promise<string | null> {
+  const contentType = blob.type === "image/jpg" ? "image/jpeg" : blob.type;
+  const meta = await request<PresignedUpload>("/config/upload-url", { method: "POST", body: JSON.stringify({ folder, contentType, size: blob.size }) });
+  if (!meta?.direct || !meta.uploadUrl || !meta.url) return null;
+  const put = await fetch(meta.uploadUrl, { method: "PUT", headers: meta.headers, body: blob });
+  return put.ok ? meta.url : null;
+}
+
+async function offloadDataUris(path: string, body: string): Promise<string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  const folder = uploadFolderFor(path);
+  const done = new Map<string, string | null>();
+  const walk = async (node: unknown): Promise<unknown> => {
+    if (typeof node === "string") {
+      if (node.length < OFFLOAD_MIN_CHARS || !DATA_URI.test(node)) return node;
+      if (!done.has(node)) {
+        try {
+          done.set(node, await putToStorage(await (await fetch(node)).blob(), folder));
+        } catch {
+          done.set(node, null);
+        }
+      }
+      return done.get(node) ?? node;
+    }
+    if (Array.isArray(node)) return Promise.all(node.map(walk));
+    if (node && typeof node === "object") {
+      const entries = await Promise.all(Object.entries(node).map(async ([k, v]) => [k, await walk(v)] as const));
+      return Object.fromEntries(entries);
+    }
+    return node;
+  };
+  return JSON.stringify(await walk(parsed));
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  if (adminToken && typeof options?.body === "string" && options.body.length >= OFFLOAD_MIN_CHARS && OFFLOAD_PATHS.test(path)) {
+    options = { ...options, body: await offloadDataUris(path, options.body) };
+  }
   const kioskKey = getKioskKey();
   let res: Response;
   const timeoutController = new AbortController();
@@ -321,6 +380,16 @@ export const api = {
   },
   // Admin: send a branding video (.mp4/.mov) to the server, which converts it; returns its hosted URL.
   uploadBrandingVideo: async (file: File) => {
+    // An .mp4 up to 40 MB goes straight to storage (no size limit from the API host). The server's re-encode/shrink step is skipped
+    // for it; .mov and bigger files still go through the server, which converts them.
+    if (file.type === "video/mp4" && file.size <= 40 * 1024 * 1024) {
+      try {
+        const url = await putToStorage(file, "branding");
+        if (url) return { url, sizeBytes: file.size, converted: false };
+      } catch {
+        // fall through to the server upload
+      }
+    }
     const form = new FormData();
     form.append("file", file, file.name);
     const res = await fetch(`${getApiBaseUrl()}/config/branding-video`, { method: "POST", body: form, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined });
