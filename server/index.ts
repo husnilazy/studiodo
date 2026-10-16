@@ -198,9 +198,15 @@ function startNotificationRules() {
   setInterval(run, 30 * 60 * 1000);
 }
 
-app.listen(PORT, () => {
-  console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
-  checkDatabase();
-  startKeepDbWarm();
-  startNotificationRules();
-});
+// On Vercel the platform calls the exported app per request (api/index.js): there is no long-lived process to listen on a
+// port or to run the keep-alive / notification timers. The PC-hosted kiosk API keeps running those.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
+    checkDatabase();
+    startKeepDbWarm();
+    startNotificationRules();
+  });
+}
+
+export default app;
