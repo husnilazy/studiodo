@@ -195,24 +195,24 @@ function mockPrintL(images?: string[]): string {
   return `<div class="mock"><div class="print float"><div class="pg">${[0, 1, 2, 3].map((i) => `<div style="${popIn(0.4 + i * 0.22)}">${lphoto(i, images)}</div>`).join("")}</div><div class="lb"><span>STUDIODO</span><span>Cetak 4R · landscape</span></div></div></div>`;
 }
 
-const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit"; k: number }> = {
-  dashboard: { html: () => mockDashboard(), fit: "crop", k: 1 },
-  qris: { html: (_s, reel) => mockQris(reel), fit: "crop", k: 0.82 },
-  gallery: { html: (s) => mockGallery(s.images), fit: "crop", k: 0.8 },
-  booth: { html: (s) => mockBooth(s.images), fit: "crop", k: 0.82 },
-  strip: { html: (s) => mockStrip(s.images), fit: "fit", k: 0.45 },
-  queue: { html: () => mockQueue(), fit: "fit", k: 0.9 },
-  hub: { html: () => mockHub(), fit: "fit", k: 0.72 },
-  "qris-l": { html: (_s, reel) => mockQrisL(reel), fit: "fit", k: 0.7 },
-  "booth-l": { html: (s) => mockBoothL(s.images), fit: "fit", k: 0.7 },
-  "gallery-l": { html: (s) => mockGalleryL(s.images), fit: "fit", k: 0.7 },
-  "print-l": { html: (s) => mockPrintL(s.images), fit: "fit", k: 0.6 },
+const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit"; k: number; in: string }> = {
+  dashboard: { html: () => mockDashboard(), fit: "crop", k: 1, in: "rise" },
+  qris: { html: (_s, reel) => mockQris(reel), fit: "crop", k: 0.82, in: "print" },
+  gallery: { html: (s) => mockGallery(s.images), fit: "crop", k: 0.8, in: "tilt" },
+  booth: { html: (s) => mockBooth(s.images), fit: "crop", k: 0.82, in: "zoom" },
+  strip: { html: (s) => mockStrip(s.images), fit: "fit", k: 0.45, in: "print" },
+  queue: { html: () => mockQueue(), fit: "fit", k: 0.9, in: "slide" },
+  hub: { html: () => mockHub(), fit: "fit", k: 0.72, in: "spin" },
+  "qris-l": { html: (_s, reel) => mockQrisL(reel), fit: "fit", k: 0.7, in: "drop" },
+  "booth-l": { html: (s) => mockBoothL(s.images), fit: "fit", k: 0.7, in: "flip" },
+  "gallery-l": { html: (s) => mockGalleryL(s.images), fit: "fit", k: 0.7, in: "swing" },
+  "print-l": { html: (s) => mockPrintL(s.images), fit: "fit", k: 0.6, in: "print" },
 };
 
 const stage = (s: Slide, reel: boolean, d = 0.36) => {
   if (!s.mockup || s.mockup === "none") return "";
   const m = MOCKS[s.mockup];
-  return `<div class="stage" data-fit="${m.fit}" data-k="${m.k}" style="--d:${d}s;--k:${m.k}"><div class="paper">${m.html(s, reel)}</div></div>`;
+  return `<div class="stage" data-fit="${m.fit}" data-k="${m.k}" data-in="${m.in}" style="--d:${d}s;--k:${m.k}"><div class="paper">${m.html(s, reel)}</div></div>`;
 };
 const note = (s: Slide) => (s.note ? `<div class="pill in" ${D(0.7)}>${rich(s.note)}</div>` : "");
 const eyebrow = (s: Slide) => (s.eyebrow ? `<div class="eyebrow in"><span class="dot"></span>${esc(s.eyebrow)}</div>` : "");

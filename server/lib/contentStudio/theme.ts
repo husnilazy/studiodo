@@ -125,6 +125,25 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .stage::before{left:7%;right:7%;top:0;height:26px;border-radius:0 0 18px 18px;background:linear-gradient(#1f2748,#0b1020);border:1px solid rgba(255,255,255,.2);border-top:none;box-shadow:0 14px 28px rgba(0,0,0,.3)}
 .stage::after{left:11%;right:11%;top:24px;height:4px;border-radius:4px;background:rgba(154,166,255,.85);filter:blur(1.2px)}
 @keyframes slotIn{from{opacity:0}to{opacity:1}}
+/* ---- only paper-like mockups (QRIS receipt, photo strip, print) use the printer slot; every other mockup gets its own entrance ---- */
+.stage:not([data-in="print"])::before,.stage:not([data-in="print"])::after{display:none}
+.stage:not([data-in="print"]) .paper{--s:calc(var(--s0,0s) + .8s);animation-duration:1.15s;animation-timing-function:cubic-bezier(.2,.9,.25,1);animation-fill-mode:both}
+.stage[data-in="rise"] .paper{animation-name:enRise}
+.stage[data-in="tilt"] .paper{animation-name:enTilt;animation-duration:1.3s}
+.stage[data-in="zoom"] .paper{animation-name:enZoom;animation-duration:1s}
+.stage[data-in="slide"] .paper{animation-name:enSlide}
+.stage[data-in="spin"] .paper{animation-name:enSpin;animation-duration:1.25s}
+.stage[data-in="drop"] .paper{animation-name:enDrop;animation-duration:1.2s}
+.stage[data-in="flip"] .paper{animation-name:enFlip;animation-duration:1.3s}
+.stage[data-in="swing"] .paper{animation-name:enSwing;animation-duration:1.3s}
+@keyframes enRise{0%{opacity:0;transform:translateY(240px) scale(.9);filter:blur(14px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes enTilt{0%{opacity:0;transform:perspective(1400px) rotateY(-62deg) translateX(-140px)}65%{opacity:1;transform:perspective(1400px) rotateY(8deg)}100%{opacity:1;transform:none}}
+@keyframes enZoom{0%{opacity:0;transform:scale(.55)}55%{opacity:1;transform:scale(1.07)}78%{transform:scale(.98)}100%{opacity:1;transform:none}}
+@keyframes enSlide{0%{opacity:0;transform:translateX(420px)}70%{opacity:1;transform:translateX(-18px)}100%{opacity:1;transform:none}}
+@keyframes enSpin{0%{opacity:0;transform:rotate(-14deg) scale(.5)}60%{opacity:1;transform:rotate(3deg) scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes enDrop{0%{opacity:0;transform:translateY(-300px)}55%{opacity:1;transform:translateY(0)}70%{transform:translateY(-34px)}85%{transform:translateY(0)}93%{transform:translateY(-8px)}100%{opacity:1;transform:none}}
+@keyframes enFlip{0%{opacity:0;transform:perspective(1500px) rotateX(-75deg) translateY(-40px);transform-origin:top center}60%{opacity:1;transform:perspective(1500px) rotateX(9deg);transform-origin:top center}100%{opacity:1;transform:none;transform-origin:top center}}
+@keyframes enSwing{0%{opacity:0;transform:translateX(-360px) rotate(-9deg)}65%{opacity:1;transform:translateX(14px) rotate(1.5deg)}100%{opacity:1;transform:none}}
 /* ---- landscape kiosk / monitor mockups ---- */
 .mon{width:880px;display:grid;justify-items:center}
 .mon .bez{width:100%;border-radius:30px;background:#0b1020;padding:16px;box-shadow:0 40px 90px rgba(11,16,32,.35)}

@@ -137,3 +137,7 @@ Tiga jenis slide tambahan untuk konten santai (tone `peach` = hangat):
 Delapan deck pemula siap pakai ada di `decks_batch5.ts` (id `carousel-bingung-pilih-aplikasi`, `carousel-aplikasi-ngapain-sih`, dst). Rencana yang sudah tersimpan tidak otomatis menambah item baru; pakai "+ Tambah" di tab Rencana.
 
 Tata letak tab Studio desain: tombol "+ Carousel / + Reel / Impor deck (JSON)" ada di atas, daftar deck scroll di kotaknya sendiri, dan kolom preview/editor bergulir terpisah.
+
+## Animasi masuk mockup
+
+Hanya mockup berbentuk kertas yang "keluar dari printer": `qris`, `strip`, `print-l`. Mockup lain punya animasi masuk sendiri (atribut `in` di `MOCKS`, `templates.ts`): dashboard naik+blur, gallery miring 3D, booth zoom-bounce, queue geser dari kanan, hub berputar, qris-l jatuh memantul, booth-l flip, gallery-l mengayun.
