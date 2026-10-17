@@ -1,6 +1,6 @@
 // Content Studio: Instagram decks (carousel / reel) rendered from HTML templates in STUDIODO's own visual language.
 
-export type Mockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
+export type Mockup = "none" | "dashboard" | "macbook" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
 export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
 export type Tone = "light" | "dark" | "indigo" | "mint" | "peach";
 

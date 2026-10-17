@@ -559,7 +559,7 @@ export const superadminApi = {
 };
 
 // ---- Konten Instagram (Content Studio) ----
-export type CsMockup = "none" | "dashboard" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
+export type CsMockup = "none" | "dashboard" | "macbook" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
 export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
 export type CsTone = "light" | "dark" | "indigo" | "mint" | "peach";
 export type CsSlide = {

@@ -190,8 +190,8 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .mbp .mbar{display:flex;align-items:center;gap:22px;height:34px;padding:0 22px;background:rgba(255,255,255,.28);backdrop-filter:blur(8px);color:#0b1020;font-size:17px;font-weight:600}
 .mbp .mbar b{font-weight:800}.mbp .mbar em{margin-left:auto;font-style:normal;font-weight:600}
 .mbp .apl{width:15px;height:18px;border-radius:50% 50% 45% 45%;background:#0b1020;margin-right:-4px}
-.mbp .mwb{height:590px;display:flex;justify-content:center;padding-top:14px}
-.mbp .mws{flex:none;width:900px;height:750px;transform:scale(.79);transform-origin:top center}
+.mbp .mwb{height:590px;display:flex;justify-content:center;padding-top:10px}
+.mbp .mws{flex:none;width:900px;height:750px;transform:scale(.88);transform-origin:top center}
 .mbp .win{width:900px;box-shadow:0 30px 60px rgba(0,0,10,.4);background:#fff;--fg:#0b1020;--muted:#5b6478;--soft:rgba(11,16,32,.06);--accent:#4f4fe8;--accent2:#9aa6ff}
 .mbp .mbase{position:relative;width:108%;height:24px;border-radius:2px 2px 26px 26px;background:linear-gradient(#e6e8ef,#aeb3c2);box-shadow:0 26px 40px rgba(11,16,32,.25)}
 .mbp .mbase::after{content:"";position:absolute;left:50%;top:0;width:150px;height:9px;margin-left:-75px;border-radius:0 0 12px 12px;background:linear-gradient(#9097aa,#c3c7d3)}
