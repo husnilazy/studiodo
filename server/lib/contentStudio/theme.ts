@@ -129,6 +129,7 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .stage:not([data-in="print"])::before,.stage:not([data-in="print"])::after{display:none}
 .stage:not([data-in="print"]) .paper{--s:calc(var(--s0,0s) + .8s);animation-duration:1.15s;animation-timing-function:cubic-bezier(.2,.9,.25,1);animation-fill-mode:both}
 .stage[data-in="rise"] .paper{animation-name:enRise}
+.stage[data-in="lift"] .paper{animation-name:enLift;animation-duration:1.3s}
 .stage[data-in="tilt"] .paper{animation-name:enTilt;animation-duration:1.3s}
 .stage[data-in="zoom"] .paper{animation-name:enZoom;animation-duration:1s}
 .stage[data-in="slide"] .paper{animation-name:enSlide}
@@ -137,6 +138,7 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .stage[data-in="flip"] .paper{animation-name:enFlip;animation-duration:1.3s}
 .stage[data-in="swing"] .paper{animation-name:enSwing;animation-duration:1.3s}
 @keyframes enRise{0%{opacity:0;transform:translateY(240px) scale(.9);filter:blur(14px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes enLift{0%{opacity:0;transform:perspective(1300px) translateY(190px) rotateX(38deg) scale(.88);transform-origin:bottom center}60%{opacity:1;transform:perspective(1300px) translateY(-14px) rotateX(-4deg) scale(1.02)}100%{opacity:1;transform:none}}
 @keyframes enTilt{0%{opacity:0;transform:perspective(1400px) rotateY(-62deg) translateX(-140px)}65%{opacity:1;transform:perspective(1400px) rotateY(8deg)}100%{opacity:1;transform:none}}
 @keyframes enZoom{0%{opacity:0;transform:scale(.55)}55%{opacity:1;transform:scale(1.07)}78%{transform:scale(.98)}100%{opacity:1;transform:none}}
 @keyframes enSlide{0%{opacity:0;transform:translateX(420px)}70%{opacity:1;transform:translateX(-18px)}100%{opacity:1;transform:none}}
@@ -179,6 +181,20 @@ p.body{font-size:34px;line-height:1.5;color:var(--muted);max-width:900px}
 .win .bar{height:58px;display:flex;align-items:center;gap:10px;padding:0 24px;background:var(--soft)}
 .win .bar i{width:14px;height:14px;border-radius:50%;background:#ff6b6b}.win .bar i:nth-child(2){background:#ffc14d}.win .bar i:nth-child(3){background:#42d392}
 .win .bar span{margin-left:18px;font-size:19px;font-weight:600;color:var(--muted)}
+/* ---- MacBook frame around the admin dashboard ---- */
+.mbp{width:900px;display:grid;justify-items:center}
+.mbp .lid{position:relative;width:100%;box-sizing:border-box;padding:16px 16px 18px;border-radius:34px 34px 10px 10px;background:#05070d;border:3px solid #c8ccd8;box-shadow:0 0 0 1px #8d92a3,0 40px 90px rgba(11,16,32,.35)}
+.mbp .cam{position:absolute;left:50%;top:5px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#1b2236;box-shadow:inset 0 0 0 2px #0e1424}
+.mbp .mscr{position:relative;height:640px;border-radius:14px;overflow:hidden;background:radial-gradient(120% 90% at 15% 0%,#c7ceff 0%,transparent 55%),radial-gradient(90% 80% at 100% 100%,#ffc7de 0%,transparent 60%),linear-gradient(160deg,#7f86ff,#4f4fe8 55%,#2a2a78)}
+.mbp .mscr::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.16) 0%,transparent 34%);pointer-events:none}
+.mbp .mbar{display:flex;align-items:center;gap:22px;height:34px;padding:0 22px;background:rgba(255,255,255,.28);backdrop-filter:blur(8px);color:#0b1020;font-size:17px;font-weight:600}
+.mbp .mbar b{font-weight:800}.mbp .mbar em{margin-left:auto;font-style:normal;font-weight:600}
+.mbp .apl{width:15px;height:18px;border-radius:50% 50% 45% 45%;background:#0b1020;margin-right:-4px}
+.mbp .mwb{height:590px;display:flex;justify-content:center;padding-top:14px}
+.mbp .mws{flex:none;width:900px;height:750px;transform:scale(.79);transform-origin:top center}
+.mbp .win{width:900px;box-shadow:0 30px 60px rgba(0,0,10,.4);background:#fff;--fg:#0b1020;--muted:#5b6478;--soft:rgba(11,16,32,.06);--accent:#4f4fe8;--accent2:#9aa6ff}
+.mbp .mbase{position:relative;width:108%;height:24px;border-radius:2px 2px 26px 26px;background:linear-gradient(#e6e8ef,#aeb3c2);box-shadow:0 26px 40px rgba(11,16,32,.25)}
+.mbp .mbase::after{content:"";position:absolute;left:50%;top:0;width:150px;height:9px;margin-left:-75px;border-radius:0 0 12px 12px;background:linear-gradient(#9097aa,#c3c7d3)}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:26px 26px 12px}
 .tile{padding:22px 24px;border-radius:24px;background:var(--soft)}
 .tile small{display:block;font-size:19px;font-weight:600;color:var(--muted)}

@@ -211,7 +211,7 @@ export function buildTriptychDoc(optsIn: TriptychOptions, live = false): string 
   const cards: Card[] = [
     // tile 1 (logo)
     { html: printer(0), w: 320, h: 590, tile: 0, x: 60, y: 790, sc: 0.95, rot: -4, enter: "fade", at: 1.1, bob: [6, 7, -1], z: 3 },
-    { html: mockDashboard(), w: 900, h: 750, tile: 0, x: 440, y: 925, sc: 0.52, rot: 5, enter: "rise", at: 2.0, bob: [8, 8, -3], z: 2 },
+    { html: mockDashboard(), w: 900, h: 694, tile: 0, x: 440, y: 925, sc: 0.52, rot: 5, enter: "rise", at: 2.0, bob: [8, 8, -3], z: 2 },
     { html: toast("Pembayaran diterima", "QRIS · Rp 35.000"), w: 400, h: 96, tile: 0, x: 55, y: 120, sc: 0.9, rot: -5, enter: "drop", at: 3.0, bob: [9, 6, -2], z: 4 },
     { html: qrCard(), w: 260, h: 320, tile: 0, x: 790, y: 70, sc: 0.8, rot: 9, enter: "pop", at: 2.6, bob: [8, 7, -4], z: 3, op: 0.95 },
     { html: scroller(), w: 176, h: 340, tile: 0, x: 985, y: 395, sc: 1, rot: 4, enter: "swing", at: 2.3, bob: [5, 9, -2], z: 2 },
@@ -223,7 +223,7 @@ export function buildTriptychDoc(optsIn: TriptychOptions, live = false): string 
     // tile 3 (positioning)
     { html: mockQris(false), w: 560, h: 800, tile: 2, x: 95, y: 925, sc: 0.5, rot: -4, enter: "rise", at: 3.0, bob: [7, 7, -3], z: 2 },
     { html: printer(2), w: 320, h: 590, tile: 2, x: 770, y: 855, sc: 0.8, rot: 4, enter: "fade", at: 3.3, bob: [6, 8, -4], z: 3 },
-    { html: mockDashboard(), w: 900, h: 750, tile: 2, x: 690, y: 36, sc: 0.33, rot: 5, enter: "drop", at: 3.6, bob: [7, 7, -1], z: 2 },
+    { html: mockDashboard(), w: 900, h: 694, tile: 2, x: 690, y: 36, sc: 0.33, rot: 5, enter: "drop", at: 3.6, bob: [7, 7, -1], z: 2 },
     { html: toast("Booth online", "3 dari 3 kiosk aktif"), w: 400, h: 96, tile: 2, x: 62, y: 105, sc: 0.74, rot: -3, enter: "drop", at: 4.0, bob: [8, 6, -3], z: 4 },
     { html: mockGallery(), w: 470, h: 880, tile: 2, x: 440, y: 985, sc: 0.4, rot: 2, enter: "pop", at: 3.7, bob: [6, 8, -2], z: 1 },
   ];

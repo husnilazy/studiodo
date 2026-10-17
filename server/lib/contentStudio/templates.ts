@@ -70,7 +70,7 @@ const photo = (i: number, images: string[] | undefined, extra = "") => {
 // ---- mockups ----
 export function mockDashboard(): string {
   const bars = [38, 56, 44, 70, 62, 88, 100];
-  return `<div class="mock win"><div class="bar"><i></i><i></i><i></i><span>STUDIODO · Dashboard</span></div>
+  return `<div class="mock mbp"><div class="lid"><i class="cam"></i><div class="mscr"><div class="mbar"><span class="apl"></span><b>STUDIODO</b><span>File</span><span>Edit</span><span>Tampilan</span><em>Sen 09.41</em></div><div class="mwb"><div class="mws"><div class="win"><div class="bar"><i></i><i></i><i></i><span>admin.studiodo.id · Dashboard</span></div>
     <div class="tiles">
       <div class="tile pop" ${D(0.5)}><small>Omzet hari ini</small><strong>Rp 1.250.000</strong><em>▲ 18%</em></div>
       <div class="tile pop" ${D(0.65)}><small>Sesi foto</small><strong><span class="count" style="--to:48;--d:.7s"></span></strong><em>▲ 12 sesi</em></div>
@@ -82,7 +82,7 @@ export function mockDashboard(): string {
       <div class="row sl" ${D(1.9)}><span class="av">${icon("qr", 24, 2.2)}</span>QRIS · Cetak tambahan<span class="amt" style="margin-left:auto">Rp 15.000</span><span class="tag" style="margin-left:14px">Lunas</span></div>
     </div>
     <div class="chart">${bars.map((h, i) => `<i class="grow" style="height:${h}%;--d:${0.9 + i * 0.08}s"></i>`).join("")}</div>
-    </div>`;
+    </div></div></div></div></div><div class="mbase"></div></div>`;
 }
 
 export function mockQris(reel: boolean): string {
@@ -196,8 +196,8 @@ function mockPrintL(images?: string[]): string {
 }
 
 const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) => string; fit: "crop" | "fit"; k: number; in: string }> = {
-  dashboard: { html: () => mockDashboard(), fit: "crop", k: 1, in: "rise" },
-  qris: { html: (_s, reel) => mockQris(reel), fit: "crop", k: 0.82, in: "print" },
+  dashboard: { html: () => mockDashboard(), fit: "fit", k: 1, in: "rise" },
+  qris: { html: (_s, reel) => mockQris(reel), fit: "crop", k: 0.82, in: "lift" },
   gallery: { html: (s) => mockGallery(s.images), fit: "crop", k: 0.8, in: "tilt" },
   booth: { html: (s) => mockBooth(s.images), fit: "crop", k: 0.82, in: "zoom" },
   strip: { html: (s) => mockStrip(s.images), fit: "fit", k: 0.45, in: "print" },

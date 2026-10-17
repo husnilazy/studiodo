@@ -123,7 +123,7 @@ export function buildTeaserDoc(optsIn: TeaserOptions, live = false): string {
     beat(2, card({ html: mockGallery(), w: 470, h: 880, x: 300, y: 500, sc: 1.05, rot: 2, enter: "rise", at: B0 + 2 * BL + 0.1, bob: [8, 8, -5], z: 3 })
       + card({ html: qrCard(), w: 260, h: 320, x: 50, y: 1230, sc: 0.85, rot: -7, enter: "pop", at: B0 + 2 * BL + 0.4, bob: [8, 7, -4], z: 4 })
       + card({ html: scroller(), w: 176, h: 340, x: 840, y: 1130, sc: 1.1, rot: 5, enter: "swing", at: B0 + 2 * BL + 0.3, bob: [6, 9, -2], z: 3 })),
-    beat(3, card({ html: mockDashboard(), w: 900, h: 750, x: 54, y: 560, sc: 1.08, rot: -2, enter: "rise", at: B0 + 3 * BL + 0.1, bob: [8, 8, -3], z: 3 })
+    beat(3, card({ html: mockDashboard(), w: 900, h: 694, x: 54, y: 560, sc: 1.08, rot: -2, enter: "rise", at: B0 + 3 * BL + 0.1, bob: [8, 8, -3], z: 3 })
       + card({ html: stat("Sesi foto hari ini", 48, "▲ 12 sesi"), w: 250, h: 150, x: 740, y: 1380, sc: 1.05, rot: 5, enter: "drop", at: B0 + 3 * BL + 0.45, bob: [8, 6.5, -1], z: 4 })
       + card({ html: toast("Booth online", "3 dari 3 kiosk aktif"), w: 400, h: 96, x: 50, y: 1420, sc: 0.95, rot: -4, enter: "drop", at: B0 + 3 * BL + 0.6, bob: [9, 6, -2], z: 4 })),
   ].join("");
@@ -134,7 +134,7 @@ export function buildTeaserDoc(optsIn: TeaserOptions, live = false): string {
     `<div class="tp-mask"><div class="tp-a" style="animation-name:tpword;animation-delay:${(S4 + 0.3 + i * 0.22).toFixed(2)}s;font-family:Sora;font-weight:700;font-size:${headSize}px;line-height:1.08;letter-spacing:-.035em;white-space:nowrap;${i === head.length - 1 ? "background:linear-gradient(100deg,#c9ccff,#ffc2dc 55%,#ffd8b8);-webkit-background-clip:text;background-clip:text;color:transparent" : ""}">${esc(ln)}</div></div>`).join("");
   const featLine = feats.map((f) => esc(f)).join(`<span style="opacity:.45;margin:0 .7em">·</span>`);
   const s4 = `
-    ${card({ html: mockDashboard(), w: 900, h: 750, x: -110, y: 70, sc: 0.42, rot: -8, enter: "drop", at: S4 + 0.4, bob: [7, 8, -2], z: 1, op: 0.55 })}
+    ${card({ html: mockDashboard(), w: 900, h: 694, x: -110, y: 70, sc: 0.42, rot: -8, enter: "drop", at: S4 + 0.4, bob: [7, 8, -2], z: 1, op: 0.55 })}
     ${card({ html: mockQris(false), w: 560, h: 800, x: 770, y: 80, sc: 0.34, rot: 8, enter: "swing", at: S4 + 0.6, bob: [7, 8, -5], z: 1, op: 0.55 })}
     ${card({ html: mockGallery(), w: 470, h: 880, x: 30, y: 1380, sc: 0.44, rot: -6, enter: "rise", at: S4 + 0.8, bob: [7, 8, -3], z: 1, op: 0.6 })}
     ${card({ html: printer(2), w: 320, h: 590, x: 860, y: 1440, sc: 0.62, rot: 5, enter: "fade", at: S4 + 1.0, bob: [6, 7, -1], z: 1, op: 0.75 })}
