@@ -257,6 +257,38 @@ export default function CameraSettings() {
           )}
         </div>
       </section>
+
+      <section className={`${sectionClass} xl:col-span-2`}>
+        <p className="eyebrow">PANDUAN</p>
+        <h2 className="font-display text-xl font-semibold">Kamera yang bisa dipakai &amp; cara menyambungkan</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { name: "Webcam / virtual camera", badge: "Paling mudah", steps: ["Colok webcam (atau nyalakan virtual camera seperti OBS / Camo / Iriun).", "Mode kamera = Webcam / virtual camera, lalu Simpan.", "Izinkan akses kamera bila diminta. Kualitas mengikuti webcam."] },
+            { name: "Canon DSLR / mirrorless via digiCamControl", badge: "Tether", steps: ["Pasang & buka digiCamControl, aktifkan webserver (File > Settings > Webserver).", "Sambungkan kamera lewat USB, nyalakan, mode M. Tutup EOS Utility.", "Mode kamera = Canon DSLR / tether bridge, URL http://127.0.0.1:5510, klik Cek koneksi."] },
+            { name: "Canon & Sony via bridge native", badge: "Tanpa digiCamControl", steps: ["Sambungkan kamera lewat USB dan nyalakan. Tutup EOS Utility / Imaging Edge / digiCamControl.", "Bridge native jalan otomatis di http://127.0.0.1:5514 bila terpasang.", "Mode kamera = tether, URL bridge 5514, klik Cek koneksi. Kamera juga muncul di daftar Pilih kamera."] },
+            { name: "Nikon", badge: "Belum tersedia", steps: ["Belum ada bridge Nikon di aplikasi ini.", "Sementara pakai Webcam / virtual camera, atau Nikon Webcam Utility sebagai virtual camera."] },
+          ].map((cam) => (
+            <details key={cam.name} className="group rounded-2xl border border-fg/10 bg-fg/[0.03] p-4" open={cam.badge === "Paling mudah"}>
+              <summary className="cursor-pointer list-none">
+                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">{cam.badge}</span>
+                <p className="mt-2 text-sm font-semibold">{cam.name}</p>
+              </summary>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-fg/60">
+                {cam.steps.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </details>
+          ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-fg/60">
+          <p className="font-semibold text-amber-600">Kalau kamera tidak terdeteksi</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <li>Pakai kabel USB data (bukan kabel charger saja) dan colok langsung ke port PC, bukan hub.</li>
+            <li>Hanya satu aplikasi yang boleh memakai kamera: tutup EOS Utility, Imaging Edge, atau digiCamControl yang tidak dipakai.</li>
+            <li>Matikan mode sleep / auto power-off kamera, lalu klik "Cari kamera" atau "Cek koneksi".</li>
+            <li>Atur eksposur dan lihat hasilnya langsung di tab "Eksposur &amp; Live view".</li>
+          </ul>
+        </div>
+      </section>
       </div>
       )}
       {camTab === "exposure" && (
