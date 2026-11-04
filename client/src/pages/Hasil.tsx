@@ -131,6 +131,8 @@ export default function Hasil() {
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
+  // Optional pop-up before the result (set in Admin > Flow Kiosk): may the photos be posted on the booth's social media?
+  const [consentAnswered, setConsentAnswered] = useState(false);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<"idle" | "ok" | "error">("idle");
@@ -402,6 +404,13 @@ export default function Hasil() {
     };
   }, [sessionId, additionalPayment, awaitingMedia, stopMotionState, printStage === "preparing" || printStage === "sending" || printStage === "printing"]);
 
+  const answerConsent = (value: boolean) => {
+    setConsent(value);
+    setConsentAnswered(true);
+    // Stored right away (not only on "Simpan biodata"), with whatever contact details exist so far since the endpoint replaces them.
+    if (sessionId) void api.updateCustomer(sessionId, { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: value }).catch(() => undefined);
+  };
+
   const saveCustomer = async () => {
     if (!sessionId || savingCustomer) return;
     setSavingCustomer(true);
@@ -565,6 +574,18 @@ export default function Hasil() {
   return (
     <ScreenLayoutBoundary screenKey="result">
     <div className="kinetic-page relative h-full">
+    {config.features.socialConsentPopup && !consentAnswered && !positionable?.editMode && photoUrls.length > 0 && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Izin unggah ke sosial media">
+        <motion.div initial={{ opacity: 0, scale: 0.94, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.25 }} className="glass-panel w-full max-w-md rounded-[2rem] p-7 text-center">
+          <h2 className="font-display text-2xl font-semibold leading-tight">Boleh fotomu kami unggah di sosial media?</h2>
+          <p className="mt-3 text-base text-muted">Hasil fotomu bisa kami posting di sosial media {config.brandName || "kami"}{config.hashtag ? ` (${config.hashtag.startsWith("#") ? config.hashtag : `#${config.hashtag}`})` : ""}. Kamu bisa memilih tidak, hasilmu tetap bisa diunduh.</p>
+          <div className="mt-6 flex flex-col gap-3">
+            <button type="button" onClick={() => answerConsent(true)} className="k-btn k-btn-accent k-btn-lg w-full">Ya, boleh</button>
+            <button type="button" onClick={() => answerConsent(false)} className="k-btn w-full">Tidak, terima kasih</button>
+          </div>
+        </motion.div>
+      </div>
+    )}
     <StepProgress current="result" />
     <div className={`flex h-full flex-col px-5 sm:px-10 ${wide ? "overflow-hidden pb-4 pt-[clamp(68px,11vh,112px)]" : "overflow-y-auto pb-8 pt-[4.75rem]"}`}>
       {/* The "new session" button lives at the TOP, next to the title — at the bottom of a scrolling page customers never found it. */}

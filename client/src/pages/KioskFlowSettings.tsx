@@ -22,6 +22,7 @@ function isValidStoredFlow(value: unknown): value is KioskFlowConfig {
 }
 
 export default function KioskFlowSettings() {
+  const socialPopupOn = useBoothConfig((s) => Boolean(s.config.features.socialConsentPopup));
   const [order, setOrder] = useState<KioskStepKey[]>(DEFAULT_KIOSK_FLOW.order as KioskStepKey[]);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(DEFAULT_KIOSK_FLOW.enabled);
   const [loading, setLoading] = useState(true);
@@ -101,6 +102,25 @@ export default function KioskFlowSettings() {
         <Link href="/admin/screen-builder/idle" className="shrink-0 rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:border-accent hover:text-fg">
           Desain
         </Link>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Pop-up izin unggah ke sosial media</p>
+          <p className="text-xs text-fg/40">Muncul sekali sebelum layar hasil: "Boleh fotomu diunggah di sosmed kami?" (Ya / Tidak). Jawabannya tersimpan di data sesi dan pelanggan.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const store = useBoothConfig.getState();
+            store.update({ features: { ...store.config.features, socialConsentPopup: !store.config.features.socialConsentPopup } });
+          }}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${socialPopupOn ? "bg-accent" : "bg-fg/15"}`}
+          aria-label="Aktifkan atau matikan pop-up izin sosial media"
+          aria-pressed={socialPopupOn}
+        >
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${socialPopupOn ? "left-[22px]" : "left-0.5"}`} />
+        </button>
       </div>
 
       <div className="mt-4 space-y-2">

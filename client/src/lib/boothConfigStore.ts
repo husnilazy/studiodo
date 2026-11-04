@@ -118,6 +118,8 @@ export interface BoothConfig {
     advancedPhotoEditor: boolean;
     stickers: boolean;
     customerForm: boolean;
+    /** Pop-up asked before the result screen: may the photos be posted on the booth's social media? Off by default. */
+    socialConsentPopup: boolean;
     shareQr: boolean;
     download: boolean;
     print: boolean;
@@ -252,6 +254,7 @@ const DEFAULT_CONFIG: BoothConfig = {
     advancedPhotoEditor: true,
     stickers: true,
     customerForm: true,
+    socialConsentPopup: false,
     shareQr: true,
     download: true,
     print: true,
