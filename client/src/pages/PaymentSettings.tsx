@@ -17,7 +17,10 @@ function Field({ label, children, className = "" }: { label: string; children: R
 // dari branding kiosk karena ini soal harga/transaksi, bukan tampilan. Sekarang
 // dirender di bawah Finance ("Database / CRM" tetap terpisah, itu soal kontak
 // customer, bukan uang).
-export default function PaymentSettings() {
+export default function PaymentSettings({ view = "all" }: { view?: "all" | "packages" | "event" | "gateway" }) {
+  const showEvent = view === "all" || view === "event";
+  const showPackages = view === "all" || view === "packages";
+  const showGateway = view === "all" || view === "gateway";
   const { config, update } = useBoothConfig();
   const set = <K extends keyof typeof config>(key: K, value: (typeof config)[K]) => update({ [key]: value } as any);
 
@@ -241,6 +244,7 @@ export default function PaymentSettings() {
 
   return (
     <div className="flex flex-col items-stretch gap-5">
+      {showEvent && (
       <section className={sectionClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -278,7 +282,9 @@ export default function PaymentSettings() {
           </div>
         </div>
       </section>
+      )}
 
+      {showPackages && (
       <section className={sectionClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -289,8 +295,8 @@ export default function PaymentSettings() {
           <span className="rounded-full border border-accent/30 px-3 py-1 text-xs text-accent">{packages.length} paket</span>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Buat paket baru</p>
+        <details className="group mt-5 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
+          <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-accent">+ Buat paket baru <span className="ml-1 normal-case tracking-normal text-fg/40 group-open:hidden">(klik untuk membuka form)</span></summary>
           <div className="mt-3 grid gap-4 md:grid-cols-[96px_minmax(0,1fr)]">
             <div>
               <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-xl border border-fg/10 bg-fg/[0.07]">
@@ -326,7 +332,7 @@ export default function PaymentSettings() {
             </div>
           </div>
           <button onClick={createPackage} disabled={!packageDraft.name.trim()} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">+ Tambah paket</button>
-        </div>
+        </details>
         {packageError && <p className="mt-3 text-sm text-red-300">{packageError}</p>}
         {packageNotice && <p className="mt-3 text-sm text-amber-300">{packageNotice}</p>}
 
@@ -439,7 +445,9 @@ export default function PaymentSettings() {
           {packages.length === 0 && <p className="text-sm text-fg/40">Belum ada paket. Tambahkan paket pertama di atas.</p>}
         </div>
       </section>
+      )}
 
+      {showGateway && (
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Platform pembayaran kiosk</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Pilih gateway yang dipakai kiosk saat customer membayar. Hanya satu yang aktif pada satu waktu.</p>
@@ -452,8 +460,9 @@ export default function PaymentSettings() {
           ))}
         </div>
       </section>
+      )}
 
-      {paymentStatus.paymentProvider === "doku" && (
+      {showGateway && paymentStatus.paymentProvider === "doku" && (
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Pembayaran DOKU</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Client ID & Secret Key ada di DOKU Back Office → Integration → API Keys. Secret Key disimpan terenkripsi dan tidak pernah dikirim kembali.</p>
@@ -523,7 +532,7 @@ export default function PaymentSettings() {
       </section>
       )}
 
-      {paymentStatus.paymentProvider === "xendit" && (
+      {showGateway && paymentStatus.paymentProvider === "xendit" && (
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Pembayaran QRIS Xendit</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">
