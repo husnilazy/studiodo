@@ -27,6 +27,11 @@ interface FrameOption {
   canvasHeight?: number;
 }
 
+// Photo windows in the frame thumbnails: soft pastel tiles numbered in shooting order (1, 2, 3 …), so the customer sees
+// where each photo will land. Colors repeat in this order for frames with more slots than colors.
+const SLOT_PASTELS = ["#FFD6E0", "#D6E8FF", "#D9F5E3", "#FFF1C9", "#E6DAFF", "#FFE0CC"];
+const SLOT_NUMBER_COLOR = "rgba(40, 36, 60, 0.55)";
+
 export default function PilihFrame() {
   const wide = useWideLandscape();
   const [, navigate] = useLocation();
@@ -177,13 +182,13 @@ export default function PilihFrame() {
       <div className={`relative overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-black/5 ${big ? "mx-auto shrink-0 shadow-2xl" : "w-full"}`} style={style}>
         {frame.slots && frame.slots.length > 0 ? (
           frame.slots.map((slot, i) => (
-            <div key={i} className="absolute flex items-center justify-center overflow-hidden bg-gradient-to-br from-accent/20 to-[#ffc8de]/60 text-accent/60" style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` }}>
-              {photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <Icon name="camera" className="h-6 w-6" />}
+            <div key={i} className="absolute flex items-center justify-center overflow-hidden" style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%`, backgroundColor: SLOT_PASTELS[i % SLOT_PASTELS.length], containerType: "size" }}>
+              {photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <span className="select-none font-display font-semibold leading-none" style={{ fontSize: "min(46cqmin, 4.5rem)", color: SLOT_NUMBER_COLOR }}>{i + 1}</span>}
             </div>
           ))
         ) : (
           <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-2 bg-slate-100 p-2">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="flex items-center justify-center rounded-md bg-gradient-to-br from-accent/20 to-[#ffc8de]/60 text-accent/60">{photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <Icon name="camera" className="h-5 w-5" />}</div>)}
+            {[0, 1, 2, 3].map((i) => <div key={i} className="flex items-center justify-center rounded-md" style={{ backgroundColor: SLOT_PASTELS[i % SLOT_PASTELS.length], containerType: "size" }}>{photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <span className="select-none font-display font-semibold leading-none" style={{ fontSize: "min(46cqmin, 3.5rem)", color: SLOT_NUMBER_COLOR }}>{i + 1}</span>}</div>)}
           </div>
         )}
         <img src={frame.imageUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-fill" draggable={false} />
