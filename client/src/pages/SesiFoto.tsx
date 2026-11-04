@@ -1478,7 +1478,7 @@ export default function SesiFoto() {
           {retakeBanner && <div className="absolute inset-x-0 top-[7.25rem] z-30">{retakeBanner}</div>}
 
           {/* Photo slots: left edge, vertical, scrolls if there are many */}
-          <div className="absolute bottom-24 left-3 top-[7.5rem] z-30 flex flex-col items-center justify-center gap-2 overflow-y-auto sm:left-5">
+          <div className="absolute bottom-24 left-3 top-[7.5rem] z-30 flex flex-col items-center gap-2 overflow-y-auto overscroll-contain [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto sm:left-5">
             {Array.from({ length: totalPhotos }).map((_, index) => renderSlot(index, "float"))}
           </div>
 
