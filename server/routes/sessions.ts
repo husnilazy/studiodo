@@ -21,6 +21,9 @@ import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib
 
 export const sessionsRouter = Router();
 
+// tenantId -> when the stale-pending cleanup last ran (see GET /admin/overview).
+const staleExpiryRanAt = new Map<string, number>();
+
 function resolveAssetUrl(value: unknown): string {
   if (!value) return "";
   const url = String(value ?? "");
@@ -416,9 +419,17 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   // Close out sessions that can never be paid so the payment log doesn't show them as "pending" forever.
-  await expireStalePendingSessions(tenantId).catch((error) => console.error("[sessions] gagal menutup sesi pending lama", error));
+  // Runs in the background (at most once a minute per tenant) instead of blocking the response: it used to be a
+  // full extra database round trip in front of every dashboard load and every 45s poll.
+  const lastExpiry = staleExpiryRanAt.get(tenantId) ?? 0;
+  if (Date.now() - lastExpiry > 60_000) {
+    staleExpiryRanAt.set(tenantId, Date.now());
+    expireStalePendingSessions(tenantId).catch((error) => console.error("[sessions] gagal menutup sesi pending lama", error));
+  }
 
-  const [metricsRow] = await db.select({
+  // The three queries are independent — run them together (one network round trip to the database instead of three in a row).
+  const [[metricsRow], trafficRows, rawRows] = await Promise.all([
+    db.select({
     totalSessions: sql<number>`count(*)::int`,
     paidSessions: sql<number>`count(*) filter (where ${sessions.paymentStatus} = 'success')::int`,
     revenue: sql<number>`coalesce(sum(${sessions.totalAmount}) filter (where ${sessions.paymentStatus} = 'success'), 0)`,
@@ -426,18 +437,18 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
     videos: sql<number>`count(*) filter (where ${sessions.videoUrl} is not null)::int`,
     gifs: sql<number>`count(*) filter (where ${sessions.gifUrl} is not null)::int`,
     customers: sql<number>`count(distinct coalesce(nullif(${sessions.customerWhatsapp}, ''), nullif(${sessions.customerEmail}, '')))::int`,
-  }).from(sessions).where(eq(sessions.tenantId, tenantId));
+  }).from(sessions).where(eq(sessions.tenantId, tenantId)),
 
-  const trafficRows = await db.select({
+    db.select({
     date: sql<string>`to_char(${sessions.createdAt}, 'YYYY-MM-DD')`,
     visits: sql<number>`count(*)::int`,
     revenue: sql<number>`coalesce(sum(${sessions.totalAmount}) filter (where ${sessions.paymentStatus} = 'success'), 0)`,
   }).from(sessions)
     .where(and(eq(sessions.tenantId, tenantId), gte(sessions.createdAt, since)))
     .groupBy(sql`to_char(${sessions.createdAt}, 'YYYY-MM-DD')`)
-    .orderBy(sql`to_char(${sessions.createdAt}, 'YYYY-MM-DD')`);
+    .orderBy(sql`to_char(${sessions.createdAt}, 'YYYY-MM-DD')`),
 
-  const rawRows = await db.select({
+    db.select({
     id: sessions.id,
     paymentMethod: sessions.paymentMethod,
     paymentStatus: sessions.paymentStatus,
@@ -456,7 +467,8 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
     driveFolderId: sessions.driveFolderId,
     drivePhotoIds: sessions.drivePhotoIds,
     driveStripId: sessions.driveStripId,
-  }).from(sessions).where(and(eq(sessions.tenantId, tenantId), gte(sessions.createdAt, since))).orderBy(sessions.createdAt);
+  }).from(sessions).where(and(eq(sessions.tenantId, tenantId), gte(sessions.createdAt, since))).orderBy(sessions.createdAt),
+  ]);
   // photoUrls/stripUrl are thumbnail/preview URLs (see uploadSessionPhoto
   // above) — fine for display, but the Media Library's "Download" button
   // needs the real full-quality file. driveLinks carries the per-asset

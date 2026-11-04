@@ -143,7 +143,35 @@ async function offloadDataUris(path: string, body: string): Promise<string> {
   return JSON.stringify(await walk(parsed));
 }
 
+// Admin list screens (packages, frames, kiosk keys, vouchers, withdrawals) re-fetched the same data on every tab switch,
+// and each request is a full round trip to the cloud server. Reads are now reused for a few seconds and identical requests
+// that are already in flight are shared; ANY write clears the cache, so a saved change is never hidden behind stale data.
+const READ_CACHE_TTL_MS = 15_000;
+const CACHEABLE_READS = /^\/(packages|frames|kiosk-keys|vouchers|withdrawals)(\/|\?|$)/;
+const readCache = new Map<string, { at: number; value: unknown }>();
+const readInFlight = new Map<string, Promise<unknown>>();
+
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    readCache.clear();
+    readInFlight.clear();
+  } else if (adminToken && !options?.body && CACHEABLE_READS.test(path)) {
+    const key = `${adminToken.slice(-12)}|${path}`;
+    const hit = readCache.get(key);
+    if (hit && Date.now() - hit.at < READ_CACHE_TTL_MS) return hit.value as T | undefined;
+    const pending = readInFlight.get(key);
+    if (pending) return pending as Promise<T | undefined>;
+    const promise = requestUncached<T>(path, options)
+      .then((value) => { readCache.set(key, { at: Date.now(), value }); return value; })
+      .finally(() => readInFlight.delete(key));
+    readInFlight.set(key, promise);
+    return promise;
+  }
+  return requestUncached<T>(path, options);
+}
+
+async function requestUncached<T>(path: string, options?: RequestInit): Promise<T | undefined> {
   if (adminToken && typeof options?.body === "string" && options.body.length >= OFFLOAD_MIN_CHARS && OFFLOAD_PATHS.test(path)) {
     options = { ...options, body: await offloadDataUris(path, options.body) };
   }
