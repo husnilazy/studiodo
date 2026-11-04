@@ -22,6 +22,7 @@ import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
 import { CountdownOverlay, FilterControl, ShutterButton, SlotFullPopup } from "@/components/kiosk/CaptureUI";
 import { resolveCaptureLayout, resolveKioskStyle } from "@/lib/kioskStyles";
+import { clampZoom, cropBlobCenter, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "@/lib/zoomCrop";
 
 // Sony Imaging Edge Webcam / virtual cam warm-up guard
 const CAMERA_WARMUP_MS = 2800;
@@ -171,6 +172,11 @@ export default function SesiFoto() {
   const slotGifFramesRef = useRef<(GifFrame[] | null)[]>([]);
   const slotVideoBlobsRef = useRef<(Blob | null)[]>([]);
   const captureLockRef = useRef(false);
+  // Customer-facing capture options for this session: digital zoom, and auto vs manual shutter (starts from the booth setting).
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
+  const [autoMode, setAutoMode] = useState(Boolean(config.autoCaptureEnabled));
   // Clips are recorded while the countdown runs, so the last one is still going when the session completes —
   // combine waits on these before it builds the GIF/video, and slotClipMsRef remembers each clip's length.
   const pendingClipsRef = useRef<Promise<void>[]>([]);
@@ -500,17 +506,22 @@ export default function SesiFoto() {
           console.warn("Capture tether pertama gagal, mencoba sekali lagi", firstError);
           blob = await captureFromTether({ bridgeUrl: config.tetherBridgeUrl, slotIndex: currentSlot, filter, orientation });
         }
+        // The camera shoots the whole frame; crop it to what the zoomed live view showed.
+        blob = await cropBlobCenter(blob, zoomRef.current);
       } finally {
         setCapturing(false);
       }
     } else {
       const video = videoRef.current;
       if (!video) return false;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const zoomNow = zoomRef.current;
+      const cropW = Math.max(1, Math.round(video.videoWidth / zoomNow));
+      const cropH = Math.max(1, Math.round(video.videoHeight / zoomNow));
+      canvas.width = cropW;
+      canvas.height = cropH;
       const ctx = canvas.getContext("2d")!;
       ctx.filter = FILTER_CSS[filter];
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, Math.round((video.videoWidth - cropW) / 2), Math.round((video.videoHeight - cropH) / 2), cropW, cropH, 0, 0, cropW, cropH);
       blob = await new Promise((resolve, reject) =>
         canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Gagal membuat foto"))), "image/jpeg", 0.92)
       );
@@ -1137,7 +1148,7 @@ export default function SesiFoto() {
     const countdownMs = config.countdownSeconds * 1000;
     const clipSlot = currentSlot;
     const startDelay = Math.max(
-      config.autoCaptureEnabled ? 0 : Math.min(CLIP_MANUAL_START_DELAY_MS, Math.max(0, countdownMs - CLIP_MIN_PRE_MS)),
+      autoMode ? 0 : Math.min(CLIP_MANUAL_START_DELAY_MS, Math.max(0, countdownMs - CLIP_MIN_PRE_MS)),
       countdownMs - CLIP_MAX_PRE_MS,
     );
     const clipDuration = countdownMs - startDelay + CLIP_TAIL_MS;
@@ -1172,12 +1183,12 @@ export default function SesiFoto() {
   // right after a countdown ends where countdown is already null but the
   // previous capture() hasn't resolved yet, so this never double-fires.
   useEffect(() => {
-    if (!config.autoCaptureEnabled || isEditMode) return;
+    if (!autoMode || isEditMode) return;
     if (!previewReady || (sessionComplete && retakeTarget === null) || countdown !== null || finishingEarly) return;
     const timer = window.setTimeout(() => startCountdown(), 2500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.autoCaptureEnabled, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
+  }, [autoMode, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
 
   const retake = (slot: number) => {
     if (countdown !== null || capturing || captureLockRef.current) return;
@@ -1225,6 +1236,7 @@ export default function SesiFoto() {
   const shutterDisabled = !previewReady || countdown !== null || (sessionComplete && retakeTarget === null);
 
   // The live picture and everything that lives ON it (loading, errors, flash). `fit` = how the picture fills the box.
+  const liveTransform = zoom === 1 && !mirrorLiveView ? undefined : `scale(${mirrorLiveView ? -zoom : zoom}, ${zoom})`;
   const liveSurface = (fit: "cover" | "contain") => (
     <>
       {!previewReady && !cameraError && (
@@ -1246,12 +1258,12 @@ export default function SesiFoto() {
         </div>
       )}
       {cameraMode === "tether" ? (
-        <div className="relative h-full w-full bg-black">
+        <div className="relative h-full w-full overflow-hidden bg-black">
           <img
             src={liveViewUrl ?? undefined}
             alt="Live view kamera Canon"
             className={`h-full w-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
-            style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
+            style={{ transform: liveTransform, transition: "transform 0.2s ease-out" }}
             onLoad={(event) => {
               liveViewFailStreakRef.current = 0;
               if (liveViewLost) setLiveViewLost(false);
@@ -1279,7 +1291,7 @@ export default function SesiFoto() {
           muted
           onLoadedMetadata={(event) => reportLiveAspect(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
           className="h-full w-full object-cover"
-          style={{ filter: FILTER_CSS[filter], transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
+          style={{ filter: FILTER_CSS[filter], transform: liveTransform, transition: "transform 0.2s ease-out" }}
         />
       )}
       {flash && <div className="pointer-events-none absolute inset-0 z-40 animate-flash bg-white" />}
@@ -1293,6 +1305,15 @@ export default function SesiFoto() {
         </div>
       )}
     </>
+  );
+
+  const zoomLocked = countdown !== null || capturing;
+  const zoomControl = (
+    <div className="flex items-center gap-0.5 rounded-full border border-white/25 bg-black/40 p-1 text-white backdrop-blur-md" role="group" aria-label="Zoom kamera">
+      <button type="button" onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))} disabled={zoomLocked || zoom <= ZOOM_MIN} aria-label="Zoom out" className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition hover:bg-white/15 disabled:opacity-35">−</button>
+      <button type="button" onClick={() => setZoom(1)} disabled={zoomLocked || zoom === 1} aria-label="Reset zoom" title="Reset zoom" className="min-w-[3rem] px-1 text-center text-xs font-semibold tabular-nums disabled:opacity-100">{zoom.toFixed(2).replace(/\.?0+$/, "")}×</button>
+      <button type="button" onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))} disabled={zoomLocked || zoom >= ZOOM_MAX} aria-label="Zoom in" className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition hover:bg-white/15 disabled:opacity-35">+</button>
+    </div>
   );
 
   const mirrorButton = (
@@ -1443,7 +1464,14 @@ export default function SesiFoto() {
 
   const statusChips = (
     <div className="flex flex-wrap items-center gap-2">
-      {config.autoCaptureEnabled && <span className="k-chip k-chip-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Otomatis</span>}
+      <div className="flex items-center rounded-full border border-fg/15 bg-black/30 p-0.5 text-xs font-semibold backdrop-blur-md" role="group" aria-label="Mode jepret">
+        {([[true, "Otomatis"], [false, "Manual"]] as const).map(([value, label]) => (
+          <button key={label} type="button" onClick={() => setAutoMode(value)} disabled={countdown !== null || capturing} aria-pressed={autoMode === value} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition disabled:opacity-60 ${autoMode === value ? "bg-accent text-on-accent shadow" : "text-fg/70 hover:text-fg"}`}>
+            {value && autoMode && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+            {label}
+          </button>
+        ))}
+      </div>
       <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />{Math.min(currentSlot + 1, totalPhotos)} / {totalPhotos}</span>
       {eventTimerEnabled && (
         <span className={`k-chip !text-sm ${remainingSeconds < 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`}>
@@ -1473,7 +1501,7 @@ export default function SesiFoto() {
 
           <header className="absolute inset-x-3 top-[4.25rem] z-30 flex items-start justify-between gap-2 sm:inset-x-5">
             <div className="min-w-0">{statusChips}</div>
-            {mirrorButton}
+            <div className="flex items-center gap-2">{zoomControl}{mirrorButton}</div>
           </header>
           {retakeBanner && <div className="absolute inset-x-0 top-[7.25rem] z-30">{retakeBanner}</div>}
 
@@ -1529,7 +1557,7 @@ export default function SesiFoto() {
               className="relative max-h-full max-w-full overflow-hidden rounded-[1.3rem]"
             >
               {liveSurface("contain")}
-              <div className="absolute right-3 top-3 z-30">{mirrorButton}</div>
+              <div className="absolute right-3 top-3 z-30 flex items-center gap-2">{zoomControl}{mirrorButton}</div>
               {retakeBanner}
               <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} focusing={focusing} styleId={styleId} />
               {filterControl("bottom-4 left-3")}
