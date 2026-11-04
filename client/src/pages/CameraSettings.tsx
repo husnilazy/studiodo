@@ -97,7 +97,7 @@ export default function CameraSettings() {
 
   const [bridgeHealth, setBridgeHealth] = useState<TetherBridgeHealth | null>(null);
   const [bridgeChecking, setBridgeChecking] = useState(false);
-  const [camTab, setCamTab] = useState<"setup" | "exposure" | "live">("setup");
+  const [camTab, setCamTab] = useState<"setup" | "exposure">("setup");
 
   // Tests the DRAFT's url/mode — not yet-saved — so the admin can validate a
   // pending change before committing it with Simpan.
@@ -150,7 +150,7 @@ export default function CameraSettings() {
   };
 
   const tetherReady = config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false);
-  const camTabs = [{ id: "setup", label: "Kamera & Sesi" }, { id: "exposure", label: "Eksposur" }, { id: "live", label: "Live view" }] as const;
+  const camTabs = [{ id: "setup", label: "Kamera & Sesi" }, { id: "exposure", label: "Eksposur & Live view" }] as const;
 
   return (
     <div className="flex flex-col items-stretch gap-4">
@@ -259,8 +259,12 @@ export default function CameraSettings() {
       </section>
       </div>
       )}
-      {camTab === "exposure" && <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />}
-      {camTab === "live" && <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />}
+      {camTab === "exposure" && (
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />
+          <div className="xl:sticky xl:top-0 xl:only:col-span-full"><AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} /></div>
+        </div>
+      )}
     </div>
   );
 }
