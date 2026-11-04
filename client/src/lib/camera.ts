@@ -198,3 +198,33 @@ export async function checkTetherBridge(bridgeUrl: string): Promise<TetherBridge
     return { ok: false, error: error instanceof Error ? error.message : "Bridge tidak terjangkau" };
   }
 }
+
+export interface DetectedCamera {
+  url: string;
+  /** Human readable, e.g. "Canon EOS 1300D (Canon SDK)". */
+  name: string;
+  engine: "native" | "digicam";
+  health: TetherBridgeHealth;
+}
+
+const BRIDGE_CANDIDATES: { url: string; engine: "native" | "digicam" }[] = [
+  { url: "http://127.0.0.1:5514", engine: "native" },
+  { url: "http://localhost:5510", engine: "digicam" },
+];
+
+/** Probes the known bridges on this PC and returns the ones that currently have a camera connected. */
+export async function detectTetherCameras(): Promise<DetectedCamera[]> {
+  const results = await Promise.all(
+    BRIDGE_CANDIDATES.map(async (candidate) => ({ candidate, health: await checkTetherBridge(candidate.url) })),
+  );
+  return results
+    .filter(({ health }) => health.ok && health.cameraConnected !== false && (health.engine ? health.state !== "asleep" && health.engine !== "none" : health.digicamReachable))
+    .map(({ candidate, health }) => ({
+      url: candidate.url,
+      engine: candidate.engine,
+      health,
+      name: candidate.engine === "native"
+        ? `${health.camera || "Kamera"} (${health.engine === "sony" ? "Sony" : "Canon"} SDK)`
+        : `Kamera via digiCamControl`,
+    }));
+}

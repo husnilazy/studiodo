@@ -19,12 +19,24 @@ function getBridgePath() {
   return fs.existsSync(dev) ? dev : packaged || null;
 }
 
-// Sesi EDSDK/Sony memegang kamera secara eksklusif — kalau bridge native ikut jalan
-// otomatis, digiCamControl di kiosk yang sama tidak bisa memakai kamera. Sampai bridge
-// ini terverifikasi di kamera asli, ia hanya jalan bila CANON_BRIDGE_ENABLED=true.
+// Sesi EDSDK/Sony memegang kamera secara eksklusif. Bridge native sekarang jalan otomatis
+// (supaya kamera terdeteksi tanpa setup), kecuali dimatikan lewat CANON_BRIDGE_ENABLED=false
+// atau digiCamControl sedang berjalan di PC ini (ia sudah memegang kamera).
+function isProcessRunning(imageName) {
+  try {
+    const out = require("child_process").execFileSync("tasklist", ["/FI", `IMAGENAME eq ${imageName}`, "/NH"], { encoding: "utf8", windowsHide: true, timeout: 4000 });
+    return out.toLowerCase().includes(imageName.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function startCanonBridge() {
-  if (process.env.CANON_BRIDGE_ENABLED !== "true") {
-    return { available: false, reason: "Bridge native nonaktif (set CANON_BRIDGE_ENABLED=true)" };
+  if (process.env.CANON_BRIDGE_ENABLED === "false") {
+    return { available: false, reason: "Bridge native dimatikan (CANON_BRIDGE_ENABLED=false)" };
+  }
+  if (process.platform === "win32" && process.env.CANON_BRIDGE_ENABLED !== "true" && isProcessRunning("CameraControl.exe")) {
+    return { available: false, reason: "digiCamControl sedang berjalan dan memegang kamera" };
   }
   const executable = getBridgePath();
   if (!executable || !fs.existsSync(executable)) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
-import { checkTetherBridge, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth } from "@/lib/camera";
+import { checkTetherBridge, detectTetherCameras, startTetherLiveView, stopTetherLiveView, type DetectedCamera, type TetherBridgeHealth } from "@/lib/camera";
 import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
@@ -118,8 +118,60 @@ export default function CameraSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.cameraMode, draft.tetherBridgeUrl]);
 
+  // Auto-detect: look for connected cameras on this PC. If the saved bridge has no
+  // camera but another one does, switch to it automatically.
+  const [detected, setDetected] = useState<DetectedCamera[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const detectNow = async (autoPick: boolean) => {
+    setDetecting(true);
+    const found = await detectTetherCameras();
+    setDetected(found);
+    setDetecting(false);
+    if (autoPick && found.length > 0 && !found.some((camera) => camera.url === config.tetherBridgeUrl)) {
+      const pick = found[0];
+      set("cameraMode", "tether");
+      set("tetherBridgeUrl", pick.url);
+      update({ cameraMode: "tether", tetherBridgeUrl: pick.url });
+      pushToast({ type: "success", title: "Kamera terdeteksi", sub: pick.name });
+    }
+  };
+  useEffect(() => {
+    void detectNow(true);
+    const interval = setInterval(() => void detectNow(false), 6000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const chooseCamera = (camera: DetectedCamera) => {
+    set("cameraMode", "tether");
+    set("tetherBridgeUrl", camera.url);
+    update({ cameraMode: "tether", tetherBridgeUrl: camera.url });
+    pushToast({ type: "success", title: "Kamera dipilih", sub: camera.name });
+  };
+
   return (
     <div className="flex flex-col items-stretch gap-5">
+      <section className={sectionClass}>
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="eyebrow">KAMERA TERSAMBUNG</p><h2 className="font-display text-xl font-semibold">Pilih kamera</h2></div>
+          <button type="button" onClick={() => void detectNow(true)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg">{detecting ? "Mencari..." : "Cari kamera"}</button>
+        </div>
+        {detected.length === 0 ? (
+          <p className="mt-3 text-sm text-fg/50">Belum ada kamera terdeteksi. Sambungkan kamera lewat USB, nyalakan, dan tutup EOS Utility / Imaging Edge. Pencarian diulang otomatis tiap beberapa detik; webcam tetap bisa dipakai lewat Mode kamera = Webcam.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {detected.map((camera) => {
+              const active = camera.url === config.tetherBridgeUrl && config.cameraMode === "tether";
+              return (
+                <li key={camera.url} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3">
+                  <div><p className="text-sm font-semibold">{camera.name}</p><p className="text-xs text-fg/40">{camera.url}</p></div>
+                  {active ? <span className="rounded-full border border-emerald-300/30 px-2 py-1 text-[0.625rem] text-emerald-200">DIPAKAI</span> : <button type="button" onClick={() => chooseCamera(camera)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Pakai</button>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Sesi Foto & Kamera</h2>
         <div className="mt-4 space-y-4">
