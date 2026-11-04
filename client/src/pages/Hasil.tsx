@@ -564,7 +564,7 @@ export default function Hasil() {
         <Positionable id="heading" type="text" label="Judul">
           <div>
             <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Hasil Foto"}</h1>
-            <p className="mt-1 text-base text-muted">Scan QR untuk mengunduh hasil.</p>
+            <p className="k-subtitle mt-1 text-base text-muted">Scan QR untuk mengunduh hasil.</p>
           </div>
         </Positionable>
         <div className="flex items-center gap-4">
@@ -579,7 +579,7 @@ export default function Hasil() {
         {/* Result card: only the finished frame, plus the GIF/video when the package has one (tabs). */}
         <section className="glass-panel flex min-h-0 min-w-0 flex-col rounded-[2rem] p-5">
           <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
+            <div className="k-desc flex items-center gap-2.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
               <h3 className="font-display text-lg font-semibold">Hasil Fotomu</h3>
             </div>
@@ -688,7 +688,7 @@ export default function Hasil() {
 
               <div className="min-w-0 text-center">
                 <h3 className="font-display text-2xl font-semibold leading-tight">Scan &amp; unduh</h3>
-                <p className="mt-1 text-[15px] leading-snug text-fg/60">Arahkan kamera HP ke kode ini.</p>
+                <p className="k-desc mt-1 text-[15px] leading-snug text-fg/60">Arahkan kamera HP ke kode ini.</p>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   {[
                     { icon: "camera", label: `${photoUrls.filter(Boolean).length} foto`, show: true },

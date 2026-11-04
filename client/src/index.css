@@ -556,6 +556,22 @@ html[data-admin-theme="dark"] .brand-logo-white { display: block; }
 [data-kiosk-style="minimal"] .eyebrow { letter-spacing: 0.22em; }
 [data-kiosk-style="minimal"] .k-drift { display: none; }
 
+/* Minimalis: only what the customer needs to act. Descriptions, sub-headings, hints, illustrations and the crew's
+   sync badge are dropped; the step bar shrinks to quiet dots with just the current step labelled. */
+[data-kiosk-style="minimal"] .k-subtitle,
+[data-kiosk-style="minimal"] .k-hint,
+[data-kiosk-style="minimal"] .k-desc,
+[data-kiosk-style="minimal"] .k-illus,
+[data-kiosk-style="minimal"] .k-sync-badge,
+[data-kiosk-style="minimal"] .kinetic-heading .eyebrow { display: none; }
+[data-kiosk-style="minimal"] .step-progress ol { background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: 0; }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child { padding: 0; background: transparent; box-shadow: none; color: var(--kiosk-muted, currentColor); }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child > span:first-child { width: 0.4rem; height: 0.4rem; font-size: 0; background: currentColor; opacity: 0.35; }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child > span:first-child svg { display: none; }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child.bg-accent { color: var(--kiosk-text); }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child.bg-accent > span:first-child { opacity: 1; }
+[data-kiosk-style="minimal"] .step-progress li > span:first-child.bg-accent > span:last-child { font-size: 0.8rem; letter-spacing: 0.02em; }
+
 /* ---- Sinematik: dark glass over the photo, glowing accent ---- */
 [data-kiosk-style="immersive"] .kinetic-card,
 [data-kiosk-style="immersive"] .glass-panel {

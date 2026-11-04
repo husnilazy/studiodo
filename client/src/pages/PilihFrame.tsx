@@ -223,7 +223,7 @@ export default function PilihFrame() {
           <>
             {/* Category chips */}
             {categoryGroups.length > 1 && (
-              <div className="flex shrink-0 justify-center gap-2 overflow-x-auto px-6 pb-3">
+              <div className="flex shrink-0 gap-2 overflow-x-auto px-6 pb-3 [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                 {[{ key: "__all__", label: `Semua (${options.length})` }, ...categoryGroups.map((g) => ({ key: g.key, label: `${g.label} (${g.items.length})` }))].map((chip) => (
                   <button key={chip.key} type="button" onClick={() => setActiveCategory(chip.key)} className={`k-chip shrink-0 !px-5 !py-2.5 !text-sm ${activeCategory === chip.key ? "!border-transparent !bg-fg !text-canvas" : ""}`}>
                     {chip.label}
@@ -280,7 +280,7 @@ export default function PilihFrame() {
                     <div className="flex flex-col items-center gap-3 px-6 text-center">
                       <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent/10 text-accent"><Icon name="frame" className="h-8 w-8" /></span>
                       <p className="font-display text-xl font-semibold">{noFrameSelected ? "Tanpa frame" : "Pilih frame di sebelah kiri"}</p>
-                      <p className="text-sm text-muted">{noFrameSelected ? "Tanpa frame." : "Pilih frame untuk melihat pratinjau."}</p>
+                      <p className="k-desc text-sm text-muted">{noFrameSelected ? "Tanpa frame." : "Pilih frame untuk melihat pratinjau."}</p>
                     </div>
                   )}
                 </div>

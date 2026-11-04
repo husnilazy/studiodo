@@ -147,14 +147,17 @@ export default function PreviewFoto() {
   // Which tabs exist follows the tenant's feature switches (these toggles used to do nothing on this screen).
   const tabs = useMemo(() => {
     const list: { key: Tab; label: string; icon: string }[] = [];
-    if (features.stickers) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
+    // Minimalis: the filter comes first and opens by default; stickers stay one tap away instead of filling the screen.
+    const minimal = config.kioskStyle === "minimal";
+    if (features.stickers && !minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.filters) list.push({ key: "filter", label: "Filter", icon: "palette" });
+    if (features.stickers && minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.advancedPhotoEditor) list.push({ key: "warna", label: "Warna", icon: "sliders" });
     if (template) list.push({ key: "susunan", label: "Susunan", icon: "layers" });
     if (features.frameChoice && template) list.push({ key: "frame", label: "Frame", icon: "frame" });
     return list;
-  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template]);
-  const [tab, setTab] = useState<Tab>(features.stickers ? "stiker" : "filter");
+  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template, config.kioskStyle]);
+  const [tab, setTab] = useState<Tab>(features.stickers && config.kioskStyle !== "minimal" ? "stiker" : "filter");
   const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
   // ---- stickers -------------------------------------------------------------------------------------------
@@ -393,7 +396,7 @@ export default function PreviewFoto() {
               {/* ---- Filter ---- */}
               {activeTab === "filter" && (
                 <div className="flex flex-col gap-4">
-                  <p className="text-xs text-muted">Filter berlaku untuk semua foto.</p>
+                  <p className="k-desc text-xs text-muted">Filter berlaku untuk semua foto.</p>
                   <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5rem, 1fr))" }}>
                     {(Object.keys(FILTER_LABELS) as CameraFilter[]).map((key) => (
                       <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key} className={`rounded-2xl border p-1.5 text-center transition ${filter === key ? "border-accent bg-accent/10 shadow-md" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}>

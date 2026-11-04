@@ -387,18 +387,18 @@ export default function Pembayaran() {
               <button type="button" onClick={startQris} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="qr" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Bayar dengan QRIS</span>
-                <span className="text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
+                <span className="k-desc text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
               </button>
               <button type="button" onClick={() => setMode("voucher")} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="ticket" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Pakai voucher</span>
-                <span className="text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
+                <span className="k-desc text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
               </button>
               {cashPaymentEnabled && (
                 <button type="button" onClick={() => { setCashRedeemed(false); setMode("voucher"); }} disabled={!sessionReady} className={methodCard}>
                   <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 transition group-hover:scale-110"><Icon name="cash" className="h-8 w-8" /></span>
                   <span className="font-display text-2xl font-semibold">Bayar tunai</span>
-                  <span className="text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
+                  <span className="k-desc text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
                 </button>
               )}
               {offlineModeEnabled && !isBrowserOnline() && (

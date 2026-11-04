@@ -61,7 +61,7 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
           {pkg.hasGif && <Feature icon="gif" label="GIF animasi" />}
           {pkg.hasVideo && <Feature icon="video" label="Video singkat" />}
           {pkg.hasStopMotion && <Feature icon="video" label="Video stop motion" />}
-          <Feature icon="download" label="Unduh lewat QR code" />
+          <span className="k-desc contents"><Feature icon="download" label="Unduh lewat QR code" /></span>
         </ul>
 
         {/* Extras are shown up front (they used to hide behind a collapsed row that customers never opened) */}
