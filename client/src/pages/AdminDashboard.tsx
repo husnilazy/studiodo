@@ -798,7 +798,7 @@ export default function AdminDashboard() {
 
   const currentSection = sections.find((item) => item.id === section)!;
   // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
-  const fitSection = section === "media" || section === "crm" || section === "finance";
+  const fitSection = section === "media" || section === "crm" || section === "finance" || section === "kiosk";
   const navButton = (item: (typeof sections)[number]) => (
     <button
       key={item.id}
@@ -898,8 +898,8 @@ export default function AdminDashboard() {
           {section === "control" && <AdminPlaceholder />}
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
-            <div className="space-y-6">
-              <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori pengaturan kiosk">
+            <div className="flex h-full min-h-0 flex-col gap-3">
+              <nav className="flex shrink-0 gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori pengaturan kiosk">
                 {KIOSK_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
@@ -911,9 +911,11 @@ export default function AdminDashboard() {
                   </button>
                 ))}
               </nav>
-              {kioskSubtab === "keys" && <KioskKeys />}
-              {kioskSubtab === "camera" && <CameraSettings />}
-              {kioskSubtab === "printer" && <PrinterSettings />}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3">
+                {kioskSubtab === "keys" && <KioskKeys />}
+                {kioskSubtab === "camera" && <CameraSettings />}
+                {kioskSubtab === "printer" && <PrinterSettings />}
+              </div>
             </div>
           )}
           {section === "flow" && <KioskFlowSettings />}

@@ -97,6 +97,7 @@ export default function CameraSettings() {
 
   const [bridgeHealth, setBridgeHealth] = useState<TetherBridgeHealth | null>(null);
   const [bridgeChecking, setBridgeChecking] = useState(false);
+  const [camTab, setCamTab] = useState<"setup" | "exposure" | "live">("setup");
 
   // Tests the DRAFT's url/mode — not yet-saved — so the admin can validate a
   // pending change before committing it with Simpan.
@@ -148,8 +149,18 @@ export default function CameraSettings() {
     pushToast({ type: "success", title: "Kamera dipilih", sub: camera.name });
   };
 
+  const tetherReady = config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false);
+  const camTabs = [{ id: "setup", label: "Kamera & Sesi" }, { id: "exposure", label: "Eksposur" }, { id: "live", label: "Live view" }] as const;
+
   return (
-    <div className="flex flex-col items-stretch gap-5">
+    <div className="flex flex-col items-stretch gap-4">
+      <nav className="flex gap-1 self-start rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Pengaturan kamera">
+        {camTabs.map((t) => (
+          <button key={t.id} type="button" onClick={() => setCamTab(t.id)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${camTab === t.id ? "bg-fg text-canvas shadow-md" : "text-fg/55 hover:text-fg"}`}>{t.label}</button>
+        ))}
+      </nav>
+      {camTab === "setup" && (
+      <div className="grid items-start gap-5 xl:grid-cols-2">
       <section className={sectionClass}>
         <div className="flex items-center justify-between gap-3">
           <div><p className="eyebrow">KAMERA TERSAMBUNG</p><h2 className="font-display text-xl font-semibold">Pilih kamera</h2></div>
@@ -246,10 +257,10 @@ export default function CameraSettings() {
           )}
         </div>
       </section>
-
-      <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
-
-      <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
+      </div>
+      )}
+      {camTab === "exposure" && <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />}
+      {camTab === "live" && <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />}
     </div>
   );
 }
