@@ -98,6 +98,20 @@ export default function ShareGallery({ id }: { id: string }) {
     }).catch(() => setSession(false));
   }, [id]);
 
+  // A customer can open the link seconds after the session, while the kiosk is still uploading the GIF/video. Check again a
+  // few times (bounded) until one of them shows up, so the page fills in by itself instead of needing a manual refresh.
+  useEffect(() => {
+    if (!session || session === false || session.gifUrl || session.videoUrl) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      tries += 1;
+      api.getPublicSession(id).then((data) => { if (data) setSession(data); }).catch(() => undefined);
+      if (tries >= 20) window.clearInterval(timer);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [id, session && session !== false ? Boolean(session.gifUrl || session.videoUrl) : null]);
+
   if (session === false) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas p-10 text-center font-body text-fg">

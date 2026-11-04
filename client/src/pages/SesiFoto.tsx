@@ -50,7 +50,7 @@ const CLIP_MAX_PRE_MS = 2500;
 const CLIP_TAIL_MS = 600;
 const SLOT_CLIP_FALLBACK_MS = 2000;
 const SLOT_CLIP_GIF_FRAME_INTERVAL_MS = 120; // ~8fps — smooth enough for a loop, keeps file size/encode time small
-const GIF_MAX_WIDTH = 560;
+const GIF_MAX_WIDTH = 420; // smaller GIFs encode and upload much faster; slots are small anyway
 // MediaRecorder has no sane default bitrate — leaving it unset produced the
 // muddy, blocky "kualitas jelek" complaint regardless of resolution. This is
 // a near-free quality win (barely affects encode cost) unlike raising
@@ -59,12 +59,13 @@ const SLOT_VIDEO_BITRATE = 6_000_000;
 // The "video" output is the whole photo session recorded in one take (not 2 s clips): HD, and a bitrate that keeps a
 // few minutes of footage to a size that uploads in reasonable time (the server re-encodes it to a phone-friendly MP4).
 const SESSION_VIDEO_BITRATE = 4_500_000;
-const GIF_TIMELAPSE_DELAY_MS = 150; // GIF frame spacing (~6.7 fps)
-const RAW_RECORD_WIDTH = 960; // the continuous live-view take is recorded this wide (slots are small, so this is plenty)
-const RAW_RECORD_BITRATE = 3_000_000;
-const SEGMENT_MAX_MS = 10_000; // each slot plays at most this much footage, ending at its shot
+const GIF_TIMELAPSE_DELAY_MS = 120; // GIF frame spacing (~8 fps)
+const RAW_RECORD_WIDTH = 640; // the continuous live-view take is recorded this wide (slots are ~300 px, so this is plenty and far cheaper to encode/decode)
+const RAW_RECORD_BITRATE = 2_000_000;
+const SEGMENT_MAX_MS = 4_000; // each slot plays at most this much footage, ending at its shot (keeps the compose pass short)
+const COMPOSE_PLAYBACK_RATE = 2; // the compose pass runs in real time, so playing the segments faster makes the wait shorter (a quick timelapse)
 const SEGMENT_TAIL_MS = 500; // a moment after the shot stays in the segment
-const COMPOSE_HARD_LIMIT_MS = 15_000;
+const COMPOSE_HARD_LIMIT_MS = 8_000;
 
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -830,6 +831,8 @@ export default function SesiFoto() {
         video.playsInline = true;
         video.preload = "auto";
         video.src = url;
+        video.defaultPlaybackRate = COMPOSE_PLAYBACK_RATE;
+        video.playbackRate = COMPOSE_PLAYBACK_RATE;
         await new Promise<void>((resolve) => { video.onloadedmetadata = () => resolve(); video.onerror = () => resolve(); });
         video.currentTime = seg.start / 1000;
         await new Promise<void>((resolve) => { video.onseeked = () => resolve(); window.setTimeout(resolve, 1500); });
@@ -905,7 +908,7 @@ export default function SesiFoto() {
             smallCtx.drawImage(canvas, 0, 0, gifW, gifH);
             gifFrames.push({ data: smallCtx.getImageData(0, 0, gifW, gifH).data, width: gifW, height: gifH });
           }
-          if (elapsed >= longest + 400 || elapsed > COMPOSE_HARD_LIMIT_MS) { window.clearInterval(timer); resolve(); }
+          if (elapsed >= longest / COMPOSE_PLAYBACK_RATE + 400 || elapsed > COMPOSE_HARD_LIMIT_MS) { window.clearInterval(timer); resolve(); }
         }, 33);
       });
       recorder.stop();
@@ -931,6 +934,12 @@ export default function SesiFoto() {
   const combineSlotClips = async () => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
     if (!sessionId || !template?.slots?.length) return;
+    // Runs in the background: the customer carries on to the edit/result screens while this finishes, so every write back to
+    // the session store checks the session is still the one that started the work (a new customer may have begun since).
+    const pipelineSession = sessionId;
+    const stillCurrent = () => useKioskSession.getState().sessionId === pipelineSession;
+    let producedMedia = false;
+    useKioskSession.getState().setMediaPipeline("working");
     setMediaUploading(true);
     try {
       setSavingStage("Menyelesaikan rekaman…");
@@ -1087,32 +1096,18 @@ export default function SesiFoto() {
       // blank. The "#clip.gif" / "#clip.video" fragment tells Hasil.tsx which kind it is (blob: URLs have no extension).
       const localGifUrl = gifBlob ? `${URL.createObjectURL(gifBlob)}#clip.gif` : null;
       const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.video` : null;
-      const online = isBrowserOnline() && !isOfflineSessionId(sessionId);
-      if (!online) {
+      // The result screen plays the local files straight away; it never waits for the upload (which only matters for the
+      // share link and the admin list and runs in parallel below).
+      producedMedia = true;
+      if (stillCurrent()) {
         if (localGifUrl) setMediaUrl(localGifUrl, "gif");
         if (localVideoUrl) setMediaUrl(localVideoUrl, "video");
       }
       if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
-        if (gifBlob) {
-          try {
-            const result = await api.uploadMedia(sessionId, "gif", gifBlob);
-            const finalGif = result?.gifUrl ?? localGifUrl;
-            if (finalGif) setMediaUrl(finalGif, "gif");
-          } catch (error) {
-            console.error("Gagal upload GIF gabungan", error);
-            if (localGifUrl) setMediaUrl(localGifUrl, "gif");
-          }
-        }
-        if (videoBlob) {
-          try {
-            const result = await api.uploadMedia(sessionId, "video", videoBlob);
-            const finalVideo = result?.videoUrl ?? localVideoUrl;
-            if (finalVideo) setMediaUrl(finalVideo, "video");
-          } catch (error) {
-            console.error("Gagal upload video gabungan", error);
-            if (localVideoUrl) setMediaUrl(localVideoUrl, "video");
-          }
-        }
+        await Promise.all([
+          gifBlob ? api.uploadMedia(sessionId, "gif", gifBlob).catch((error) => console.error("Gagal upload GIF gabungan", error)) : null,
+          videoBlob ? api.uploadMedia(sessionId, "video", videoBlob).catch((error) => console.error("Gagal upload video gabungan", error)) : null,
+        ]);
       }
     } catch (error) {
       console.error("Gagal menggabungkan klip semua slot", error);
@@ -1120,6 +1115,7 @@ export default function SesiFoto() {
     } finally {
       setMediaUploading(false);
       setSavingStage(null);
+      if (stillCurrent()) useKioskSession.getState().setMediaPipeline(producedMedia ? "done" : "failed");
     }
   };
 
@@ -1220,7 +1216,7 @@ export default function SesiFoto() {
     // twice if sessionComplete somehow flips true around the same time.
     if (!combineTriggeredRef.current) {
       combineTriggeredRef.current = true;
-      await combineSlotClips();
+      void combineSlotClips(); // builds in the background; the customer does not wait for it
     }
     navigate(getNextRoute("capture", config.kioskFlow));
   };
@@ -1230,7 +1226,7 @@ export default function SesiFoto() {
   const fullscreen = resolveCaptureLayout(config) === "fullscreen";
   const slotsRemaining = Math.max(0, totalPhotos - capturedCount);
   const slotPopupKind: "frame" | "complete" | null = retakeTarget !== null ? null : sessionComplete ? "complete" : canFinishEarly ? "frame" : null;
-  const showSlotPopup = slotPopupKind !== null && !slotPopupDismissed && countdown === null && !capturing && !savingStage && !(eventTimerEnabled && remainingSeconds <= 0);
+  const showSlotPopup = slotPopupKind !== null && !slotPopupDismissed && countdown === null && !capturing && !(eventTimerEnabled && remainingSeconds <= 0);
   const goToResult = () => navigate(getNextRoute("capture", config.kioskFlow));
   const savingLabel = selectedPackage?.hasGif && selectedPackage?.hasVideo ? "Menyimpan GIF & video…" : selectedPackage?.hasGif ? "Menyimpan GIF…" : "Menyimpan video…";
   const shutterDisabled = !previewReady || countdown !== null || (sessionComplete && retakeTarget === null);
@@ -1397,7 +1393,7 @@ export default function SesiFoto() {
       kind={slotPopupKind ?? "complete"}
       slots={templateSlotCount}
       remaining={slotsRemaining}
-      busy={slotPopupKind === "complete" ? mediaUploading : finishingEarly}
+      busy={finishingEarly}
       busyLabel={slotPopupKind === "complete" ? savingLabel : "Menyimpan…"}
       onContinue={() => (slotPopupKind === "complete" ? goToResult() : void finishEarly())}
       onStay={() => setSlotPopupDismissed(true)}
@@ -1408,8 +1404,8 @@ export default function SesiFoto() {
   const continueButtons = slotPopupDismissed && retakeTarget === null && (sessionComplete || canFinishEarly) && (
     <div className="relative z-10 mt-3 flex w-full flex-col gap-2">
       {sessionComplete ? (
-        <button onClick={goToResult} disabled={mediaUploading} className="k-btn k-btn-accent k-btn-lg w-full disabled:cursor-wait disabled:opacity-60">
-          {mediaUploading ? <><Spinner size="md" />{savingLabel}</> : <>Lanjut ke hasil <Icon name="arrow-right" className="h-5 w-5" /></>}
+        <button onClick={goToResult} className="k-btn k-btn-accent k-btn-lg w-full">
+          Lanjut ke hasil <Icon name="arrow-right" className="h-5 w-5" />
         </button>
       ) : (
         <button onClick={finishEarly} disabled={finishingEarly} className="k-btn w-full !border-accent/40 !bg-accent/10 !text-accent disabled:cursor-wait disabled:opacity-60">
@@ -1424,16 +1420,15 @@ export default function SesiFoto() {
       {/* Building the GIF/video is heavy and used to leave a frozen-looking screen — say what is happening instead */}
       <AnimatePresence>
         {savingStage && !(eventTimerEnabled && remainingSeconds <= 0) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-canvas/85 backdrop-blur-md" role="status" aria-live="polite">
-            <div className="h-16 w-16 animate-spin rounded-full border-4 border-fg/15 border-t-accent" />
-            <div className="text-center">
-              <p className="font-display text-2xl font-semibold">Menyimpan hasil sesimu…</p>
-              <p className="mt-1 text-fg/55">{savingStage} Mohon tunggu sebentar, jangan tutup layar.</p>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="status" aria-live="polite">
+            <div className="flex items-center gap-3 rounded-full border border-fg/15 bg-black/70 px-4 py-2.5 text-sm text-white shadow-xl backdrop-blur-md">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              <span>{savingStage} <span className="text-white/60">Kamu bisa lanjut, ini jalan di latar belakang.</span></span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-      {eventTimerEnabled && remainingSeconds <= 0 && <TimerExpiredOverlay onSkip={goToResult} waitingForMedia={mediaUploading} />}
+      {eventTimerEnabled && remainingSeconds <= 0 && <TimerExpiredOverlay onSkip={goToResult} waitingForMedia={false} />}
       <canvas ref={canvasRef} className="hidden" />
       {zoomSlot !== null && photoUrls[zoomSlot] && (
         <ZoomableImageModal

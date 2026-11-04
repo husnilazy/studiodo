@@ -115,7 +115,7 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl, mediaPipeline } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
@@ -190,6 +190,9 @@ export default function Hasil() {
     if (!sessionId) return;
     if (!selectedPackage?.hasGif && !selectedPackage?.hasVideo) return;
     if (mediaUrls.length > 0) return; // already have it from the live session's own store
+    // The capture screen is still composing/uploading the GIF/video in the background: the local files land in the store
+    // by themselves, so just show the "preparing" state instead of asking the server (which does not have it yet).
+    if (mediaPipeline === "working") { setAwaitingMedia(true); return; }
     let cancelled = false;
     let attempts = 0;
     const MAX_ATTEMPTS = 10;
@@ -226,7 +229,12 @@ export default function Hasil() {
     // Intentionally only keyed on sessionId — mediaUrls.length is read once
     // up front to decide whether to start polling at all, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, mediaPipeline === "working"]);
+
+  // The local GIF/video arrived (or the build finished): stop showing the "preparing" state and release the auto-reset hold.
+  useEffect(() => {
+    if (mediaUrls.length > 0) setAwaitingMedia(false);
+  }, [mediaUrls.length]);
 
   useEffect(() => {
     if (!hasStopMotion || stripRendering || stopMotionStartedRef.current || !sessionId || photoUrls.length === 0 || positionable?.editMode) return;

@@ -69,6 +69,8 @@ interface KioskSessionState {
   mediaUrls: string[];
   /** What each entry of mediaUrls is, so screens never have to guess from the address. */
   mediaKinds: Record<string, "gif" | "video">;
+  /** Background build of the GIF/video (capture screen -> result screen): "working" while it is being composed/uploaded. */
+  mediaPipeline: "idle" | "working" | "done" | "failed";
   /** The slow stop-motion video of every photo (its own tab on the result screen). */
   stopMotionUrl: string | null;
   // Short clip captured at each individual photo shot, indexed the same as
@@ -95,6 +97,7 @@ interface KioskSessionState {
   setTemplatePhotoMap: (map: Record<number, number>) => void;
   setSelectedExtras: (extras: { id: string; name: string; price: number }[]) => void;
   setMediaUrl: (url: string, kind?: "gif" | "video") => void;
+  setMediaPipeline: (state: "idle" | "working" | "done" | "failed") => void;
   setStopMotionUrl: (url: string | null) => void;
   setSlotClipUrl: (slot: number, url: string) => void;
   setPhotoEdit: (slot: number, edit: PhotoEdit) => void;
@@ -124,6 +127,7 @@ const initial = {
   mediaUrl: null,
   mediaUrls: [] as string[],
   mediaKinds: {} as Record<string, "gif" | "video">,
+  mediaPipeline: "idle" as "idle" | "working" | "done" | "failed",
   stopMotionUrl: null as string | null,
   slotClipUrls: [] as (string | null)[],
   photoUrls: [] as string[],
@@ -160,6 +164,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
       for (const url of [...kept, mediaUrl]) nextKinds[url] = kinds[url] ?? "video";
       return { mediaUrl, mediaUrls: [...kept, mediaUrl], mediaKinds: nextKinds };
     }),
+  setMediaPipeline: (mediaPipeline) => set({ mediaPipeline }),
   setStopMotionUrl: (stopMotionUrl) => set({ stopMotionUrl }),
   setSlotClipUrl: (slot, url) =>
     set((state) => {
