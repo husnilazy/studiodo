@@ -155,6 +155,11 @@ export interface BoothConfig {
   printMarginMm: number;
   /** Print the strip twice side by side on one sheet (2x6 strips on 4R paper, cut in half). */
   printTwoUp: boolean;
+  /** Crew PIN (digits) asked before the on-site operator console opens from the kiosk. Empty = no PIN. Device-local. */
+  operatorPin: string;
+  /** Which screen corner the hidden crew taps are counted in. */
+  operatorEntryCorner: "bl" | "br" | "tl" | "tr";
+  operatorEntryTaps: 3 | 5;
   offlineModeEnabled: boolean;
   kioskFlow: KioskFlowConfig;
 }
@@ -274,6 +279,9 @@ const DEFAULT_CONFIG: BoothConfig = {
   printFit: "cover",
   printMarginMm: 0,
   printTwoUp: false,
+  operatorPin: "",
+  operatorEntryCorner: "bl",
+  operatorEntryTaps: 5,
   offlineModeEnabled: false,
   kioskFlow: DEFAULT_KIOSK_FLOW,
 };
@@ -361,7 +369,7 @@ export const useBoothConfig = create<BoothConfigStore>()(
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
-const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "offlineModeEnabled", "kioskFlow"];
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "operatorPin", "operatorEntryCorner", "operatorEntryTaps", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
 const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 

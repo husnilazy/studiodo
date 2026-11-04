@@ -20,6 +20,7 @@ import PaymentSettings from "./PaymentSettings";
 import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
+import OperatorAccessSettings from "./OperatorAccessSettings";
 import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
@@ -544,6 +545,7 @@ const KIOSK_SUBTABS = [
   { id: "keys", label: "API Key" },
   { id: "camera", label: "Kamera" },
   { id: "printer", label: "Printer" },
+  { id: "access", label: "Akses operator" },
 ] as const;
 type KioskSubtab = (typeof KIOSK_SUBTABS)[number]["id"];
 
@@ -917,6 +919,7 @@ export default function AdminDashboard() {
                 {kioskSubtab === "keys" && <KioskKeys />}
                 {kioskSubtab === "camera" && <CameraSettings />}
                 {kioskSubtab === "printer" && <PrinterSettings />}
+                {kioskSubtab === "access" && <OperatorAccessSettings />}
               </div>
             </div>
           )}
