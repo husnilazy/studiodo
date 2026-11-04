@@ -473,8 +473,8 @@ export default function Pembayaran() {
 
                 <div>
                   <span className="eyebrow !mb-1">Scan untuk bayar</span>
-                  <h2 className="font-display text-3xl font-semibold tracking-tight">Bayar dengan QRIS</h2>
-                  <p className="mt-2 text-sm text-muted">Buka aplikasi pembayaranmu, scan QR di bawah, lalu tunggu. Halaman ini lanjut otomatis.</p>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight">{viaDoku ? "Bayar lewat HP" : "Bayar dengan QRIS"}</h2>
+                  <p className="mt-2 text-sm text-muted">{viaDoku ? "Buka kamera HP biasa (bukan scanner di aplikasi bank/e-wallet), arahkan ke QR di bawah, lalu pilih QRIS di halaman yang terbuka. Halaman ini lanjut otomatis." : "Buka aplikasi pembayaranmu, scan QR di bawah, lalu tunggu. Halaman ini lanjut otomatis."}</p>
                 </div>
 
                 {/* While the invoice is still being created the canvas is empty — show a spinner instead of a blank white square. */}
@@ -488,7 +488,7 @@ export default function Pembayaran() {
                     </div>
                   )}
                 </div>
-                {viaDoku && <p className="-mt-1 text-center text-sm text-muted">Scan dengan kamera HP, lalu bayar di halaman DOKU (QRIS, e-wallet, atau VA).</p>}
+                {viaDoku && <p className="-mt-1 text-center text-xs text-muted">Di halaman DOKU kamu bisa bayar dengan QRIS, e-wallet, atau Virtual Account.</p>}
                 <p className="font-display text-2xl font-semibold text-accent">{rupiah(payableAmount)}</p>
 
                 {checking && qrisExpirySeconds > 0 && (
