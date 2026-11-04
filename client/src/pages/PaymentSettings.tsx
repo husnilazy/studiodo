@@ -31,6 +31,7 @@ export default function PaymentSettings() {
   const [snapDraft, setSnapDraft] = useState({ merchantId: "", terminalId: "", postalCode: "", privateKey: "" });
   const [snapSaving, setSnapSaving] = useState(false);
   const [snapTest, setSnapTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [snapSaved, setSnapSaved] = useState(false);
   const [dokuError, setDokuError] = useState<string | null>(null);
   const [providerSaving, setProviderSaving] = useState(false);
   const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
@@ -106,22 +107,31 @@ export default function PaymentSettings() {
       setDokuError(error instanceof Error ? error.message : "Gagal mengubah mode DOKU.");
     }
   };
-  const saveSnap = async () => {
+  const saveSnap = async (): Promise<boolean> => {
     setDokuError(null);
+    setSnapSaved(false);
     setSnapSaving(true);
     try {
       await api.updatePaymentConfig({ dokuMerchantId: snapDraft.merchantId, dokuTerminalId: snapDraft.terminalId, dokuPostalCode: snapDraft.postalCode, ...(snapDraft.privateKey.trim() ? { dokuSnapPrivateKey: snapDraft.privateKey } : {}) });
       setPaymentStatus((state) => ({ ...state, dokuMerchantId: snapDraft.merchantId.trim(), dokuTerminalId: snapDraft.terminalId.trim(), dokuPostalCode: snapDraft.postalCode.trim(), hasDokuSnapKey: Boolean(snapDraft.privateKey.trim()) || state.hasDokuSnapKey }));
       setSnapDraft((draft) => ({ ...draft, privateKey: "" }));
       setSnapTest(null);
+      setSnapSaved(true);
+      window.setTimeout(() => setSnapSaved(false), 3000);
+      return true;
     } catch (error) {
-      setDokuError(error instanceof Error ? error.message : "Gagal menyimpan pengaturan QRIS langsung.");
+      const message = error instanceof Error ? error.message : "Gagal menyimpan pengaturan QRIS langsung.";
+      setDokuError(message);
+      setSnapTest({ ok: false, message });
+      return false;
     } finally {
       setSnapSaving(false);
     }
   };
   const testSnap = async () => {
     setSnapTest(null);
+    // The test reads what is SAVED on the server, so save the form first (this was a trap: typed values were tested as "empty").
+    if (!(await saveSnap())) return;
     try {
       setSnapTest((await api.testPaymentConnection("doku")) ?? { ok: false, message: "Tidak ada respons." });
     } catch (error) {
@@ -494,8 +504,8 @@ export default function PaymentSettings() {
               </Field>
               <p className="text-xs text-fg/50">Pasangan publiknya didaftarkan di DOKU Back Office → Integration → API Keys → Merchant Public Key. Kunci privat disimpan terenkripsi dan tidak pernah dikirim kembali. Jika data belum lengkap, kiosk otomatis memakai halaman bayar DOKU.</p>
               <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={saveSnap} disabled={snapSaving} className="bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{snapSaving ? "Menyimpan…" : "Simpan QRIS langsung"}</button>
-                <button type="button" onClick={testSnap} className="rounded-xl border border-fg/20 px-4 py-2 text-sm font-medium hover:border-fg/50">Tes buat QRIS (Rp 1.000, tidak dibayar)</button>
+                <button type="button" onClick={saveSnap} disabled={snapSaving} className="bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{snapSaving ? "Menyimpan…" : snapSaved ? "✓ Tersimpan" : "Simpan QRIS langsung"}</button>
+                <button type="button" onClick={testSnap} disabled={snapSaving} className="rounded-xl border border-fg/20 px-4 py-2 text-sm font-medium hover:border-fg/50 disabled:opacity-50">Simpan &amp; tes buat QRIS (Rp 1.000, tidak dibayar)</button>
                 {snapTest && <span className={`text-sm ${snapTest.ok ? "text-emerald-300" : "text-red-300"}`}>{snapTest.message}</span>}
               </div>
             </div>
