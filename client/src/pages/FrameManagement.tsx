@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { Icon } from "@/components/kiosk/Icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate, type OutputPreset } from "@/lib/templateStore";
@@ -347,7 +348,7 @@ export default function FrameManagement() {
     <div className="h-full overflow-y-auto bg-[var(--kiosk-background)] px-5 py-8 text-[var(--kiosk-text)] md:px-10">
       <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
         <div>
-          <Link href="/admin" className="text-sm text-fg/45 hover:text-fg">← Admin OS</Link>
+          <Link href="/admin" className="inline-flex items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 py-2 text-sm font-semibold text-fg/80 shadow-sm transition hover:border-accent hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Admin</Link>
           <h1 className="mt-2 font-display text-3xl font-bold md:text-4xl">Manajemen Frame</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--kiosk-muted)]">Kelola frame, stop motion, stiker, dan output strip dalam satu tempat.</p>
         </div>
@@ -521,8 +522,8 @@ export default function FrameManagement() {
         </div>
       </section>}
 
-      {tab === "output" && <>
-      <section className={`mx-auto mt-6 max-w-7xl ${panel} md:p-7`}>
+      {tab === "output" && <div className="mx-auto mt-6 grid max-w-7xl items-start gap-5 lg:grid-cols-2">
+      <section className={`${panel} md:p-7`}>
         <p className="eyebrow">CAPTURE OUTPUT</p>
         <h2 className="font-display text-2xl font-semibold">Output & Capture</h2>
         <div className="mt-4 space-y-4">
@@ -535,7 +536,7 @@ export default function FrameManagement() {
         </div>
       </section>
 
-      <section className={`mx-auto mt-8 max-w-7xl ${panel} md:p-7`}>
+      <section className={`${panel} md:p-7`}>
         <p className="eyebrow">PRINT LAYOUT</p>
         <h2 className="font-display text-2xl font-semibold">Layout & Visual Strip</h2>
         <p className="mt-1 text-sm text-fg/45">Susunan foto (layout) dan tema warna/border (visual template) dipakai di halaman Hasil dan saat cetak.</p>
@@ -561,7 +562,7 @@ export default function FrameManagement() {
           </div>
         </div>
       </section>
-      </>}
+      </div>}
     </div>
   );
 }
