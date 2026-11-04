@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { printLayoutFromConfig } from "@/lib/printLayout";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -133,6 +133,8 @@ export default function Hasil() {
   const [consent, setConsent] = useState(false);
   // Optional pop-up before the result (set in Admin > Flow Kiosk): may the photos be posted on the booth's social media?
   const [consentAnswered, setConsentAnswered] = useState(false);
+  // The result screen shows only preview + QR + main actions (no scrolling); the contact form and extra prints open as a panel.
+  const [panel, setPanel] = useState<"customer" | "extra" | null>(null);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<"idle" | "ok" | "error">("idle");
@@ -403,6 +405,12 @@ export default function Hasil() {
       window.clearTimeout(timeout);
     };
   }, [sessionId, additionalPayment, awaitingMedia, stopMotionState, printStage === "preparing" || printStage === "sending" || printStage === "printing"]);
+
+  useEffect(() => {
+    if (!customerSaved || panel !== "customer") return;
+    const timer = window.setTimeout(() => setPanel(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [customerSaved, panel]);
 
   const answerConsent = (value: boolean) => {
     setConsent(value);
@@ -685,11 +693,11 @@ export default function Hasil() {
           </div>
         </section>
 
-        <aside className={`flex min-w-0 flex-col gap-4 [&>*]:shrink-0 ${wide ? "min-h-0 overflow-y-auto pr-1" : ""}`}>
+        <aside className={`flex min-w-0 flex-col gap-3 [&>*]:shrink-0 ${wide ? "min-h-0 justify-start overflow-hidden" : ""}`}>
           {/* Share card: brand, a big QR with a scanning sweep, what is inside the download, then the tenant's socials.
               QR only — nothing clickable here (taps next to the QR distracted from scanning). */}
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="glass-panel overflow-hidden rounded-[2rem]">
-            <div className="flex items-center gap-3 bg-gradient-to-r from-accent/20 via-accent/10 to-transparent px-5 py-3.5">
+            <div className="flex items-center gap-3 bg-gradient-to-r from-accent/20 via-accent/10 to-transparent px-5 py-2.5">
               {config.logoUrl ? <img src={config.logoUrl} alt={config.brandName} className="h-9 max-w-[9rem] object-contain" /> : <span className="font-display text-lg font-semibold tracking-tight">{config.brandName}</span>}
               <div className="ml-auto">
                 {uploadStatus === "pending" && <span className="inline-flex items-center gap-2 rounded-full bg-fg/[0.07] px-3 py-1 text-xs font-semibold text-fg/65"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan…</span>}
@@ -698,7 +706,7 @@ export default function Hasil() {
               </div>
             </div>
 
-            <div className="flex flex-col items-center gap-4 p-5">
+            <div className="flex flex-col items-center gap-3 p-4">
               <div className="relative shrink-0">
                 {stripRendering && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -710,15 +718,15 @@ export default function Hasil() {
                   {["left-1.5 top-1.5 border-l-[3px] border-t-[3px] rounded-tl-xl", "right-1.5 top-1.5 border-r-[3px] border-t-[3px] rounded-tr-xl", "bottom-1.5 left-1.5 border-b-[3px] border-l-[3px] rounded-bl-xl", "bottom-1.5 right-1.5 border-b-[3px] border-r-[3px] rounded-br-xl"].map((c) => (
                     <span key={c} className={`pointer-events-none absolute h-6 w-6 border-accent ${c}`} />
                   ))}
-                  <canvas ref={qrCanvasRef} className="relative block !h-[clamp(140px,23vh,210px)] !w-[clamp(140px,23vh,210px)] rounded-lg" />
+                  <canvas ref={qrCanvasRef} className="relative block !h-[clamp(100px,min(20vh,34vw),220px)] !w-[clamp(100px,min(20vh,34vw),220px)] rounded-lg" />
                   {config.animationsEnabled && !stripRendering && <span className="k-scan-line pointer-events-none absolute inset-x-4 h-0.5 rounded-full bg-accent/70 shadow-[0_0_14px_var(--accent)]" />}
                 </div>
               </div>
 
               <div className="min-w-0 text-center">
-                <h3 className="font-display text-2xl font-semibold leading-tight">Scan &amp; unduh</h3>
-                <p className="k-desc mt-1 text-[15px] leading-snug text-fg/60">Arahkan kamera HP ke kode ini.</p>
-                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <h3 className="font-display text-2xl font-semibold leading-tight [@media(max-height:760px)]:text-xl">Scan &amp; unduh</h3>
+                <p className="k-desc mt-1 text-[15px] leading-snug text-fg/60 [@media(max-height:760px)]:hidden">Arahkan kamera HP ke kode ini.</p>
+                <div className="mt-3 flex flex-wrap justify-center gap-2 [@media(max-height:760px)]:hidden">
                   {[
                     { icon: "camera", label: `${photoUrls.filter(Boolean).length} foto`, show: true },
                     { icon: "gif", label: "GIF", show: Boolean(selectedPackage?.hasGif) },
@@ -733,14 +741,31 @@ export default function Hasil() {
 
           </motion.div>
 
-          {/* Shown only when auto-print is off; with auto-print the strip already prints itself (a second button just invites mashing). */}
+          {/* Main actions. Print is shown only when auto-print is off (with auto-print the strip already prints itself). */}
           {!config.autoPrintEnabled && (
-            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-[76px] !w-full !gap-3 !px-8 !py-5 !text-[26px] whitespace-nowrap">
-              <IconPrinter className="h-8 w-8" />
+            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-[64px] !w-full !gap-3 !px-8 !py-4 !text-[22px] whitespace-nowrap">
+              <IconPrinter className="h-7 w-7" />
               {printing ? "Mencetak…" : "Cetak foto"}
             </button>
           )}
-
+          <div className={`grid gap-3 ${additionalPrintConfig?.enabled ? "grid-cols-2" : "grid-cols-1"}`}>
+            <button type="button" onClick={() => setPanel("customer")} className="k-btn !min-h-[52px] !gap-2 !px-4 !py-3 !text-[16px] whitespace-nowrap">
+              <IconPhone className="h-5 w-5" /> {customerSaved ? "Tersimpan" : "Kirim hasil"}
+            </button>
+            {additionalPrintConfig?.enabled && (
+              <button type="button" onClick={() => setPanel("extra")} className="k-btn !min-h-[52px] !gap-2 !px-4 !py-3 !text-[16px] whitespace-nowrap">
+                <IconPrinter className="h-5 w-5" /> Tambah cetak
+              </button>
+            )}
+          </div>
+        </aside>
+      </main>
+      {panel && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
+          <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[2rem]">
+            <button type="button" onClick={() => setPanel(null)} aria-label="Tutup" className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-fg/10 text-lg font-semibold text-fg/70 hover:bg-fg/20">×</button>
+            {panel === "customer" && (
+              <>
           {/* Informasi Pelanggan */}
           <div className="glass-panel rounded-[2rem] p-5">
             <div className="mb-3 flex items-center gap-2.5">
@@ -766,7 +791,9 @@ export default function Hasil() {
             </div>
           </div>
 
-          {additionalPrintConfig?.enabled && (
+              </>
+            )}
+          {additionalPrintConfig?.enabled && panel === "extra" && (
             <div className="glass-panel rounded-[2rem] p-5">
               <div className="mb-3 flex items-center gap-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPrinter className="h-[18px] w-[18px]" /></span>
@@ -829,8 +856,9 @@ export default function Hasil() {
               )}
             </div>
           )}
-        </aside>
-      </main>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {printStage !== "idle" && (
           <motion.div key="print-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-canvas/80 p-6 backdrop-blur-md" role="status" aria-live="polite">
