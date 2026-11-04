@@ -302,6 +302,13 @@
       "when": 1793807436963,
       "tag": "0042_same_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793816876212,
+      "tag": "0043_wallet_ledger_policy",
+      "breakpoints": true
     }
   ]
 }

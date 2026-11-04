@@ -19,6 +19,7 @@ import { reconcileOrder } from "../lib/billing.js";
 import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
 import { contentStudioAdminRouter } from "./contentStudio.js";
+import { superadminFinanceRouter } from "./superadminFinance.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -75,11 +76,22 @@ superadminRouter.post("/logout", requireSuperadminAuth, (_req, res) => {
 });
 
 superadminRouter.get("/me", requireSuperadminAuth, async (req, res) => {
-  const [superadmin] = await db.select({ email: superadmins.email, totp: superadmins.totpEnabledAt }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
-  res.json({ email: superadmin?.email, twoFactorEnabled: !!superadmin?.totp });
+  const [superadmin] = await db.select({ email: superadmins.email, totp: superadmins.totpEnabledAt, role: superadmins.role }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  res.json({ email: superadmin?.email, twoFactorEnabled: !!superadmin?.totp, role: superadmin?.role ?? "owner" });
 });
 
 superadminRouter.use(requireSuperadminAuth);
+
+// A 'finance' account only reaches the money screens (and its own 2FA); everything else is the owner's.
+const FINANCE_ALLOWED = [/^\/2fa(\/|$)/, /^\/finance(\/|$)/, /^\/withdrawals(\/|$)/, /^\/tenants\/[0-9a-f-]{36}\/qris-balance$/i];
+superadminRouter.use(async (req, res, next) => {
+  const [row] = await db.select({ role: superadmins.role }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  if (row?.role === "finance" && !FINANCE_ALLOWED.some((pattern) => pattern.test(req.path))) {
+    return res.status(403).json({ error: "Akun finance hanya bisa mengakses menu keuangan." });
+  }
+  next();
+});
+superadminRouter.use("/finance", superadminFinanceRouter);
 superadminRouter.use("/2fa", twoFactorAdminRouter);
 superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);

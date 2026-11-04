@@ -10,6 +10,7 @@ import { loadGateway } from "../lib/gateways.js";
 import { expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 import { createDokuCheckout, createDokuQris, dokuInvoicePaid, queryDokuQris, verifyDokuNotification, type DokuCfg } from "../lib/doku.js";
 import { decryptSecret, readStoredSecret } from "../lib/secretBox.js";
+import { creditPlatformPayment } from "../lib/qrisBalance.js";
 
 export const paymentRouter = Router();
 
@@ -162,7 +163,7 @@ async function completeAdditionalPrintPayment(tenantId: string, sessionId: strin
 // and an underpaid amount is ignored (a leaked webhook token/secret shouldn't be enough to mark an underpaid session as paid).
 // Only enforced when the payload carried a parseable amount: silently rejecting a genuine payment over a missed field would hurt real customers.
 async function settlePayment(tenantId: string, sessionId: string, paidAmount: number, method: string, label: string) {
-  const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending }).from(sessions).where(eq(sessions.id, sessionId));
+  const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending, additionalPrintsPaid: sessions.additionalPrintsPaid }).from(sessions).where(eq(sessions.id, sessionId));
   if (session?.tenantId !== tenantId) return;
   if (session.paymentPurpose === "additional_print") {
     const expected = session.additionalPrintsPending * (await getPrintingConfig(tenantId)).price;
@@ -170,6 +171,8 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari cetak tambahan yang diharapkan (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
       await completeAdditionalPrintPayment(tenantId, sessionId);
+      // Only money the gateway really received is credited to a platform-settled tenant's wallet (a voucher-paid extra print is not).
+      if (method === "qris") await creditPlatformPayment(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`);
     }
   } else {
     const expected = Number(session.totalAmount ?? 0);
@@ -177,6 +180,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari total sesi (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
       await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      if (method === "qris") await creditPlatformPayment(tenantId, sessionId, expected, "session");
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
   }

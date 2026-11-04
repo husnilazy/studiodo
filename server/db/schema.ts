@@ -54,6 +54,9 @@ export const tenants = pgTable("tenants", {
   // balance (see `withdrawals`). `qrisPlatformSince` marks when that began: only QRIS payments after it count.
   qrisSettlement: text("qris_settlement").notNull().default("direct"), // 'direct' | 'platform'
   qrisPlatformSince: timestamp("qris_platform_since"),
+  // Per-tenant override of the platform withdrawal policy (see lib/withdrawalPolicy.ts). null = follow the platform default;
+  // only the fields present here override it. `enabled: false` freezes this tenant's payouts.
+  withdrawalPolicy: jsonb("withdrawal_policy").$type<Record<string, unknown>>(),
   // Negotiated discount (0-90 %) a superadmin grants this tenant on every booth subscription it buys, on top of the
   // platform-wide volume tiers (platform_settings.volume_discounts). The better of the two applies — they do not stack.
   boothDiscountPercent: integer("booth_discount_percent").notNull().default(0),
@@ -164,6 +167,8 @@ export const superadmins = pgTable("superadmins", {
   // Two-factor sign-in (TOTP, see lib/totp.ts + routes/superadminTwoFactor.ts). The secret is encrypted at rest; it only counts
   // once totp_enabled_at is set (after the owner proved the authenticator app works). Recovery codes are stored as hashes.
   totpSecretEnc: text("totp_secret_enc"),
+  // 'owner' = full platform access; 'finance' = only money screens (withdrawals, balances, ledger, payout policy).
+  role: text("role").notNull().default("owner"),
   totpEnabledAt: timestamp("totp_enabled_at"),
   totpLastStep: integer("totp_last_step"), // last accepted 30-second step: a code can never be used twice
   recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
@@ -188,11 +193,37 @@ export const platformSettings = pgTable("platform_settings", {
   qrisFeePercent: numeric("qris_fee_percent", { precision: 5, scale: 2 }).notNull().default("0.70"),
   withdrawalMinAmount: integer("withdrawal_min_amount").notNull().default(50000),
   withdrawalFlatFee: integer("withdrawal_flat_fee").notNull().default(0),
+  // Platform-wide default withdrawal policy: when tenants may withdraw (any time or a schedule), limits, hold period.
+  withdrawalPolicy: jsonb("withdrawal_policy").$type<Record<string, unknown>>().notNull().default({}),
   // Volume discount on booth subscriptions: buying `minBooths` or more booths in one order takes `percent` off each of
   // them. Managed by the superadmin; the default is the "10+ booths" offer advertised on the website.
   volumeDiscounts: jsonb("volume_discounts").$type<{ minBooths: number; percent: number }[]>().notNull().default([{ minBooths: 10, percent: 10 }]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Money the platform holds for a platform-settled tenant, one immutable row per movement. The tenant's balance is
+//   Σ net_amount of these rows − withdrawals that are not rejected.
+// kind 'payment'    : a QRIS payment STUDIODO's gateway received for the tenant. gross/fee are a snapshot of the fee at that
+//                     moment (changing the fee later never rewrites old payments); available_at = paid time + hold days.
+// kind 'adjustment' : manual correction by a superadmin/finance user (net_amount may be negative), always with a note.
+// `ref` makes crediting idempotent (a webhook delivered twice cannot credit twice): unique per (tenant, kind, ref).
+export const walletLedger = pgTable("wallet_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'payment' | 'adjustment'
+  sessionId: uuid("session_id"),
+  ref: text("ref"),
+  grossAmount: numeric("gross_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  feeAmount: numeric("fee_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  netAmount: numeric("net_amount", { precision: 14, scale: 2 }).notNull(),
+  availableAt: timestamp("available_at").notNull().defaultNow(),
+  note: text("note"),
+  actor: text("actor"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("wallet_ledger_tenant_idx").on(table.tenantId, table.createdAt),
+  uniqueIndex("wallet_ledger_ref_idx").on(table.tenantId, table.kind, table.ref),
+]);
 
 // A tenant's request to pay out their QRIS balance to a bank account / e-wallet. The tenant asks (pending); a
 // superadmin transfers the money by hand and follows it up (processing → paid, or rejected with a reason). The
