@@ -24,6 +24,7 @@ export default function VoucherManagement() {
   const { config } = useBoothConfig();
 
   // --- Single voucher CRUD (relocated, unchanged) ---------------------------
+  const [view, setView] = useState<"vouchers" | "bulk" | "report" | "cash">("vouchers");
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [voucherDraft, setVoucherDraft] = useState({ code: "", discountType: "percent", discountValue: "10", maxUses: "", startsAt: "", expiresAt: "" });
   const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
@@ -198,8 +199,14 @@ export default function VoucherManagement() {
   };
   useEffect(() => { loadReport(0); }, []);
 
+  const tabs = [{ id: "vouchers", label: `Voucher (${vouchers.length})` }, { id: "bulk", label: "Buat banyak" }, { id: "report", label: "Laporan" }, ...(cashPaymentEnabled ? [{ id: "cash", label: "Invoice Cash" }] : [])] as { id: "vouchers" | "bulk" | "report" | "cash"; label: string }[];
+
   return (
-    <div className="flex flex-col items-stretch gap-5">
+    <div className="flex flex-col items-stretch gap-4">
+      <nav className="flex gap-1 self-start rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Voucher & promosi">
+        {tabs.map((t) => <button key={t.id} type="button" onClick={() => setView(t.id)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${view === t.id ? "bg-fg text-canvas shadow-md" : "text-fg/55 hover:text-fg"}`}>{t.label}</button>)}
+      </nav>
+      {view === "vouchers" && (
       <section className={sectionClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -209,8 +216,8 @@ export default function VoucherManagement() {
           </div>
           <span className="rounded-full border border-accent/30 px-3 py-1 text-xs text-accent">{vouchers.length} voucher</span>
         </div>
-        <div className="mt-5 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Buat voucher baru</p>
+        <details className="group mt-5 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4">
+          <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-accent">+ Buat voucher baru <span className="ml-1 normal-case tracking-normal text-fg/40 group-open:hidden">(klik untuk membuka form)</span></summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Kode voucher"><input className={inputClass} placeholder="HEMAT50" value={voucherDraft.code} onChange={(e) => setVoucherDraft({ ...voucherDraft, code: e.target.value.toUpperCase() })} /></Field>
             <Field label="Jenis diskon"><select className={inputClass} value={voucherDraft.discountType} onChange={(e) => setVoucherDraft({ ...voucherDraft, discountType: e.target.value })}><option value="percent">Persen (%)</option><option value="fixed">Potongan Rp</option><option value="free">Gratis</option></select></Field>
@@ -220,7 +227,7 @@ export default function VoucherManagement() {
             <Field label="Berakhir"><input className={inputClass} type="datetime-local" value={voucherDraft.expiresAt} onChange={(e) => setVoucherDraft({ ...voucherDraft, expiresAt: e.target.value })} /></Field>
           </div>
           <button onClick={createVoucher} disabled={!voucherDraft.code.trim()} className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">+ Tambah voucher</button>
-        </div>
+        </details>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {vouchers.map((voucher) => (
             <div key={voucher.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
@@ -248,7 +255,9 @@ export default function VoucherManagement() {
           {vouchers.length === 0 && <p className="text-sm text-fg/40">Belum ada voucher. Buat promo pertama untuk customer.</p>}
         </div>
       </section>
+      )}
 
+      {view === "bulk" && (
       <section className={sectionClass}>
         <p className="eyebrow">BULK PROMO</p>
         <h2 className="font-display text-xl font-semibold">Buat banyak sekaligus</h2>
@@ -281,7 +290,9 @@ export default function VoucherManagement() {
           </div>
         )}
       </section>
+      )}
 
+      {view === "report" && (
       <section className={sectionClass}>
         <p className="eyebrow">LAPORAN</p>
         <h2 className="font-display text-xl font-semibold">Penggunaan voucher</h2>
@@ -316,8 +327,9 @@ export default function VoucherManagement() {
           </div>
         )}
       </section>
+      )}
 
-      {cashPaymentEnabled && (
+      {view === "cash" && cashPaymentEnabled && (
         <section className={sectionClass}>
           <p className="eyebrow">PROMO CONTROL</p>
           <h2 className="font-display text-xl font-semibold">Invoice Cash</h2>

@@ -228,14 +228,15 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
   const formatDate = (date: string) => date === "-" ? "-" : new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon="activity" label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
-        <Metric icon="check" label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
-        <Metric icon="clock" label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
-        <Metric icon="chart" label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="grid shrink-0 grid-cols-2 gap-3 xl:grid-cols-4">
+        <CompactStat icon="activity" label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
+        <CompactStat icon="check" label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
+        <CompactStat icon="clock" label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
+        <CompactStat icon="chart" label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
       </div>
 
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain pb-3">
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <section className={`${panel} overflow-hidden`}>
           {sortedTraffic.length > 0 ? <TrendChart data={sortedTraffic} /> : <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-fg/10 text-sm text-fg/35">Belum ada aktivitas traffic.</div>}
@@ -272,6 +273,7 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
           {sessions.length === 0 && <p className="py-8 text-sm text-fg/40">Belum ada sesi tercatat.</p>}
         </div>
       </section>
+      </div>
     </div>
   );
 }
@@ -798,7 +800,7 @@ export default function AdminDashboard() {
 
   const currentSection = sections.find((item) => item.id === section)!;
   // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
-  const fitSection = section === "media" || section === "crm" || section === "finance" || section === "kiosk";
+  const fitSection = section === "media" || section === "crm" || section === "finance" || section === "kiosk" || section === "control" || section === "traffic";
   const navButton = (item: (typeof sections)[number]) => (
     <button
       key={item.id}

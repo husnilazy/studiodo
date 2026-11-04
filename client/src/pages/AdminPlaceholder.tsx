@@ -257,8 +257,8 @@ export default function AdminPlaceholder() {
   const failed = syncState.status === "error";
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_390px]">
-      <div className="min-w-0 space-y-5">
+    <div className="grid items-start gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-stretch">
+      <div className="min-w-0 space-y-5 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-3 lg:pr-2">
         {/* Status + quick actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-surface px-4 py-3 shadow-glass">
           <span role="status" title={syncState.message} className={`inline-flex items-center gap-2 text-sm font-medium ${failed ? "text-red-500" : saving ? "text-fg/60" : "text-emerald-600"}`}>
@@ -549,7 +549,7 @@ export default function AdminPlaceholder() {
         </AnimatePresence>
       </div>
 
-      <KioskPreviewFrame focusStage={activeTab.stage} stickyTop={16} />
+      <div className="min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-3"><KioskPreviewFrame focusStage={activeTab.stage} stickyTop={0} /></div>
     </div>
   );
 }
