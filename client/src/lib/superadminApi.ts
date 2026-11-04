@@ -278,6 +278,34 @@ export interface TenantQrisBalance {
   paymentCount: number;
 }
 
+export interface WithdrawalPolicy {
+  enabled: boolean;
+  mode: "anytime" | "window";
+  days: number[];
+  fromTime: string;
+  toTime: string;
+  minAmount: number;
+  maxAmount: number;
+  dailyMaxAmount: number;
+  dailyMaxCount: number;
+  holdDays: number;
+  cooldownHours: number;
+  feePercent: number | null;
+  flatFee: number | null;
+}
+export interface FinanceTenantRow {
+  tenantId: string; name: string; frozen: boolean; hasOverride: boolean;
+  gross: number; fee: number; onHold: number; adjustments: number; withdrawn: number; pending: number; openRequests: number; available: number; owed: number; lastPaymentAt: string | null;
+}
+export interface FinanceOverview {
+  rules: { feePercent: number; minAmount: number; flatFee: number };
+  totals: { tenants: number; gross: number; feesEarned: number; owed: number; available: number; onHold: number; awaitingPayout: number; paidOut: number; frozenTenants: number };
+  items: FinanceTenantRow[];
+  uncredited: { count: number; amount: number };
+}
+export interface LedgerRow { at: string; type: string; description: string; amount: number; fee: number; status: string; note: string | null; actor: string | null }
+export interface FinanceUser { id: string; email: string; role: "owner" | "finance"; twoFactor: string | null; createdAt: string }
+
 export interface PlatformOverview {
   tenants: { total: number; byStatus: Record<string, number>; expiringSoon: number; expired: number; locked: number };
   booths?: { total: number; paid: number; trial: number; unpaid: number; locked: number; expiringSoon: number };
@@ -442,7 +470,7 @@ export const superadminApi = {
   disableTwoFactor: (password: string, code: string) => request<{ ok: boolean }>("/2fa/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
   regenerateRecoveryCodes: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>("/2fa/recovery-codes", { method: "POST", body: JSON.stringify({ code }) }),
   logout: () => request<{ ok: boolean }>("/logout", { method: "POST" }),
-  getMe: () => request<{ email: string }>("/me"),
+  getMe: () => request<{ email: string; role?: "owner" | "finance"; twoFactorEnabled?: boolean }>("/me"),
   getTenants: () => request<SuperadminTenant[]>("/tenants"),
   getTenant: (id: string) => request<TenantDetail>(`/tenants/${id}`),
   recheckBillingOrder: (orderId: string) => request<{ ok: boolean; status: string; result: string }>(`/billing/orders/${encodeURIComponent(orderId)}/check`, { method: "POST" }),
@@ -477,6 +505,29 @@ export const superadminApi = {
   updateWithdrawal: (id: string, body: { status: "processing" | "paid" | "rejected"; adminNote?: string; transferReference?: string }) =>
     request<WithdrawalAdminRow>(`/withdrawals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   getTenantQrisBalance: (id: string) => request<TenantQrisBalance>(`/tenants/${id}/qris-balance`),
+  getFinanceOverview: () => request<FinanceOverview>("/finance/overview"),
+  getFinancePolicy: () => request<{ policy: WithdrawalPolicy; defaults: WithdrawalPolicy; rules: { feePercent: number; minAmount: number; flatFee: number }; summary: string }>("/finance/policy"),
+  saveFinancePolicy: (policy: Partial<WithdrawalPolicy>) => request<{ policy: WithdrawalPolicy; summary: string }>("/finance/policy", { method: "PUT", body: JSON.stringify({ policy }) }),
+  getTenantPolicy: (id: string) => request<{ name: string; settlement: string; override: Partial<WithdrawalPolicy>; effective: WithdrawalPolicy; summary: string }>(`/finance/tenants/${id}/policy`),
+  saveTenantPolicy: (id: string, override: Partial<WithdrawalPolicy> | null) => request<{ override: Partial<WithdrawalPolicy>; effective: WithdrawalPolicy; summary: string }>(`/finance/tenants/${id}/policy`, { method: "PUT", body: JSON.stringify({ override }) }),
+  getTenantLedger: (id: string) => request<{ name: string; balance: { available: number; onHold: number; pending: number; withdrawn: number; adjustments: number; grossIncome: number; platformFee: number }; rows: LedgerRow[] }>(`/finance/tenants/${id}/ledger`),
+  adjustTenantBalance: (id: string, amount: number, note: string) => request<{ balance: { available: number } }>(`/finance/tenants/${id}/adjustments`, { method: "POST", body: JSON.stringify({ amount, note }) }),
+  getReconcile: () => request<{ count: number; amount: number; items: { id: string; tenantId: string; amount: string; createdAt: string }[] }>("/finance/reconcile"),
+  runReconcile: (tenantId?: string) => request<{ found: number; credited: number; amount: number }>("/finance/reconcile", { method: "POST", body: JSON.stringify({ tenantId }) }),
+  getFinanceUsers: () => request<FinanceUser[]>("/finance/users"),
+  createFinanceUser: (email: string, password: string) => request<FinanceUser>("/finance/users", { method: "POST", body: JSON.stringify({ email, password }) }),
+  deleteFinanceUser: (id: string) => request<{ ok: boolean }>(`/finance/users/${id}`, { method: "DELETE" }),
+  /** CSV files need the auth header, so they are fetched and saved from a blob instead of opened as a link. */
+  downloadFinanceCsv: async (path: string, filename: string) => {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin${path}`, { cache: "no-store", headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {} });
+    if (!res.ok) throw new SuperadminApiError(res.status, `Gagal mengunduh (${res.status})`);
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   getPlans: () => request<Plan[]>("/plans"),
   createPlan: (body: Partial<PlanInput> & Pick<PlanInput, "name" | "slug" | "price" | "billingInterval" | "kioskLimit">) =>
     request<Plan>("/plans", { method: "POST", body: JSON.stringify(body) }),

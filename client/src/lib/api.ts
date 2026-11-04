@@ -37,6 +37,11 @@ export interface QrisBalance {
   available: number;
   paymentCount: number;
   rules: { feePercent: number; minAmount: number; flatFee: number };
+  /** Received but still in the hold period (not withdrawable yet). */
+  onHold?: number;
+  adjustments?: number;
+  policy?: { enabled: boolean; mode: "anytime" | "window"; minAmount: number; maxAmount: number; dailyMaxAmount: number; dailyMaxCount: number; holdDays: number; cooldownHours: number; flatFee: number | null };
+  window?: { open: boolean; label: string; nextOpenAt: string | null };
 }
 export interface WithdrawalRow {
   id: string;

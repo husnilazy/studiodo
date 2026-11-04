@@ -65,8 +65,14 @@ export default function WithdrawalPanel() {
   }
 
   const amount = Math.floor(Number(form.amount) || 0);
-  const net = amount - balance.rules.flatFee;
-  const canSubmit = amount >= balance.rules.minAmount && amount <= balance.available && form.accountNumber.trim() && form.accountName.trim() && !submitting;
+  // What actually applies to this account: the platform rules, unless STUDIODO set something specific for it.
+  const minAmount = balance.policy && balance.policy.minAmount > 0 ? balance.policy.minAmount : balance.rules.minAmount;
+  const flatFee = balance.policy?.flatFee ?? balance.rules.flatFee;
+  const maxAmount = balance.policy?.maxAmount ?? 0;
+  const windowOpen = balance.window?.open !== false && balance.policy?.enabled !== false;
+  const frozen = balance.policy?.enabled === false;
+  const net = amount - flatFee;
+  const canSubmit = windowOpen && amount >= minAmount && amount <= balance.available && (maxAmount === 0 || amount <= maxAmount) && form.accountNumber.trim() && form.accountName.trim() && !submitting;
 
   const submit = async () => {
     setSubmitting(true);
@@ -103,17 +109,23 @@ export default function WithdrawalPanel() {
           <Stat label="Bisa ditarik" value={money(balance.available)} tone="accent" hint="Setelah potongan & penarikan sebelumnya" />
           <Stat label="Total pemasukan QRIS" value={money(balance.grossIncome)} hint={`${balance.paymentCount} pembayaran`} />
           <Stat label={`Biaya layanan ${balance.rules.feePercent}%`} value={`− ${money(balance.platformFee)}`} />
+          {(balance.onHold ?? 0) > 0 && <Stat label="Masih ditahan" value={money(balance.onHold ?? 0)} hint={`Bisa ditarik ${balance.policy?.holdDays ?? 0} hari setelah pembayaran`} />}
           <Stat label="Sudah / sedang ditarik" value={money(balance.withdrawn + balance.pending)} hint={balance.pending > 0 ? `${money(balance.pending)} masih diproses` : undefined} />
         </div>
       </section>
 
       <section className={panel}>
         <h3 className="font-display text-2xl font-semibold">Ajukan penarikan</h3>
-        <p className="mt-1 text-sm text-fg/55">Minimal {money(balance.rules.minAmount)}{balance.rules.flatFee > 0 ? ` · biaya transfer ${money(balance.rules.flatFee)} per penarikan` : ""}. Admin STUDIODO mentransfer secara manual ke rekening di bawah.</p>
+        <p className="mt-1 text-sm text-fg/55">Minimal {money(minAmount)}{maxAmount > 0 ? ` · maksimal ${money(maxAmount)}` : ""}{flatFee > 0 ? ` · biaya transfer ${money(flatFee)} per penarikan` : ""}. Admin STUDIODO mentransfer secara manual ke rekening di bawah.</p>
+        {balance.window && (
+          <p className={`mt-3 rounded-xl border px-3 py-2 text-sm ${windowOpen ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-700" : "border-amber-400/30 bg-amber-400/10 text-amber-700"}`}>
+            {frozen ? "Penarikan akun ini sedang dibekukan. Hubungi STUDIODO untuk informasi lebih lanjut." : windowOpen ? balance.window.label : `${balance.window.label}. Saat ini di luar jam penarikan${balance.window.nextOpenAt ? `, dibuka lagi ${new Date(balance.window.nextOpenAt).toLocaleString("id-ID", { weekday: "long", hour: "2-digit", minute: "2-digit" })}` : ""}.`}
+          </p>
+        )}
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="block text-sm text-fg/60">
             Nominal (Rp)
-            <input className={inputClass} type="number" min={0} inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={String(balance.rules.minAmount)} />
+            <input className={inputClass} type="number" min={0} inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={String(minAmount)} />
             <span className="mt-1 flex gap-2 text-xs">
               <button type="button" onClick={() => setForm({ ...form, amount: String(balance.available) })} className="text-accent hover:underline">Tarik semua ({money(balance.available)})</button>
             </span>
@@ -143,7 +155,8 @@ export default function WithdrawalPanel() {
           </button>
           {amount > 0 && <span className="text-sm text-fg/55">Kamu terima: <strong className="text-fg">{money(Math.max(0, net))}</strong></span>}
           {amount > balance.available && <span className="text-sm text-red-500">Melebihi saldo yang bisa ditarik</span>}
-          {amount > 0 && amount < balance.rules.minAmount && <span className="text-sm text-red-500">Di bawah minimal penarikan</span>}
+          {amount > 0 && amount < minAmount && <span className="text-sm text-red-500">Di bawah minimal penarikan</span>}
+          {maxAmount > 0 && amount > maxAmount && <span className="text-sm text-red-500">Melebihi batas per penarikan</span>}
         </div>
       </section>
 

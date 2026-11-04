@@ -39,6 +39,7 @@ const ContentStudioPanel = lazy(() => import("@/components/ContentStudioPanel").
 const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
+import SuperadminFinancePanel from "@/components/SuperadminFinancePanel";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -1363,7 +1364,7 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
+type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
@@ -1379,6 +1380,7 @@ const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon
   { title: "Keuangan", items: [
     { id: "billing", label: "Pembayaran", icon: "card" },
     { id: "withdrawals", label: "Penarikan QRIS", icon: "wallet" },
+    { id: "finance", label: "Saldo & Kebijakan", icon: "chart" },
     { id: "plans", label: "Plans", icon: "box" },
   ] },
   { title: "Konten", items: [
@@ -1396,6 +1398,8 @@ export default function SuperadminDashboard() {
   useAdminThemeScope();
   const [status, setStatus] = useState<"checking" | "needsLogin" | "authenticated">("checking");
   const [email, setEmail] = useState<string | null>(null);
+  // "finance" accounts only see the money screens (the server enforces it too, see routes/superadmin.ts).
+  const [role, setRole] = useState<"owner" | "finance">("owner");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [tenants, setTenants] = useState<SuperadminTenant[]>([]);
   const [section, setSection] = useState<Section>("overview");
@@ -1447,6 +1451,7 @@ export default function SuperadminDashboard() {
     }
     superadminApi.getMe().then((result) => {
       setEmail(result?.email ?? null);
+      if (result?.role === "finance") { setRole("finance"); setSection("withdrawals"); }
       setStatus("authenticated");
     }).catch((err) => {
       if (err instanceof SuperadminApiError && err.status === 401) {
@@ -1496,7 +1501,7 @@ export default function SuperadminDashboard() {
           <h1 className="mt-1.5 font-display text-xl font-bold leading-tight">Admin Pusat</h1>
         </div>
         <nav className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2">
-          {SECTION_GROUPS.map((group) => (
+          {SECTION_GROUPS.map((group) => ({ ...group, items: role === "finance" ? group.items.filter((item) => item.id === "withdrawals" || item.id === "finance") : group.items })).filter((group) => group.items.length > 0).map((group) => (
             <div key={group.title}>
               <div className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-fg/40">{group.title}</div>
               <ul className="flex flex-col gap-0.5">
@@ -1592,6 +1597,7 @@ export default function SuperadminDashboard() {
         {section === "creators" && <CreatorsPanel />}
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
+        {section === "finance" && <SuperadminFinancePanel isOwner={role === "owner"} />}
 
         {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
 
