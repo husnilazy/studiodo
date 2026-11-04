@@ -266,7 +266,7 @@ export default function CameraSettings() {
             { name: "Webcam / virtual camera", badge: "Paling mudah", steps: ["Colok webcam (atau nyalakan virtual camera seperti OBS / Camo / Iriun).", "Mode kamera = Webcam / virtual camera, lalu Simpan.", "Izinkan akses kamera bila diminta. Kualitas mengikuti webcam."] },
             { name: "Canon DSLR / mirrorless via digiCamControl", badge: "Tether", steps: ["Pasang & buka digiCamControl, aktifkan webserver (File > Settings > Webserver).", "Sambungkan kamera lewat USB, nyalakan, mode M. Tutup EOS Utility.", "Mode kamera = Canon DSLR / tether bridge, URL http://127.0.0.1:5510, klik Cek koneksi."] },
             { name: "Canon & Sony via bridge native", badge: "Tanpa digiCamControl", steps: ["Sambungkan kamera lewat USB dan nyalakan. Tutup EOS Utility / Imaging Edge / digiCamControl.", "Bridge native jalan otomatis di http://127.0.0.1:5514 bila terpasang.", "Mode kamera = tether, URL bridge 5514, klik Cek koneksi. Kamera juga muncul di daftar Pilih kamera."] },
-            { name: "Nikon", badge: "Belum tersedia", steps: ["Belum ada bridge Nikon di aplikasi ini.", "Sementara pakai Webcam / virtual camera, atau Nikon Webcam Utility sebagai virtual camera."] },
+            { name: "Nikon", badge: "Belum tersedia", steps: ["SDK Nikon sudah ada di PC, tetapi bridge Nikon belum dibuat di aplikasi ini.", "Sementara pakai Webcam / virtual camera, atau Nikon Webcam Utility sebagai virtual camera."] },
           ].map((cam) => (
             <details key={cam.name} className="group rounded-2xl border border-fg/10 bg-fg/[0.03] p-4" open={cam.badge === "Paling mudah"}>
               <summary className="cursor-pointer list-none">
@@ -278,6 +278,31 @@ export default function CameraSettings() {
               </ol>
             </details>
           ))}
+        </div>
+        <div className="mt-4 rounded-2xl border border-fg/10 p-4">
+          <p className="text-sm font-semibold">SDK resmi pabrikan yang dipakai</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="uppercase tracking-wider text-fg/45"><tr><th className="py-2 pr-3">SDK</th><th className="py-2 pr-3">Kamera</th><th className="py-2 pr-3">Status di STUDIODO</th><th className="py-2">Catatan</th></tr></thead>
+              <tbody className="text-fg/65">
+                {[
+                  { sdk: "Canon EDSDK 13.20", cam: "EOS DSLR / mirrorless Canon", status: "Aktif", tone: "ok", note: "Teruji di EOS 1300D: live view, jepret, ISO / speed / aperture / WB. Tutup EOS Utility." },
+                  { sdk: "Sony Camera Remote SDK (CrSDK) 2.x", cam: "Sony Alpha yang didukung CrSDK", status: "Aktif, belum teruji", tone: "warn", note: "Atur kamera ke mode \"PC Remote\" dan format JPEG. Tutup Imaging Edge." },
+                  { sdk: "Nikon SDK (MAID3 / Z-series)", cam: "D5300, D7100/7200, D750, D780, D800/810, Z5, Z6, Z50, dll.", status: "Belum tersambung", tone: "off", note: "File SDK sudah tersedia, tetapi bridge Nikon belum dibuat. Sementara pakai Webcam Utility atau webcam." },
+                  { sdk: "digiCamControl 2.1 (bukan SDK pabrikan)", cam: "Banyak model Canon & Nikon", status: "Aktif", tone: "ok", note: "Jalur alternatif lewat webserver digiCamControl, port 5510. Tidak bisa jalan bersamaan dengan bridge native." },
+                  { sdk: "EOS Webcam Utility (Canon)", cam: "EOS tertentu sebagai webcam", status: "Lewat mode Webcam", tone: "ok", note: "Memakai kamera sebagai virtual camera, tanpa kontrol eksposur dari admin." },
+                ].map((row) => (
+                  <tr key={row.sdk} className="border-t border-fg/10 align-top">
+                    <td className="py-2 pr-3 font-semibold text-fg/80">{row.sdk}</td>
+                    <td className="py-2 pr-3">{row.cam}</td>
+                    <td className="py-2 pr-3"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${row.tone === "ok" ? "bg-emerald-400/15 text-emerald-600" : row.tone === "warn" ? "bg-amber-300/20 text-amber-600" : "bg-fg/10 text-fg/50"}`}>{row.status}</span></td>
+                    <td className="py-2">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[11px] text-fg/40">Hanya satu program yang boleh memegang kamera pada satu waktu (bridge native, digiCamControl, EOS Utility, atau Imaging Edge).</p>
         </div>
         <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-fg/60">
           <p className="font-semibold text-amber-600">Kalau kamera tidak terdeteksi</p>
