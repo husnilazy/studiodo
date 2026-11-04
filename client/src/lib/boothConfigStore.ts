@@ -147,6 +147,14 @@ export interface BoothConfig {
   autoPrintEnabled: boolean;
   printCopies: number;
   printerName: string | null;
+  /** Physical sheet size sent to the printer driver. The strip is always rendered for it, so it must match the paper loaded. */
+  printPaperSize: "4r" | "5r" | "6r" | "a4";
+  /** cover = fill the sheet (edges may be cropped); contain = whole image visible with white edges. */
+  printFit: "cover" | "contain";
+  /** White margin around the print, in mm (0 = borderless). */
+  printMarginMm: number;
+  /** Print the strip twice side by side on one sheet (2x6 strips on 4R paper, cut in half). */
+  printTwoUp: boolean;
   offlineModeEnabled: boolean;
   kioskFlow: KioskFlowConfig;
 }
@@ -262,6 +270,10 @@ const DEFAULT_CONFIG: BoothConfig = {
   autoPrintEnabled: true,
   printCopies: 1,
   printerName: null,
+  printPaperSize: "4r",
+  printFit: "cover",
+  printMarginMm: 0,
+  printTwoUp: false,
   offlineModeEnabled: false,
   kioskFlow: DEFAULT_KIOSK_FLOW,
 };
@@ -349,7 +361,7 @@ export const useBoothConfig = create<BoothConfigStore>()(
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
-const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "offlineModeEnabled", "kioskFlow"];
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
 const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 

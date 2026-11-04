@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { printLayoutFromConfig } from "@/lib/printLayout";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
@@ -421,6 +422,7 @@ export default function Hasil() {
           dataUrl: printDataUrl,
           printerName: config.printerName,
           copies,
+          ...printLayoutFromConfig(config),
         });
         if (result.ok) {
           // The printer has the job; keep the animation up until the physical print leaves the Windows queue.

@@ -16,6 +16,9 @@ const { BrowserWindow } = require("electron");
 const PAGE_SIZES_MM = {
   "4r": { width: 101.6, height: 152.4 },
   receipt: { width: 72, height: 120 },
+  "5r": { width: 127, height: 177.8 },
+  "6r": { width: 152.4, height: 203.2 },
+  a4: { width: 210, height: 297 },
 };
 
 // Strict on purpose: dataUrl gets interpolated straight into an <img src="">
@@ -33,8 +36,12 @@ function pageSizeMicrons(pageSize) {
   return { width: Math.round(mm.width * 1000), height: Math.round(mm.height * 1000) };
 }
 
-function buildPrintHtml(dataUrl, pageSize) {
+function buildPrintHtml(dataUrl, pageSize, layout = {}) {
   const mm = PAGE_SIZES_MM[pageSize] ?? PAGE_SIZES_MM["4r"];
+  const fit = layout.fit === "contain" ? "contain" : "cover";
+  const margin = Math.max(0, Math.min(10, Number(layout.marginMm) || 0));
+  const copies = layout.twoUp ? 2 : 1;
+  const imgs = Array.from({ length: copies }, () => `<img src="${dataUrl}" />`).join("");
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -42,11 +49,12 @@ function buildPrintHtml(dataUrl, pageSize) {
 <style>
   @page { size: ${mm.width}mm ${mm.height}mm; margin: 0; }
   html, body { margin: 0; padding: 0; width: ${mm.width}mm; height: ${mm.height}mm; }
-  img { width: ${mm.width}mm; height: ${mm.height}mm; display: block; object-fit: cover; }
+  .sheet { box-sizing: border-box; width: ${mm.width}mm; height: ${mm.height}mm; padding: ${margin}mm; display: flex; gap: ${copies > 1 ? margin : 0}mm; background: #fff; overflow: hidden; }
+  img { flex: 1 1 0; min-width: 0; height: 100%; display: block; object-fit: ${fit}; }
 </style>
 </head>
 <body>
-  <img src="${dataUrl}" />
+  <div class="sheet">${imgs}</div>
 </body>
 </html>`;
 }
@@ -65,7 +73,7 @@ async function listPrinters() {
   }
 }
 
-function printImage({ dataUrl, printerName, copies, pageSize }) {
+function printImage({ dataUrl, printerName, copies, pageSize, fit, marginMm, twoUp }) {
   return new Promise((resolve, reject) => {
     if (!isValidImageDataUrl(dataUrl)) {
       reject(new Error("dataUrl strip tidak valid"));
@@ -73,7 +81,7 @@ function printImage({ dataUrl, printerName, copies, pageSize }) {
     }
 
     const printWin = new BrowserWindow({ show: false, webPreferences: { offscreen: false } });
-    const html = buildPrintHtml(dataUrl, pageSize);
+    const html = buildPrintHtml(dataUrl, pageSize, { fit, marginMm, twoUp });
 
     printWin.webContents.once("did-finish-load", () => {
       const options = {

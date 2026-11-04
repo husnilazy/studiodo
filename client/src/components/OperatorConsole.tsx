@@ -1,4 +1,5 @@
-import AdminKeyboard from "@/components/AdminKeyboard";
+import AdminKeyboard from "@/components/AdminKeyboard";
+import { printLayoutFromConfig } from "@/lib/printLayout";
 import { openAdminFromKiosk } from "@/lib/adminEntry";
 import { useCallback, useEffect, useState } from "react";
 import { useBoothConfig, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
@@ -296,7 +297,7 @@ function PrinterPanel() {
     ctx.fillText("TEST PRINT", canvas.width / 2, canvas.height / 2 - 30);
     ctx.font = "32px sans-serif";
     ctx.fillText("Operator Console", canvas.width / 2, canvas.height / 2 + 40);
-    const result = await window.studiodo.printImage({ dataUrl: canvas.toDataURL("image/jpeg", 0.92), printerName: config.printerName, copies: 1 });
+    const result = await window.studiodo.printImage({ dataUrl: canvas.toDataURL("image/jpeg", 0.92), printerName: config.printerName, copies: 1, ...printLayoutFromConfig(config) });
     if (result.ok) {
       setTestStatus("ok");
     } else {
