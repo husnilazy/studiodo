@@ -1,122 +1,10 @@
 import { useEffect, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
-import { checkTetherBridge, getCameraProperties, setCameraProperties, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth, type CameraProperties } from "@/lib/camera";
+import { checkTetherBridge, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth } from "@/lib/camera";
+import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
-
-const PROPERTY_LABELS: Record<string, string> = {
-  iso: "ISO",
-  shutterspeed: "Shutter Speed",
-  aperture: "Aperture",
-  whitebalance: "White Balance",
-};
-
-// ISO/shutter/aperture/WB control over the tethered camera — only works
-// through electron/digicam-bridge.cjs (digiCamControl), verified live
-// 2026-09-29 against a real Canon EOS 1300D via its "slc" single-command
-// API (see the comment block at the top of digicam-bridge.cjs for the full
-// verification notes — an earlier guess at the command syntax silently did
-// nothing, since every request to digiCamControl's "/" returns the same
-// static HTML whether or not the command was actually recognized). The
-// separate closed-source canon-bridge.exe doesn't implement /properties at
-// all, so this just fails to load and hides itself for that setup instead
-// of showing a broken/empty panel.
-function CameraPropertiesPanel({ bridgeUrl, enabled }: { bridgeUrl: string; enabled: boolean }) {
-  const [properties, setProperties] = useState<CameraProperties | null>(null);
-  const [pending, setPending] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [supported, setSupported] = useState(true);
-
-  const load = async () => {
-    if (!enabled || !bridgeUrl) return;
-    setLoading(true);
-    try {
-      setProperties(await getCameraProperties(bridgeUrl));
-      setSupported(true);
-    } catch {
-      setSupported(false);
-      setProperties(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setPending({});
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridgeUrl, enabled]);
-
-  if (!enabled || (!loading && !supported)) return null;
-
-  const dirty = Object.keys(pending).length > 0;
-
-  const apply = async () => {
-    if (!dirty) return;
-    setApplying(true);
-    try {
-      const results = await setCameraProperties(bridgeUrl, pending);
-      const failed = Object.entries(results).filter(([, r]) => !r.ok);
-      if (failed.length > 0) {
-        pushToast({ type: "error", title: "Sebagian pengaturan gagal diterapkan", sub: failed.map(([name, r]) => `${PROPERTY_LABELS[name] ?? name}: ${r.error}`).join(" · ") });
-      } else {
-        pushToast({ type: "success", title: "Pengaturan kamera diterapkan" });
-      }
-      setPending({});
-      await load();
-    } catch (error) {
-      pushToast({ type: "error", title: "Gagal menerapkan pengaturan kamera", sub: error instanceof Error ? error.message : undefined });
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  return (
-    <section className={sectionClass}>
-      <div className="flex items-center justify-between gap-3">
-        <div><p className="eyebrow">TETHER CONTROL</p><h2 className="font-display text-xl font-semibold">Pengaturan kamera</h2></div>
-        <button type="button" onClick={load} disabled={loading} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg disabled:opacity-50">
-          {loading ? "Memuat…" : "Refresh"}
-        </button>
-      </div>
-      {!properties ? (
-        <p className="mt-4 text-xs text-fg/40">Memuat pengaturan kamera...</p>
-      ) : (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {Object.entries(properties).map(([name, state]) => (
-            <Field key={name} label={PROPERTY_LABELS[name] ?? name}>
-              {state.error || state.choices.length === 0 ? (
-                <p className="mt-2 text-xs text-fg/30">Tidak tersedia di kamera ini</p>
-              ) : (
-                <select
-                  className={inputClass}
-                  value={pending[name] ?? state.value ?? ""}
-                  onChange={(e) => setPending((prev) => ({ ...prev, [name]: e.target.value }))}
-                >
-                  {state.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-                </select>
-              )}
-            </Field>
-          ))}
-        </div>
-      )}
-      <p className="mt-3 text-xs text-fg/40">Langsung mengubah kamera fisik yang terhubung — bukan preset, ini kontrol langsung ke hardware.</p>
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={apply}
-          disabled={!dirty || applying}
-          className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {applying && <Spinner size="sm" />}
-          {applying ? "Menerapkan…" : "Terapkan ke kamera"}
-        </button>
-      </div>
-    </section>
-  );
-}
 
 type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl">;
 const pickDraft = (config: BoothConfig): CameraDraft => ({
@@ -269,7 +157,13 @@ export default function CameraSettings() {
               </div>
               <p className="mt-2 text-xs">
                 {bridgeHealth === null ? (
-                  <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
+                  <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif. Bridge native Canon/Sony (tanpa digiCamControl, otomatis jalan bila terpasang): http://127.0.0.1:5514 — tutup EOS Utility/digiCamControl dulu.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine && bridgeHealth.state === "asleep" ? (
+                  <span className="text-amber-300">● Kamera tidur atau mati. Nyalakan kamera atau setengah-tekan shutter — bridge akan menyambung ulang otomatis.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine && bridgeHealth.cameraConnected === false ? (
+                  <span className="text-amber-300">● Bridge native aktif, tapi belum ada kamera Canon/Sony yang terdeteksi.{bridgeHealth.error ? ` ${bridgeHealth.error}.` : ""} Periksa kabel USB, nyalakan kamera, dan tutup EOS Utility / Imaging Edge.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine ? (
+                  <span className="text-emerald-300">● Bridge native aktif — {bridgeHealth.camera || "kamera"} terhubung ({bridgeHealth.engine === "sony" ? "Sony" : "Canon"} SDK)</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected === false ? (
                   <span className="text-amber-300">● digiCamControl jalan, tapi kamera Canon tidak terdeteksi. Periksa kabel USB dan pastikan kamera menyala.</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable ? (

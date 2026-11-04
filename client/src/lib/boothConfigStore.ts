@@ -133,6 +133,8 @@ export interface BoothConfig {
   sessionTimerMinutes: number;
   cameraMode: CameraMode;
   tetherBridgeUrl: string;
+  /** Camera settings saved from Admin > Kamera ({ iso: "400", shutterspeed: "1/125", ... }), pushed back to the camera when a session's live view starts. Device-local: depends on this PC's camera. */
+  cameraPreset: Record<string, string>;
   qrisEnabled: boolean;
   stripLayout: StripLayout;
   stripTemplate: StripVisualTemplate;
@@ -249,6 +251,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   sessionTimerMinutes: 5,
   cameraMode: "webcam",
   tetherBridgeUrl: "http://localhost:5510",
+  cameraPreset: {},
   qrisEnabled: true,
   stripLayout: "classic-vertical",
   stripTemplate: "solid",
@@ -346,7 +349,7 @@ export const useBoothConfig = create<BoothConfigStore>()(
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
-const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "printerName", "offlineModeEnabled", "kioskFlow"];
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
 const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 

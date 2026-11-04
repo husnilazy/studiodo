@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, FILTER_CSS, FILTER_LABELS, type CameraFilter } from "@/lib/sessionStore";
 import { isEventActive, useBoothConfig } from "@/lib/boothConfigStore";
-import { captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
+import { applyCameraPreset, captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
 import { loadImage, renderTemplate } from "@/lib/output";
 import { getNextRoute } from "@/lib/kioskFlow";
 import { useTemplateLibrary } from "@/lib/templateStore";
@@ -408,6 +408,8 @@ export default function SesiFoto() {
       setLiveViewStarting(true);
       await startTetherLiveView(bridgeUrl);
       if (controller.signal.aborted) return;
+      // Cameras forget settings changed over USB after a power cycle — push the booth's saved preset again.
+      void applyCameraPreset(bridgeUrl, useBoothConfig.getState().config.cameraPreset);
       setLiveViewStarting(false);
       while (!controller.signal.aborted) {
         setLiveViewUrl(`${bridgeUrl}/liveview.jpg?ts=${Date.now()}`);

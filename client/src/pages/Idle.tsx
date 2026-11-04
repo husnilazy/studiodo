@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { useKioskSession } from "@/lib/sessionStore";
 import { getNextRoute } from "@/lib/kioskFlow";
+import { applyCameraPreset, prepareTetherCamera, standbyTetherCamera } from "@/lib/camera";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
@@ -30,8 +31,23 @@ export default function Idle() {
   const showHeading = config.idleShowHeadline !== false && headline !== "";
   const showSubheading = config.idleShowSubheadline !== false && subheadline !== "";
 
+  // Back on the idle screen = nobody is shooting: switch camera live view off so the sensor can cool
+  // (sessions turn it on again). The idle screen inside the WYSIWYG editor must not touch real hardware.
+  useEffect(() => {
+    if (positionable?.editMode || config.cameraMode !== "tether") return;
+    standbyTetherCamera(config.tetherBridgeUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const start = () => {
     if (positionable?.editMode) return;
+    // Wake the camera now: payment/frame selection takes a while, and by the time the customer reaches
+    // the camera screen live view is already running with the booth's saved settings.
+    if (config.cameraMode === "tether") {
+      void prepareTetherCamera(config.tetherBridgeUrl).then((ok) => {
+        if (ok) void applyCameraPreset(config.tetherBridgeUrl, config.cameraPreset);
+      });
+    }
     navigate(getNextRoute("idle", config.kioskFlow));
   };
 

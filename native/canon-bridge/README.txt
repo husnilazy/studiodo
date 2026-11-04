@@ -1,23 +1,31 @@
-STUDIODO Canon bridge runtime
+STUDIODO camera bridge — Canon EDSDK + Sony Camera Remote SDK (tanpa digiCamControl)
 
-Place the legally licensed, compiled Canon EDSDK bridge here before building:
+Sumber: native/canon-bridge-src (C# .NET 8). Output build ada di folder ini
+(canon-bridge.exe + DLL) dan tidak di-commit.
 
-  canon-bridge.exe
-  CanonEDSDK.dll (or the DLL name required by the bridge)
-  EDSDK.dll (if required by the bridge)
+Build:
+  0. (Sony) powershell -File native/sony-core-src/setup-sdk.ps1 -Zip "<path CrSDK zip>"
+     lalu native\sony-core-src\build.bat  (butuh MSVC Build Tools)
+  1. powershell -File native/canon-bridge-src/setup-sdk.ps1 -Zip "<path EDSDK zip>"
+  2. cd native/canon-bridge-src ; dotnet build -c Release -o ../canon-bridge
 
-The bridge must listen on http://127.0.0.1:5513 and implement:
+Kontrak HTTP (port 5514, ubah dengan --port / CANON_BRIDGE_PORT) sama dengan
+electron/digicam-bridge.cjs: /health, /capture, /focus, /properties,
+/liveview/start, /liveview/stop, /liveview.jpg.
 
-  GET  /health
-  POST /capture
+Di kiosk: set URL bridge kamera ke http://127.0.0.1:5514. Tutup EOS Utility
+dan digiCamControl — hanya satu aplikasi yang boleh memegang kamera.
+Kiosk PC butuh .NET 8 Desktop/ASP.NET Runtime (x64).
 
-POST /capture receives JSON:
-  { "slotIndex": 0, "filter": "normal", "orientation": "portrait" }
+Canon EDSDK proprietary: pastikan izin redistribusi DLL dari Canon sebelum
+dibagikan ke penyewa.
 
-It may return image/jpeg directly, or JSON:
-  { "dataUrl": "data:image/jpeg;base64,..." }
-  { "imageUrl": "http://127.0.0.1:5513/..." }
 
-Canon EDSDK is proprietary and is intentionally not included in this repository.
-Obtain the SDK and redistribution permissions from Canon, then compile the
-bridge against the SDK and place its runtime files in this folder.
+Mesin kamera dipilih otomatis: kamera yang terhubung lebih dulu dipakai (/health
+melaporkan engine "canon" / "sony"). Mesin yang DLL-nya tidak ada dilewati.
+Sony: set menu kamera USB Connection = "PC Remote", kualitas gambar JPEG
+(RAW-only ditolak). Lama autofocus sebelum foto: env SONY_AF_MS (default 500).
+Belum diuji dengan kamera Sony asli.
+
+Otomatis jalan dari Electron hanya bila env CANON_BRIDGE_ENABLED=true (default mati,
+karena sesi EDSDK memegang kamera eksklusif dan memblokir digiCamControl).

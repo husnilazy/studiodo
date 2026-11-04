@@ -48,11 +48,21 @@ const POLL_INTERVAL_MS = 250;
 // against real hardware, and an allowlist also means /properties can never
 // be used to poke at an arbitrary, unvalidated camera property from the client.
 const CAMERA_PROPERTIES = [
-  { name: "iso", label: "ISO" },
-  { name: "shutterspeed", label: "Shutter Speed" },
-  { name: "aperture", label: "Aperture" },
-  { name: "whitebalance", label: "White Balance" },
+  { name: "iso", label: "ISO", group: "exposure" },
+  { name: "shutterspeed", label: "Shutter Speed", group: "exposure" },
+  { name: "aperture", label: "Aperture", group: "exposure" },
+  { name: "whitebalance", label: "White Balance", group: "color" },
+  // The four above were verified live on a Canon EOS 1300D. The ones below are
+  // property names digiCamControl documents for its set/get/list commands but
+  // were NOT exercised on a real camera — an unsupported one just reports an
+  // error and the admin UI hides it ("Tidak tersedia di kamera ini").
+  { name: "exposurecompensation", label: "Kompensasi Eksposur (EV)", group: "exposure" },
+  { name: "exposuremode", label: "Mode Eksposur (dial kamera)", group: "exposure", writable: false },
+  { name: "meteringmode", label: "Metering", group: "exposure" },
+  { name: "focusmode", label: "Mode Autofocus", group: "focus" },
+  { name: "compressionsetting", label: "Kualitas & Ukuran Foto", group: "output" },
 ];
+const UNSUPPORTED_REPLY = /wrong|error|exception|not found|object reference|invalid/i;
 
 let server = null;
 
@@ -148,14 +158,19 @@ async function digicamSlc(action, param1, param2 = "") {
 // requests at once when one property fully failing doesn't stop the rest anyway.
 async function getCameraProperties() {
   const result = {};
-  for (const { name } of CAMERA_PROPERTIES) {
+  for (const { name, label, group, writable = true } of CAMERA_PROPERTIES) {
+    const meta = { label, group, writable };
     try {
       const value = await digicamSlc("get", name);
       const listRaw = await digicamSlc("list", name);
+      if (UNSUPPORTED_REPLY.test(value) || UNSUPPORTED_REPLY.test(listRaw)) {
+        result[name] = { value: null, choices: [], error: "Tidak didukung kamera ini", ...meta, writable: false };
+        continue;
+      }
       const choices = listRaw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      result[name] = { value: value || null, choices };
+      result[name] = { value: value || null, choices, ...meta, writable: writable && choices.length > 1 };
     } catch (error) {
-      result[name] = { value: null, choices: [], error: error instanceof Error ? error.message : "Gagal membaca properti" };
+      result[name] = { value: null, choices: [], error: error instanceof Error ? error.message : "Gagal membaca properti", ...meta, writable: false };
     }
   }
   return result;
@@ -530,6 +545,13 @@ function startDigicamBridge(options = {}) {
       const chunks = [];
       req.on("data", (chunk) => chunks.push(chunk));
       req.on("end", () => handleCapture(req, res));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/focus/drive") {
+      // Manual focus nudging is only implemented by the native bridge (EDSDK).
+      res.writeHead(501, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ error: "Fokus manual dari layar tidak didukung bridge digiCamControl" }));
       return;
     }
 
