@@ -20,3 +20,5 @@ native/sony-core-src/obj/
 native/canon-bridge/CrAdapter/
 native/canon-bridge/*.lib
 native/canon-bridge/*.exp
+.env.bak*
+.env.pre-*
