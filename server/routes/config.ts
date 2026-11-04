@@ -453,12 +453,12 @@ configRouter.post("/payment/test", requireAdminAuth, async (req, res) => {
 
   if (provider === "doku") {
     const secret = readStoredSecret(config?.dokuSecretEnc);
-    if (!config?.clientId || !secret) return res.status(400).json({ ok: false, message: "Client ID dan Secret Key DOKU belum disimpan." });
+    if (!config?.clientId || !secret) return res.status(400).json({ ok: false, error: "Client ID dan Secret Key DOKU belum disimpan.", message: "Client ID dan Secret Key DOKU belum disimpan." });
     const cfg: DokuCfg = { clientId: config.clientId, secretKey: secret, production: config.dokuEnv === "production" };
     if (config.qrisMode === "snap") {
       // Creates a real (unpaid, 5 minute) dynamic QRIS for Rp 1.000 — the only way to prove Merchant ID, Terminal ID and the RSA key all work.
       const privateKeyPem = readStoredSecret(config.snapKeyEnc);
-      if (!config.merchantId || !config.terminalId || !privateKeyPem) return res.status(400).json({ ok: false, message: "Lengkapi Merchant ID, Terminal ID, dan kunci privat dulu." });
+      if (!config.merchantId || !config.terminalId || !privateKeyPem) return res.status(400).json({ ok: false, error: "Lengkapi Merchant ID, Terminal ID, dan kunci privat lalu klik Simpan QRIS langsung, baru tes.", message: "Lengkapi Merchant ID, Terminal ID, dan kunci privat lalu klik Simpan QRIS langsung, baru tes." });
       try {
         cfg.snap = { merchantId: config.merchantId, terminalId: config.terminalId, postalCode: config.postalCode || "10110", privateKeyPem };
         const qr = await createDokuQris(cfg, { partnerReferenceNo: `test-${Date.now().toString(36)}`, amount: 1000, validityMinutes: 5 });
@@ -470,7 +470,7 @@ configRouter.post("/payment/test", requireAdminAuth, async (req, res) => {
     return res.json(await testDoku(cfg));
   }
   const key = readStoredSecret(config?.xenditKey);
-  if (!key) return res.status(400).json({ ok: false, message: "Secret Key Xendit belum disimpan." });
+  if (!key) return res.status(400).json({ ok: false, error: "Secret Key Xendit belum disimpan.", message: "Secret Key Xendit belum disimpan." });
   res.json(await testXenditQris(key));
 });
 
