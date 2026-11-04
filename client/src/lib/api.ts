@@ -470,7 +470,7 @@ export const api = {
   getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
   markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
   startQris: (sessionId: string) =>
-    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
+    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string; direct?: boolean }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
   startAdditionalPrint: (sessionId: string, quantity: number) => request<{ demo: boolean; qrString: string; amount: number; expiresInSeconds?: number }>("/payment/additional-print", { method: "POST", body: JSON.stringify({ sessionId, quantity }) }),
   redeemAdditionalPrintVoucher: (sessionId: string, code: string, quantity: number) =>
@@ -479,8 +479,9 @@ export const api = {
   updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
     request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string; frame?: { id: string; name: string; imageUrl: string; slots: any[]; canvasWidth: number; canvasHeight: number; orientation: string; outputPreset?: string } | null }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
-  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>("/config/payment"),
-  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production" }) =>
+  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; hasDokuSnapKey?: boolean }>("/config/payment"),
+  testPaymentConnection: (provider: "xendit" | "doku") => request<{ ok: boolean; message: string }>("/config/payment/test", { method: "POST", body: JSON.stringify({ provider }) }),
+  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; dokuSnapPrivateKey?: string }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
   updateCashPaymentConfig: (enabled: boolean) => request<{ enabled: boolean }>("/config/cash-payment", { method: "PATCH", body: JSON.stringify({ enabled }) }),
   createCashVoucher: (body: { amount: number; customerName?: string }) => request<any>("/vouchers/cash", { method: "POST", body: JSON.stringify(body) }),

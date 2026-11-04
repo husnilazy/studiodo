@@ -577,6 +577,12 @@ export const tenantSettings = pgTable("tenant_settings", {
   dokuClientId: text("doku_client_id"),
   dokuSecretKeyEnc: text("doku_secret_key_enc"), // encrypted with lib/secretBox
   dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
+  // 'checkout' = hosted DOKU page (QR is a link, scan with the phone camera); 'snap' = DOKU SNAP QRIS MPM (QR is a real QRIS code any e-wallet can scan).
+  dokuQrisMode: text("doku_qris_mode").notNull().default("checkout"),
+  dokuMerchantId: text("doku_merchant_id"), // SNAP QRIS "Mall ID" issued by DOKU
+  dokuTerminalId: text("doku_terminal_id"), // SNAP QRIS terminal id, 3-16 alphanumerics
+  dokuPostalCode: text("doku_postal_code"), // SNAP QRIS additionalInfo.postalCode (numeric, max 5)
+  dokuSnapPrivateKeyEnc: text("doku_snap_private_key_enc"), // RSA private key (PEM), encrypted with lib/secretBox; public half registered as "Merchant Public Key" at DOKU
   storageDriver: text("storage_driver"), // 'local' | 'r2' | 'gdrive'; falls back to env/local when unset
   r2AccountId: text("r2_account_id"),
   r2Endpoint: text("r2_endpoint"),

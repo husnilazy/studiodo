@@ -25,9 +25,12 @@ export default function PaymentSettings() {
   const [paymentConfig, setPaymentConfig] = useState({ secretKey: "", webhookToken: "" });
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false, paymentProvider: "xendit", dokuClientId: "", hasDokuSecret: false, dokuEnvironment: "sandbox" });
+  const [paymentStatus, setPaymentStatus] = useState<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; hasDokuSnapKey?: boolean }>({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false, paymentProvider: "xendit", dokuClientId: "", hasDokuSecret: false, dokuEnvironment: "sandbox" });
   const [dokuDraft, setDokuDraft] = useState({ clientId: "", secretKey: "" });
   const [dokuSaved, setDokuSaved] = useState(false);
+  const [snapDraft, setSnapDraft] = useState({ merchantId: "", terminalId: "", postalCode: "", privateKey: "" });
+  const [snapSaving, setSnapSaving] = useState(false);
+  const [snapTest, setSnapTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [dokuError, setDokuError] = useState<string | null>(null);
   const [providerSaving, setProviderSaving] = useState(false);
   const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
@@ -69,7 +72,7 @@ export default function PaymentSettings() {
   const refreshPackages = () => api.getPackagesAll().then((result) => setPackages(result ?? [])).catch((error) => console.error("Gagal memuat paket", error));
   useEffect(() => { refreshPackages(); }, []);
   useEffect(() => {
-    api.getPaymentConfig().then((result) => { if (result) { setPaymentStatus(result); setDokuDraft((draft) => ({ ...draft, clientId: result.dokuClientId ?? "" })); } }).catch((error) => console.error("Gagal memuat konfigurasi pembayaran", error));
+    api.getPaymentConfig().then((result) => { if (result) { setPaymentStatus(result); setDokuDraft((draft) => ({ ...draft, clientId: result.dokuClientId ?? "" })); setSnapDraft((draft) => ({ ...draft, merchantId: result.dokuMerchantId ?? "", terminalId: result.dokuTerminalId ?? "", postalCode: result.dokuPostalCode ?? "" })); } }).catch((error) => console.error("Gagal memuat konfigurasi pembayaran", error));
   }, []);
 
   const savePaymentConfig = async () => {
@@ -94,6 +97,37 @@ export default function PaymentSettings() {
     }
   };
 
+  const chooseDokuMode = async (mode: "checkout" | "snap") => {
+    setDokuError(null);
+    try {
+      await api.updatePaymentConfig({ dokuQrisMode: mode });
+      setPaymentStatus((state) => ({ ...state, dokuQrisMode: mode }));
+    } catch (error) {
+      setDokuError(error instanceof Error ? error.message : "Gagal mengubah mode DOKU.");
+    }
+  };
+  const saveSnap = async () => {
+    setDokuError(null);
+    setSnapSaving(true);
+    try {
+      await api.updatePaymentConfig({ dokuMerchantId: snapDraft.merchantId, dokuTerminalId: snapDraft.terminalId, dokuPostalCode: snapDraft.postalCode, ...(snapDraft.privateKey.trim() ? { dokuSnapPrivateKey: snapDraft.privateKey } : {}) });
+      setPaymentStatus((state) => ({ ...state, dokuMerchantId: snapDraft.merchantId.trim(), dokuTerminalId: snapDraft.terminalId.trim(), dokuPostalCode: snapDraft.postalCode.trim(), hasDokuSnapKey: Boolean(snapDraft.privateKey.trim()) || state.hasDokuSnapKey }));
+      setSnapDraft((draft) => ({ ...draft, privateKey: "" }));
+      setSnapTest(null);
+    } catch (error) {
+      setDokuError(error instanceof Error ? error.message : "Gagal menyimpan pengaturan QRIS langsung.");
+    } finally {
+      setSnapSaving(false);
+    }
+  };
+  const testSnap = async () => {
+    setSnapTest(null);
+    try {
+      setSnapTest((await api.testPaymentConnection("doku")) ?? { ok: false, message: "Tidak ada respons." });
+    } catch (error) {
+      setSnapTest({ ok: false, message: error instanceof Error ? error.message : "Tes gagal." });
+    }
+  };
   const saveDoku = async (environment: "sandbox" | "production" = paymentStatus.dokuEnvironment) => {
     setDokuError(null);
     try {
@@ -431,6 +465,42 @@ export default function PaymentSettings() {
           <span className="text-xs text-fg/50">{paymentStatus.dokuClientId && paymentStatus.hasDokuSecret ? `DOKU siap (mode ${paymentStatus.dokuEnvironment === "production" ? "produksi" : "sandbox"}).` : "Isi Client ID dan Secret Key agar pembayaran DOKU aktif."}</span>
         </div>
         {dokuError && <p className="mt-2 text-sm text-red-300">{dokuError}</p>}
+
+        <div className="mt-6 border-t border-fg/10 pt-5">
+          <p className="text-sm font-semibold">Cara customer membayar</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {([{ id: "checkout", name: "Halaman bayar DOKU", desc: "QR berisi tautan. Customer scan dengan kamera HP biasa, lalu pilih QRIS / e-wallet / VA." }, { id: "snap", name: "QRIS langsung", desc: "QR adalah kode QRIS asli: bisa discan dari aplikasi bank / e-wallet apa pun. Perlu Merchant ID, Terminal ID, dan kunci RSA." }] as const).map((option) => (
+              <button key={option.id} type="button" onClick={() => chooseDokuMode(option.id)} className={`rounded-2xl border p-4 text-left transition ${(paymentStatus.dokuQrisMode ?? "checkout") === option.id ? "border-accent bg-accent/10" : "border-fg/15 hover:border-fg/40"}`}>
+                <p className="font-semibold">{option.name}</p>
+                <p className="mt-1 text-xs text-fg/55">{option.desc}</p>
+              </button>
+            ))}
+          </div>
+          {paymentStatus.dokuQrisMode === "snap" && (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field label="Merchant ID (Mall ID) QRIS">
+                  <input className={inputClass} value={snapDraft.merchantId} onChange={(e) => setSnapDraft({ ...snapDraft, merchantId: e.target.value })} autoComplete="off" />
+                </Field>
+                <Field label="Terminal ID (3-16 huruf/angka)">
+                  <input className={inputClass} value={snapDraft.terminalId} onChange={(e) => setSnapDraft({ ...snapDraft, terminalId: e.target.value })} placeholder="STUDIODO01" autoComplete="off" />
+                </Field>
+                <Field label="Kode pos usaha">
+                  <input className={inputClass} value={snapDraft.postalCode} onChange={(e) => setSnapDraft({ ...snapDraft, postalCode: e.target.value })} placeholder="10110" inputMode="numeric" autoComplete="off" />
+                </Field>
+              </div>
+              <Field label={`Kunci privat RSA (PEM)${paymentStatus.hasDokuSnapKey ? " — sudah tersimpan, isi untuk mengganti" : ""}`}>
+                <textarea className={`${inputClass} h-24 font-mono text-xs`} value={snapDraft.privateKey} onChange={(e) => setSnapDraft({ ...snapDraft, privateKey: e.target.value })} placeholder="-----BEGIN PRIVATE KEY-----" autoComplete="off" spellCheck={false} />
+              </Field>
+              <p className="text-xs text-fg/50">Pasangan publiknya didaftarkan di DOKU Back Office → Integration → API Keys → Merchant Public Key. Kunci privat disimpan terenkripsi dan tidak pernah dikirim kembali. Jika data belum lengkap, kiosk otomatis memakai halaman bayar DOKU.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={saveSnap} disabled={snapSaving} className="bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{snapSaving ? "Menyimpan…" : "Simpan QRIS langsung"}</button>
+                <button type="button" onClick={testSnap} className="rounded-xl border border-fg/20 px-4 py-2 text-sm font-medium hover:border-fg/50">Tes buat QRIS (Rp 1.000, tidak dibayar)</button>
+                {snapTest && <span className={`text-sm ${snapTest.ok ? "text-emerald-300" : "text-red-300"}`}>{snapTest.message}</span>}
+              </div>
+            </div>
+          )}
+        </div>
         {tenantId && (
           <div className="mt-5 rounded-2xl border border-amber-400/25 bg-amber-500/[0.06] p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">URL notifikasi DOKU</p>

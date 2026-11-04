@@ -22,3 +22,4 @@ native/canon-bridge/*.lib
 native/canon-bridge/*.exp
 .env.bak*
 .env.pre-*
+.secrets/

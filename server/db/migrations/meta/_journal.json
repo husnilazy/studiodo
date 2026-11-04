@@ -295,6 +295,13 @@
       "when": 1792000000000,
       "tag": "0041_custom_frames",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793807436963,
+      "tag": "0042_same_blue_blade",
+      "breakpoints": true
     }
   ]
 }

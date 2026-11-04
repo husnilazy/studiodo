@@ -185,7 +185,8 @@ export default function Pembayaran() {
       const result = await api.startQris(sessionId);
       if (!result) throw new Error("Gagal memulai QRIS");
       setQrisString(result.qrString);
-      setViaDoku(result.provider === "doku");
+      // Checkout returns a LINK (phone-camera scan); direct (SNAP) returns a real QRIS code any e-wallet scanner reads.
+      setViaDoku(result.provider === "doku" && !result.direct);
 
       // Visual ring only — reaching 0 just tells the customer the QR looks
       // stale and offers a fresh one. It must NOT stop the background poll:

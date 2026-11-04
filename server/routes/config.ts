@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { encryptSecret, readStoredSecret } from "../lib/secretBox.js";
-import { testDoku } from "../lib/doku.js";
+import { createDokuQris, testDoku, type DokuCfg } from "../lib/doku.js";
+import crypto from "node:crypto";
 import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -307,6 +308,7 @@ function paymentWebhookUrls(tenantId: string) {
   return {
     xendit: `${xenditBase}/${tenantId}`,
     doku: `${publicBase || "https://<alamat-server-anda>"}/api/payment/webhook/doku/${tenantId}`,
+    dokuQris: `${publicBase || "https://<alamat-server-anda>"}/api/payment/webhook/doku-qris/${tenantId}`,
   };
 }
 
@@ -329,6 +331,11 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
       dokuClientId: tenantSettings.dokuClientId,
       dokuSecretKeyEnc: tenantSettings.dokuSecretKeyEnc,
       dokuEnvironment: tenantSettings.dokuEnvironment,
+      dokuQrisMode: tenantSettings.dokuQrisMode,
+      dokuMerchantId: tenantSettings.dokuMerchantId,
+      dokuTerminalId: tenantSettings.dokuTerminalId,
+      dokuPostalCode: tenantSettings.dokuPostalCode,
+      dokuSnapPrivateKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc,
     })
     .from(tenantSettings)
     .where(eq(tenantSettings.tenantId, req.tenantId!));
@@ -351,6 +358,11 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
     dokuClientId: config?.dokuClientId ?? "",
     hasDokuSecret: Boolean(config?.dokuSecretKeyEnc),
     dokuEnvironment: config?.dokuEnvironment === "production" ? "production" : "sandbox",
+    dokuQrisMode: config?.dokuQrisMode === "snap" ? "snap" : "checkout",
+    dokuMerchantId: config?.dokuMerchantId ?? "",
+    dokuTerminalId: config?.dokuTerminalId ?? "",
+    dokuPostalCode: config?.dokuPostalCode ?? "",
+    hasDokuSnapKey: Boolean(config?.dokuSnapPrivateKeyEnc),
     webhookUrls: paymentWebhookUrls(req.tenantId!),
   });
 });
@@ -385,7 +397,33 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
     if (dokuSecretKey.length < 8 || dokuSecretKey.length > 300 || /\s/.test(dokuSecretKey)) return res.status(400).json({ error: "Secret Key DOKU tidak valid (minimal 8 karakter, tanpa spasi)." });
     values.dokuSecretKeyEnc = encryptSecret(dokuSecretKey);
   }
-  if (body.clearDoku === true) { values.dokuClientId = null; values.dokuSecretKeyEnc = null; }
+  if (body.clearDoku === true) { values.dokuClientId = null; values.dokuSecretKeyEnc = null; values.dokuMerchantId = null; values.dokuTerminalId = null; values.dokuSnapPrivateKeyEnc = null; values.dokuQrisMode = "checkout"; }
+  if (body.dokuQrisMode === "checkout" || body.dokuQrisMode === "snap") values.dokuQrisMode = body.dokuQrisMode;
+  if (typeof body.dokuMerchantId === "string") {
+    const v = body.dokuMerchantId.trim();
+    if (v.length > 64 || /\s/.test(v)) return res.status(400).json({ error: "Merchant ID (Mall ID) DOKU tidak valid (tanpa spasi)." });
+    values.dokuMerchantId = v || null;
+  }
+  if (typeof body.dokuTerminalId === "string") {
+    const v = body.dokuTerminalId.trim();
+    if (v && !/^[A-Za-z0-9]{3,16}$/.test(v)) return res.status(400).json({ error: "Terminal ID harus 3-16 huruf/angka, tanpa spasi." });
+    values.dokuTerminalId = v || null;
+  }
+  if (typeof body.dokuPostalCode === "string") {
+    const v = body.dokuPostalCode.trim();
+    if (v && !/^\d{1,5}$/.test(v)) return res.status(400).json({ error: "Kode pos harus angka (maksimal 5 digit)." });
+    values.dokuPostalCode = v || null;
+  }
+  const dokuSnapPrivateKey = text(body.dokuSnapPrivateKey);
+  if (dokuSnapPrivateKey) {
+    try {
+      const keyObject = crypto.createPrivateKey(dokuSnapPrivateKey);
+      if (keyObject.asymmetricKeyType !== "rsa") throw new Error("bukan RSA");
+    } catch {
+      return res.status(400).json({ error: "Kunci privat tidak valid. Tempel seluruh isi file .pem (diawali -----BEGIN PRIVATE KEY-----)." });
+    }
+    values.dokuSnapPrivateKeyEnc = encryptSecret(dokuSnapPrivateKey);
+  }
   if (body.dokuEnvironment === "sandbox" || body.dokuEnvironment === "production") values.dokuEnvironment = body.dokuEnvironment;
   if (typeof body.qrisEnabled === "boolean") values.qrisEnabled = body.qrisEnabled;
   if (typeof body.cashPaymentEnabled === "boolean") values.cashPaymentEnabled = body.cashPaymentEnabled;
@@ -409,14 +447,27 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
 // wrong key is caught in the dashboard instead of at the first customer.
 configRouter.post("/payment/test", requireAdminAuth, async (req, res) => {
   const [config] = await db
-    .select({ xenditKey: tenantSettings.xenditSecretKey, clientId: tenantSettings.dokuClientId, dokuSecretEnc: tenantSettings.dokuSecretKeyEnc, dokuEnv: tenantSettings.dokuEnvironment, provider: tenantSettings.paymentProvider })
+    .select({ xenditKey: tenantSettings.xenditSecretKey, clientId: tenantSettings.dokuClientId, dokuSecretEnc: tenantSettings.dokuSecretKeyEnc, dokuEnv: tenantSettings.dokuEnvironment, provider: tenantSettings.paymentProvider, qrisMode: tenantSettings.dokuQrisMode, merchantId: tenantSettings.dokuMerchantId, terminalId: tenantSettings.dokuTerminalId, postalCode: tenantSettings.dokuPostalCode, snapKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc })
     .from(tenantSettings).where(eq(tenantSettings.tenantId, req.tenantId!));
   const provider = req.body?.provider === "doku" ? "doku" : req.body?.provider === "xendit" ? "xendit" : config?.provider === "doku" ? "doku" : "xendit";
 
   if (provider === "doku") {
     const secret = readStoredSecret(config?.dokuSecretEnc);
     if (!config?.clientId || !secret) return res.status(400).json({ ok: false, message: "Client ID dan Secret Key DOKU belum disimpan." });
-    return res.json(await testDoku({ clientId: config.clientId, secretKey: secret, production: config.dokuEnv === "production" }));
+    const cfg: DokuCfg = { clientId: config.clientId, secretKey: secret, production: config.dokuEnv === "production" };
+    if (config.qrisMode === "snap") {
+      // Creates a real (unpaid, 5 minute) dynamic QRIS for Rp 1.000 — the only way to prove Merchant ID, Terminal ID and the RSA key all work.
+      const privateKeyPem = readStoredSecret(config.snapKeyEnc);
+      if (!config.merchantId || !config.terminalId || !privateKeyPem) return res.status(400).json({ ok: false, message: "Lengkapi Merchant ID, Terminal ID, dan kunci privat dulu." });
+      try {
+        cfg.snap = { merchantId: config.merchantId, terminalId: config.terminalId, postalCode: config.postalCode || "10110", privateKeyPem };
+        const qr = await createDokuQris(cfg, { partnerReferenceNo: `test-${Date.now().toString(36)}`, amount: 1000, validityMinutes: 5 });
+        return res.json({ ok: true, message: `QRIS langsung berhasil dibuat (referensi DOKU ${qr.referenceNo || "-"}). Belum ada pembayaran yang terjadi.` });
+      } catch (error) {
+        return res.json({ ok: false, message: error instanceof Error ? error.message : "Gagal membuat QRIS" });
+      }
+    }
+    return res.json(await testDoku(cfg));
   }
   const key = readStoredSecret(config?.xenditKey);
   if (!key) return res.status(400).json({ ok: false, message: "Secret Key Xendit belum disimpan." });
