@@ -27,7 +27,12 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
  * admin shortcut (Ctrl+Shift+A).
  */
 function PinPad({ pin, onSuccess, onCancel }: { pin: string; onSuccess: () => void; onCancel: () => void }) {
-  const [value, setValue] = useState("");
+  const [value, setValueState] = useState("");
+  const valueRef = useRef("");
+  const setValue = (next: string | ((current: string) => string)) => {
+    valueRef.current = typeof next === "function" ? next(valueRef.current) : next;
+    setValueState(valueRef.current);
+  };
   const [failures, setFailures] = useState(0);
   const [lockedUntil, setLockedUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -43,7 +48,7 @@ function PinPad({ pin, onSuccess, onCancel }: { pin: string; onSuccess: () => vo
   const press = (digit: string) => {
     if (locked) return;
     setWrong(false);
-    const next = (value + digit).slice(0, 8);
+    const next = (valueRef.current + digit).slice(0, 8);
     setValue(next);
     if (next.length === pin.length) {
       if (next === pin) { onSuccess(); return; }
