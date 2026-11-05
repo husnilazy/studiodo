@@ -40,7 +40,12 @@ export function TenantWhatsAppCard({ tenantId }: { tenantId: string }) {
 
   // The licence state suggests the right template up front (a tenant already past its end date gets the "habis" one).
   const suggested = data?.licenceStage === "expired" ? "expired" : data?.licenceStage ? "expiring" : "";
-  const pick = (key: string) => { setPicked(key); const t = data?.templates.find((x) => x.key === key); if (t) setText(t.text); };
+  const pick = (key: string) => {
+    if (key === "account") { void prepareAccount(); return; } // needs the server: fresh password link + the booth key
+    setPicked(key); setAccount(null);
+    const t = data?.templates.find((x) => x.key === key);
+    if (t) setText(t.text);
+  };
   const missing = data?.templates.find((t) => t.key === picked)?.missing ?? [];
   const phoneOk = Boolean(data?.phone);
 
@@ -80,6 +85,7 @@ export function TenantWhatsAppCard({ tenantId }: { tenantId: string }) {
           <p className="mt-3 text-[11px] uppercase tracking-[.14em] text-fg/40">atau pilih template lain</p>
           <Select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-1`}>
             <option value="">Pilih template pesan…</option>
+            <option value="account">🔑 Data akun & key trial (terisi otomatis)</option>
             {data.templates.map((t) => <option key={t.key} value={t.key}>{t.label}{t.key === suggested ? " — disarankan" : ""}</option>)}
           </Select>
           <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Tulis pesan atau pilih template di atas…" className={`${fieldClass} mt-2`} />

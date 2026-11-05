@@ -489,7 +489,9 @@ html.admin-themed select option {
 @keyframes sa-pop { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes sa-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .sa-select-list { animation: sa-pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.sa-page { animation: sa-rise 0.32s cubic-bezier(0.22, 0.8, 0.24, 1) both; }
+/* "backwards" only: a finished animation must leave NO transform behind, or the page container becomes the containing block of every
+   position:fixed modal inside it (they would centre and clip inside the content area instead of the window). */
+.sa-page { animation: sa-rise 0.32s cubic-bezier(0.22, 0.8, 0.24, 1) backwards; }
 .sa-select:focus-visible { outline: none; border-color: var(--accent); }
 html.admin-themed button, html.admin-themed a, html.admin-themed input, html.admin-themed textarea {
   transition-property: color, background-color, border-color, box-shadow, opacity, transform;
