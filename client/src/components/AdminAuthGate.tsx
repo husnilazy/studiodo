@@ -1,5 +1,6 @@
 import { BrandLogo } from "@/components/BrandLogo";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { signInWithEmailLink, signInWithGoogle, type HandoffHandle } from "@/lib/passwordless";
 import { api, ApiError } from "@/lib/api";
 import { getAdminToken, setAdminToken } from "@/lib/api";
 import ToastHost from "@/components/ToastHost";
@@ -18,6 +19,33 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [providers, setProviders] = useState<{ google: boolean; magic: boolean } | null>(null);
+  // "waiting" = a passwordless sign-in is in progress (browser tab for Google, inbox for the email link)
+  const [waiting, setWaiting] = useState<{ via: "google" | "email"; verified: boolean } | null>(null);
+  const handle = useRef<HandoffHandle | null>(null);
+
+  useEffect(() => { api.getLoginProviders().then((p) => p && setProviders({ google: p.google, magic: p.magic })).catch(() => undefined); }, []);
+  useEffect(() => () => handle.current?.cancel(), []);
+
+  const runPasswordless = async (via: "google" | "email") => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const h = via === "google" ? await signInWithGoogle(() => setWaiting({ via, verified: true })) : await signInWithEmailLink(email.trim(), () => setWaiting({ via, verified: true }));
+      handle.current = h;
+      setWaiting({ via, verified: false });
+      const result = await h.done;
+      setWaiting(null);
+      if (result.ok) { setAdminToken(result.token); setStatus("authenticated"); }
+      else if (result.error !== "Dibatalkan.") setError(result.error);
+    } catch (err) {
+      setWaiting(null);
+      setError(err instanceof Error ? err.message : "Gagal memulai login");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const cancelWaiting = () => { handle.current?.cancel(); setWaiting(null); };
 
   const evaluate = async () => {
     if (!getAdminToken()) {
@@ -103,6 +131,25 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
         <h1 className="mt-6 font-display text-2xl font-bold">Login Admin</h1>
         <p className="mt-2 text-sm text-fg/50">Masuk dengan akun admin tenant kamu untuk membuka dashboard.</p>
 
+        {waiting ? (
+          <div className="mt-6 rounded-2xl border border-fg/10 bg-canvas p-5 text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
+            <p className="mt-4 text-sm font-semibold">{waiting.verified ? "Tinggal satu langkah" : waiting.via === "google" ? "Selesaikan di browser" : "Cek email kamu"}</p>
+            <p className="mt-1 text-xs text-fg/50">
+              {waiting.verified ? "Tekan “Ya, ini saya” di halaman yang terbuka. Aplikasi akan masuk otomatis." : waiting.via === "google" ? "Kami membuka browser untuk memilih akun Google. Setelah itu aplikasi ini masuk otomatis." : `Kami mengirim tautan masuk ke ${email}. Buka tautannya, lalu tekan “Ya, ini saya”. Berlaku 10 menit.`}
+            </p>
+            <button type="button" onClick={cancelWaiting} className="mt-4 text-xs font-semibold text-fg/50 hover:text-fg">Batal</button>
+          </div>
+        ) : providers?.google && (
+          <>
+            <button type="button" disabled={submitting} onClick={() => void runPasswordless("google")} className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-fg/15 bg-canvas px-4 py-3 text-sm font-semibold transition hover:border-accent hover:bg-fg/[0.04] disabled:opacity-50">
+              <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z" /><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z" /><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z" /><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z" /></svg>
+              Lanjutkan dengan Google
+            </button>
+            <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-widest text-fg/35"><span className="h-px flex-1 bg-fg/10" />atau<span className="h-px flex-1 bg-fg/10" /></div>
+          </>
+        )}
+
         <div className="mt-6 space-y-3">
           <input
             type="email"
@@ -130,6 +177,11 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
         >
           {submitting ? "Memproses…" : "Masuk"}
         </button>
+        {providers?.magic && !waiting && (
+          <button type="button" disabled={submitting || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())} onClick={() => void runPasswordless("email")} className="mt-3 w-full rounded-xl px-4 py-2.5 text-xs font-semibold text-accent transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40">
+            Masuk tanpa password — kirim tautan ke email
+          </button>
+        )}
         <a href="#/" className="mt-4 block text-center text-xs font-semibold text-fg/45 hover:text-fg">← Kembali ke kiosk</a>
       </form>
       <AdminKeyboard />

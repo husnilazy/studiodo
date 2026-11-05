@@ -1058,3 +1058,19 @@ export const adminNotifications = pgTable("admin_notifications", {
   waError: text("wa_error"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("admin_notifications_created_idx").on(table.createdAt), index("admin_notifications_read_idx").on(table.readAt)]);
+
+// Passwordless sign-in for tenant admins (Google, email link): the app starts a handoff, the user approves it in a browser, the app collects the token by polling. See lib/loginHandoff.ts.
+export const authHandoffs = pgTable("auth_handoffs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(), // 'google' | 'magic'
+  pollHash: text("poll_hash").notNull(), // the app proves it started the handoff with the secret behind this hash
+  confirmHash: text("confirm_hash"), // one-time secret carried by the confirm page / email link
+  email: text("email"),
+  adminId: uuid("admin_id").references(() => admins.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // 'pending' | 'verified' (identity proven, waiting for the user's OK) | 'approved' | 'failed' | 'used'
+  error: text("error"),
+  requestIp: text("request_ip"),
+  requestUa: text("request_ua"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("auth_handoffs_email_idx").on(table.email, table.createdAt)]);

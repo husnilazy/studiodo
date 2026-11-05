@@ -328,6 +328,11 @@ export const api = {
   upgradeKioskBinding: (body: { newDeviceId?: string }) =>
     request<{ deviceToken: string; deviceId: string | null }>("/kiosk-keys/upgrade-binding", { method: "POST", body: JSON.stringify(body) }),
   loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  // Passwordless sign-in (Google / email link) — see server/lib/loginHandoff.ts
+  getLoginProviders: () => request<{ google: boolean; googleButton: boolean; googleClientId: string | null; magic: boolean }>("/auth/providers"),
+  startGoogleHandoff: () => request<{ id: string; poll: string; url: string; expiresInSeconds: number }>("/auth/handoff/google", { method: "POST", body: "{}" }),
+  startMagicHandoff: (email: string) => request<{ id: string; poll: string; expiresInSeconds: number }>("/auth/handoff/magic", { method: "POST", body: JSON.stringify({ email }) }),
+  pollHandoff: (id: string, poll: string) => request<{ status: "pending" | "verified" | "approved" | "failed" | "expired" | "invalid"; token?: string; error?: string }>(`/auth/handoff/${id}/poll`, { method: "POST", body: JSON.stringify({ poll }) }),
   logoutAdmin: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   getMe: () => request<{
     tenantId: string;
