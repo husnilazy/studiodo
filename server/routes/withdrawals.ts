@@ -4,7 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, tenants, withdrawals } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
-import { computeQrisBalance } from "../lib/qrisBalance.js";
+import { computeQrisBalance, createWithdrawal } from "../lib/qrisBalance.js";
 import { logEvent } from "../lib/platformEvents.js";
 
 // Tenant side of QRIS withdrawals (mounted at /api/withdrawals). The superadmin side — reviewing, paying and
@@ -41,32 +41,11 @@ withdrawalsRouter.post("/", async (req, res) => {
   if (!bankName || !accountNumber || !accountName) return res.status(400).json({ error: "Nama bank/e-wallet, nomor rekening, dan nama pemilik wajib diisi" });
   if (!/^[0-9]{5,}$/.test(accountNumber)) return res.status(400).json({ error: "Nomor rekening hanya boleh berisi angka" });
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Nominal penarikan tidak valid" });
-
-  const balance = await computeQrisBalance(tenantId);
-  if (balance.settlement !== "platform") {
-    return res.status(403).json({ error: "Akun ini menerima QRIS langsung di rekening Xendit sendiri, jadi tidak ada saldo yang perlu ditarik." });
-  }
-  if (amount < balance.rules.minAmount) {
-    return res.status(400).json({ error: `Penarikan minimal Rp ${balance.rules.minAmount.toLocaleString("id-ID")}` });
-  }
-  if (amount > balance.available) {
-    return res.status(400).json({ error: `Saldo tersedia hanya Rp ${balance.available.toLocaleString("id-ID")}` });
-  }
-  if (amount <= balance.rules.flatFee) return res.status(400).json({ error: "Nominal harus lebih besar dari biaya penarikan" });
-
   const [admin] = await db.select({ email: admins.email }).from(admins).where(eq(admins.id, req.adminId!));
-  const fee = balance.rules.flatFee;
-  const [row] = await db.insert(withdrawals).values({
-    tenantId,
-    amount: amount.toFixed(2),
-    feeAmount: fee.toFixed(2),
-    netAmount: (amount - fee).toFixed(2),
-    bankName,
-    accountNumber,
-    accountName,
-    requestNote: note,
-    requestedBy: admin?.email ?? null,
-  }).returning();
+  // Balance, policy window, limits and the insert are checked together inside one locked transaction (see createWithdrawal).
+  const result = await createWithdrawal(tenantId, { amount, bankName, accountNumber, accountName, note, requestedBy: admin?.email ?? null });
+  if (!result.ok) return res.status(result.status).json({ error: result.error, code: result.code });
+  const row = result.row;
 
   const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
   logEvent({

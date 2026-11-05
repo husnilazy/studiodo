@@ -147,14 +147,17 @@ export default function PreviewFoto() {
   // Which tabs exist follows the tenant's feature switches (these toggles used to do nothing on this screen).
   const tabs = useMemo(() => {
     const list: { key: Tab; label: string; icon: string }[] = [];
-    if (features.stickers) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
+    // Minimalis: the filter comes first and opens by default; stickers stay one tap away instead of filling the screen.
+    const minimal = config.kioskStyle === "minimal";
+    if (features.stickers && !minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.filters) list.push({ key: "filter", label: "Filter", icon: "palette" });
+    if (features.stickers && minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.advancedPhotoEditor) list.push({ key: "warna", label: "Warna", icon: "sliders" });
     if (template) list.push({ key: "susunan", label: "Susunan", icon: "layers" });
     if (features.frameChoice && template) list.push({ key: "frame", label: "Frame", icon: "frame" });
     return list;
-  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template]);
-  const [tab, setTab] = useState<Tab>(features.stickers ? "stiker" : "filter");
+  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template, config.kioskStyle]);
+  const [tab, setTab] = useState<Tab>(features.stickers && config.kioskStyle !== "minimal" ? "stiker" : "filter");
   const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
   // ---- stickers -------------------------------------------------------------------------------------------
@@ -285,7 +288,7 @@ export default function PreviewFoto() {
         <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-[4.5rem] md:px-8">
           <Positionable id="heading" type="text" label="Judul">
             <div>
-              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{config.previewHeadline || "Percantik fotomu"}</h1>
+              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{config.previewHeadline || "Edit Foto"}</h1>
               <p className="mt-0.5 hidden text-sm text-muted sm:block">Tambahkan stiker atau filter, lalu lanjut. Hasilnya langsung terlihat.</p>
             </div>
           </Positionable>
@@ -318,8 +321,8 @@ export default function PreviewFoto() {
                   />
                 )}
               </div>
-              <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={openZoom} aria-label="Perbesar preview" className="k-btn absolute right-2 top-2 !min-h-0 !rounded-full !p-2.5">
-                <Icon name="zoom" className="h-5 w-5" />
+              <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={openZoom} aria-label="Perbesar preview" className="k-btn absolute right-2 top-2 !min-h-0 !gap-2 !rounded-full !px-4 !py-2.5 !text-sm">
+                <Icon name="zoom" className="h-5 w-5" /> Zoom
               </button>
             </div>
 
@@ -334,17 +337,17 @@ export default function PreviewFoto() {
                 ))}
               </div>
               <div className="flex items-center justify-between gap-3">
-                <div className="flex shrink-0 items-center gap-2" title="Cermin = sama seperti yang kamu lihat di layar saat berfoto">
+                <div className="flex shrink-0 items-center gap-2" title="Mirror = sama seperti yang terlihat di layar saat berfoto">
                   <span className="hidden text-xs font-semibold text-muted sm:inline">Hasil:</span>
                   <div className="inline-flex rounded-full border border-fg/10 bg-canvas/60 p-1 text-xs font-semibold">
-                    <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                    <button type="button" onClick={() => setOutputMirrored(true)} aria-pressed={outputMirrored} className={`rounded-full px-3.5 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Mirror</button>
                     <button type="button" onClick={() => setOutputMirrored(false)} aria-pressed={!outputMirrored} className={`rounded-full px-3.5 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
                   </div>
                 </div>
                 {features.retake && (
                   <button type="button" onClick={() => redo(selectedPhoto)} disabled={retakesLeft <= 0} className="k-btn shrink-0 !min-h-0 !px-4 !py-2.5 !text-sm">
                     <Icon name="refresh" className="h-4 w-4" />
-                    Ulangi foto {selectedPhoto + 1}
+                    Ganti foto {selectedPhoto + 1} (foto ulang)
                     <span className="text-xs text-muted">({Math.max(0, retakesLeft)}x lagi)</span>
                   </button>
                 )}
@@ -393,7 +396,7 @@ export default function PreviewFoto() {
               {/* ---- Filter ---- */}
               {activeTab === "filter" && (
                 <div className="flex flex-col gap-4">
-                  <p className="text-xs text-muted">Filter berlaku untuk semua foto.</p>
+                  <p className="k-desc text-xs text-muted">Filter berlaku untuk semua foto.</p>
                   <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5rem, 1fr))" }}>
                     {(Object.keys(FILTER_LABELS) as CameraFilter[]).map((key) => (
                       <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key} className={`rounded-2xl border p-1.5 text-center transition ${filter === key ? "border-accent bg-accent/10 shadow-md" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}>
@@ -405,10 +408,10 @@ export default function PreviewFoto() {
                   <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 p-3">
                     <div>
                       <p className="text-sm font-semibold">Arah hasil</p>
-                      <p className="text-xs text-muted">Cermin = sama seperti yang kamu lihat di layar saat berfoto.</p>
+                      <p className="text-xs text-muted">Mirror = sama seperti yang terlihat di layar saat berfoto.</p>
                     </div>
                     <div className="inline-flex shrink-0 rounded-full border border-fg/10 bg-canvas/60 p-1 text-sm font-semibold">
-                      <button type="button" onClick={() => setOutputMirrored(true)} className={`rounded-full px-4 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Cermin</button>
+                      <button type="button" onClick={() => setOutputMirrored(true)} className={`rounded-full px-4 py-1.5 ${outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Mirror</button>
                       <button type="button" onClick={() => setOutputMirrored(false)} className={`rounded-full px-4 py-1.5 ${!outputMirrored ? "bg-accent text-on-accent" : "text-muted"}`}>Asli</button>
                     </div>
                   </div>

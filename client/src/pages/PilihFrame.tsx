@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
-import { OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
+import { CUSTOM_FRAME_LOCK, OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useFrameCategories, hydrateFrameCategoriesFromServer } from "@/lib/frameCategoryStore";
 import { isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
@@ -27,11 +27,21 @@ interface FrameOption {
   canvasHeight?: number;
 }
 
+// Photo windows in the frame thumbnails: soft pastel tiles numbered in shooting order (1, 2, 3 …), so the customer sees
+// where each photo will land. Colors repeat in this order for frames with more slots than colors.
+const SLOT_PASTELS = ["#FFD6E0", "#D6E8FF", "#D9F5E3", "#FFF1C9", "#E6DAFF", "#FFE0CC"];
+const SLOT_NUMBER_COLOR = "rgba(40, 36, 60, 0.55)";
+
 export default function PilihFrame() {
   const wide = useWideLandscape();
   const [, navigate] = useLocation();
   const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
+  // A custom-frame voucher already put the customer's own frame in the session: nothing to choose, go on.
+  const lockedFrame = useKioskSession((s) => s.selectedTemplateData?.style === CUSTOM_FRAME_LOCK);
+  useEffect(() => {
+    if (lockedFrame) navigate(getNextRoute("frame", kioskFlow), { replace: true });
+  }, [lockedFrame, kioskFlow, navigate]);
   const frameHeadline = useBoothConfig((s) => s.config.frameHeadline);
   const localTemplates = useTemplateLibrary((state) => state.templates);
   // The category list an admin builds in Kelola Frame (Admin → Kelola Frame →
@@ -172,13 +182,13 @@ export default function PilihFrame() {
       <div className={`relative overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-black/5 ${big ? "mx-auto shrink-0 shadow-2xl" : "w-full"}`} style={style}>
         {frame.slots && frame.slots.length > 0 ? (
           frame.slots.map((slot, i) => (
-            <div key={i} className="absolute flex items-center justify-center overflow-hidden bg-gradient-to-br from-accent/20 to-[#ffc8de]/60 text-accent/60" style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` }}>
-              {photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <Icon name="camera" className="h-6 w-6" />}
+            <div key={i} className="absolute flex items-center justify-center overflow-hidden" style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%`, backgroundColor: SLOT_PASTELS[i % SLOT_PASTELS.length], containerType: "size" }}>
+              {photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <span className="select-none font-display font-semibold leading-none" style={{ fontSize: "min(46cqmin, 4.5rem)", color: SLOT_NUMBER_COLOR }}>{i + 1}</span>}
             </div>
           ))
         ) : (
           <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-2 bg-slate-100 p-2">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="flex items-center justify-center rounded-md bg-gradient-to-br from-accent/20 to-[#ffc8de]/60 text-accent/60">{photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <Icon name="camera" className="h-5 w-5" />}</div>)}
+            {[0, 1, 2, 3].map((i) => <div key={i} className="flex items-center justify-center rounded-md" style={{ backgroundColor: SLOT_PASTELS[i % SLOT_PASTELS.length], containerType: "size" }}>{photoUrls[i] ? <img src={photoUrls[i]} alt="" className="h-full w-full object-cover" /> : <span className="select-none font-display font-semibold leading-none" style={{ fontSize: "min(46cqmin, 3.5rem)", color: SLOT_NUMBER_COLOR }}>{i + 1}</span>}</div>)}
           </div>
         )}
         <img src={frame.imageUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-fill" draggable={false} />
@@ -191,7 +201,7 @@ export default function PilihFrame() {
       <div className="kinetic-page relative flex h-full min-h-0 w-full flex-col">
         <StepProgress current="frame" />
         <div className={`shrink-0 px-6 md:px-10 ${wide ? "pb-2 pt-[112px]" : "pb-3 pt-20"}`}>
-          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Frame adalah bingkai fotomu. Opsional, kamu juga bisa lanjut tanpa frame." hint="Ketuk satu frame, lalu tekan “Lanjut”" />
+          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Opsional. Bisa lanjut tanpa frame." />
         </div>
 
         {loading && (
@@ -218,7 +228,7 @@ export default function PilihFrame() {
           <>
             {/* Category chips */}
             {categoryGroups.length > 1 && (
-              <div className="flex shrink-0 justify-center gap-2 overflow-x-auto px-6 pb-3">
+              <div className="flex shrink-0 gap-2 overflow-x-auto px-6 pb-3 [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                 {[{ key: "__all__", label: `Semua (${options.length})` }, ...categoryGroups.map((g) => ({ key: g.key, label: `${g.label} (${g.items.length})` }))].map((chip) => (
                   <button key={chip.key} type="button" onClick={() => setActiveCategory(chip.key)} className={`k-chip shrink-0 !px-5 !py-2.5 !text-sm ${activeCategory === chip.key ? "!border-transparent !bg-fg !text-canvas" : ""}`}>
                     {chip.label}
@@ -275,7 +285,7 @@ export default function PilihFrame() {
                     <div className="flex flex-col items-center gap-3 px-6 text-center">
                       <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent/10 text-accent"><Icon name="frame" className="h-8 w-8" /></span>
                       <p className="font-display text-xl font-semibold">{noFrameSelected ? "Tanpa frame" : "Pilih frame di sebelah kiri"}</p>
-                      <p className="text-sm text-muted">{noFrameSelected ? "Fotomu akan dicetak polos tanpa bingkai." : "Ketuk satu frame untuk melihat pratinjau besarnya di sini."}</p>
+                      <p className="k-desc text-sm text-muted">{noFrameSelected ? "Tanpa frame." : "Pilih frame untuk melihat pratinjau."}</p>
                     </div>
                   )}
                 </div>

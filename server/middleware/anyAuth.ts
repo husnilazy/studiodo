@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { authenticateKiosk } from "../lib/kioskAccess.js";
-import { verifyAdminToken } from "../lib/jwt.js";
+import { blocksWrite, verifyAdminToken } from "../lib/jwt.js";
 import { isSessionCurrent } from "../lib/sessionGuard.js";
 
 /**
@@ -14,8 +14,10 @@ export async function requireAnyAuth(req: Request, res: Response, next: NextFunc
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
   if (bearer) {
     try {
-      const { adminId, tenantId, pv } = verifyAdminToken(bearer);
+      const claims = verifyAdminToken(bearer);
+      const { adminId, tenantId, pv } = claims;
       if (!(await isSessionCurrent("admin", adminId, pv))) throw new Error("sesi dicabut");
+      if (blocksWrite(claims, req.method)) return res.status(403).json({ error: "Mode lihat saja: perubahan tidak diizinkan saat Anda melihat sebagai tenant.", code: "read_only_session" });
       req.adminId = adminId;
       req.tenantId = tenantId;
       return next();

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { encryptSecret, readStoredSecret } from "../lib/secretBox.js";
-import { testDoku } from "../lib/doku.js";
+import { createDokuQris, testDoku, type DokuCfg } from "../lib/doku.js";
+import crypto from "node:crypto";
 import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -13,7 +14,7 @@ import { resetR2Client } from "../storage.js";
 import { resetDriveClient } from "../lib/gdrive.js";
 import { validateFlowOrder } from "../lib/kioskFlowRules.js";
 import { getKeyPlanFeatures, getTenantBoothFeatures, getTenantPlanFeatures } from "../lib/planFeatures.js";
-import { saveUploadedFile } from "../storage.js";
+import { createPresignedUpload, saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import multer from "multer";
 import { transcodeToMp4 } from "../lib/ffmpeg.js";
@@ -22,6 +23,31 @@ export const configRouter = Router();
 
 // Branding videos (idle cover / animated logo). Multipart instead of a base64 JSON body: these are tens of MB.
 const brandingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 120 * 1024 * 1024 } });
+
+// POST /api/config/upload-url — admin asks for a one-time URL to PUT a file straight to object storage (R2). Used for frame,
+// package, branding and screen-layout images/videos, which can be bigger than the 4.5 MB request body Vercel accepts.
+// Answers { direct: false } when this tenant's storage is not R2; the dashboard then sends the file through the API as before.
+const PRESIGN_FOLDERS = new Set(["branding", "templates", "packages", "layouts"]);
+const PRESIGN_TYPES: Record<string, { ext: string; max: number }> = {
+  "image/png": { ext: ".png", max: 20 * 1024 * 1024 },
+  "image/jpeg": { ext: ".jpg", max: 20 * 1024 * 1024 },
+  "image/webp": { ext: ".webp", max: 20 * 1024 * 1024 },
+  "image/gif": { ext: ".gif", max: 20 * 1024 * 1024 },
+  "video/mp4": { ext: ".mp4", max: 120 * 1024 * 1024 },
+  "video/webm": { ext: ".webm", max: 120 * 1024 * 1024 },
+};
+configRouter.post("/upload-url", requireAdminAuth, async (req, res) => {
+  const folder = String(req.body?.folder ?? "");
+  const contentType = String(req.body?.contentType ?? "").toLowerCase();
+  const size = Number(req.body?.size);
+  const rule = PRESIGN_TYPES[contentType];
+  if (!PRESIGN_FOLDERS.has(folder)) return res.status(400).json({ error: "Folder upload tidak valid" });
+  if (!rule) return res.status(400).json({ error: "Tipe file harus PNG, JPG, WebP, GIF, MP4, atau WebM" });
+  if (!Number.isInteger(size) || size <= 0) return res.status(400).json({ error: "Ukuran file tidak valid" });
+  if (size > rule.max) return res.status(413).json({ error: `File terlalu besar (maksimal ${Math.round(rule.max / 1024 / 1024)} MB)` });
+  const upload = await createPresignedUpload(req.tenantId!, folder, { contentType, size, extension: rule.ext });
+  res.json(upload ? { direct: true, ...upload } : { direct: false });
+});
 
 // POST /api/config/branding-video — admin uploads an MP4 or MOV; it is converted to a muted, web-safe H.264 MP4
 // (MOV from iPhones is usually HEVC, which kiosk browsers cannot play) and stored. Returns the absolute URL.
@@ -83,6 +109,8 @@ configRouter.get("/public", async (req, res) => {
     socialInstagram: tenantSettings.socialInstagram,
     socialTiktok: tenantSettings.socialTiktok,
     socialFacebook: tenantSettings.socialFacebook,
+    socialYoutube: tenantSettings.socialYoutube,
+    hashtag: tenantSettings.hashtag,
     websiteUrl: tenantSettings.websiteUrl,
     address: tenantSettings.address,
     // accentColor is the only theme value stored server-side (everything
@@ -110,6 +138,8 @@ configRouter.get("/tenant", requireAnyAuth, async (req, res) => {
     socialInstagram: tenantSettings.socialInstagram,
     socialTiktok: tenantSettings.socialTiktok,
     socialFacebook: tenantSettings.socialFacebook,
+    socialYoutube: tenantSettings.socialYoutube,
+    hashtag: tenantSettings.hashtag,
     websiteUrl: tenantSettings.websiteUrl,
     address: tenantSettings.address,
     accentColor: tenantSettings.accentColor,
@@ -138,7 +168,7 @@ const KIOSK_CONFIG_STRINGS = [
   "eventName", "eventDescription", "eventStartAt", "eventEndAt", "buttonStyle", "kioskDensity", "sessionLayout", "backgroundStyle",
   "backgroundGradientStart", "backgroundGradientEnd", "promoText", "idleStartText", "idleHeadline", "idleSubheadline",
   "packageHeadline", "orientationHeadline", "paymentHeadline", "captureHeadline", "previewHeadline", "frameHeadline", "resultHeadline",
-  "idleCoverType", "captureVibe", "stripLayout", "stripTemplate",
+  "idleCoverType", "captureVibe", "kioskStyle", "idleLayout", "packageLayout", "captureLayout", "socialYoutube", "hashtag", "stripLayout", "stripTemplate",
 ] as const;
 const KIOSK_CONFIG_NUMBERS = ["logoScale", "keyboardScale", "countdownSeconds", "sessionTimerMinutes", "eventSessionTimerMinutes", "eventMaxPhotosPerSession", "maxPhotosPerSession", "printCopies"] as const;
 const KIOSK_CONFIG_BOOLS = [
@@ -220,6 +250,12 @@ configRouter.patch("/kiosk-config", requireAdminAuth, async (req, res) => {
   if (typeof clean.tagline === "string") columns.tagline = clean.tagline.slice(0, 160);
   if (typeof clean.accentColor === "string") columns.accentColor = clean.accentColor;
   if ("logoUrl" in images) columns.logoUrl = images.logoUrl;
+  // Social/contact lines are read by the customer's result page from these columns, so a save from the design screen
+  // has to land here too (empty string = cleared).
+  const mirror = (key: "contactWhatsapp" | "socialInstagram" | "socialTiktok" | "socialFacebook" | "socialYoutube" | "websiteUrl" | "address" | "hashtag") => {
+    if (typeof clean[key] === "string") columns[key] = (clean[key] as string).trim() || null;
+  };
+  for (const key of ["contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "websiteUrl", "address", "hashtag"] as const) mirror(key);
   await db.update(tenantSettings).set(columns).where(eq(tenantSettings.tenantId, tenantId));
 
   res.json({ ok: true, images });
@@ -257,6 +293,8 @@ configRouter.patch("/gallery-profile", requireAdminAuth, async (req, res) => {
   if (body.socialTiktok !== undefined) values.socialTiktok = text("socialTiktok", 160);
   if (body.socialFacebook !== undefined) values.socialFacebook = text("socialFacebook", 160);
   if (body.websiteUrl !== undefined) values.websiteUrl = text("websiteUrl", 160);
+  if (body.socialYoutube !== undefined) values.socialYoutube = text("socialYoutube", 160);
+  if (body.hashtag !== undefined) values.hashtag = text("hashtag", 60);
   if (body.address !== undefined) values.address = text("address", 200);
   await ensureTenantSettingsRow(tenantId);
   await db.update(tenantSettings).set(values).where(eq(tenantSettings.tenantId, tenantId));
@@ -270,6 +308,7 @@ function paymentWebhookUrls(tenantId: string) {
   return {
     xendit: `${xenditBase}/${tenantId}`,
     doku: `${publicBase || "https://<alamat-server-anda>"}/api/payment/webhook/doku/${tenantId}`,
+    dokuQris: `${publicBase || "https://<alamat-server-anda>"}/api/payment/webhook/doku-qris/${tenantId}`,
   };
 }
 
@@ -292,6 +331,11 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
       dokuClientId: tenantSettings.dokuClientId,
       dokuSecretKeyEnc: tenantSettings.dokuSecretKeyEnc,
       dokuEnvironment: tenantSettings.dokuEnvironment,
+      dokuQrisMode: tenantSettings.dokuQrisMode,
+      dokuMerchantId: tenantSettings.dokuMerchantId,
+      dokuTerminalId: tenantSettings.dokuTerminalId,
+      dokuPostalCode: tenantSettings.dokuPostalCode,
+      dokuSnapPrivateKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc,
     })
     .from(tenantSettings)
     .where(eq(tenantSettings.tenantId, req.tenantId!));
@@ -314,6 +358,11 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
     dokuClientId: config?.dokuClientId ?? "",
     hasDokuSecret: Boolean(config?.dokuSecretKeyEnc),
     dokuEnvironment: config?.dokuEnvironment === "production" ? "production" : "sandbox",
+    dokuQrisMode: config?.dokuQrisMode === "snap" ? "snap" : "checkout",
+    dokuMerchantId: config?.dokuMerchantId ?? "",
+    dokuTerminalId: config?.dokuTerminalId ?? "",
+    dokuPostalCode: config?.dokuPostalCode ?? "",
+    hasDokuSnapKey: Boolean(config?.dokuSnapPrivateKeyEnc),
     webhookUrls: paymentWebhookUrls(req.tenantId!),
   });
 });
@@ -348,7 +397,33 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
     if (dokuSecretKey.length < 8 || dokuSecretKey.length > 300 || /\s/.test(dokuSecretKey)) return res.status(400).json({ error: "Secret Key DOKU tidak valid (minimal 8 karakter, tanpa spasi)." });
     values.dokuSecretKeyEnc = encryptSecret(dokuSecretKey);
   }
-  if (body.clearDoku === true) { values.dokuClientId = null; values.dokuSecretKeyEnc = null; }
+  if (body.clearDoku === true) { values.dokuClientId = null; values.dokuSecretKeyEnc = null; values.dokuMerchantId = null; values.dokuTerminalId = null; values.dokuSnapPrivateKeyEnc = null; values.dokuQrisMode = "checkout"; }
+  if (body.dokuQrisMode === "checkout" || body.dokuQrisMode === "snap") values.dokuQrisMode = body.dokuQrisMode;
+  if (typeof body.dokuMerchantId === "string") {
+    const v = body.dokuMerchantId.trim();
+    if (v.length > 64 || /\s/.test(v)) return res.status(400).json({ error: "Merchant ID (Mall ID) DOKU tidak valid (tanpa spasi)." });
+    values.dokuMerchantId = v || null;
+  }
+  if (typeof body.dokuTerminalId === "string") {
+    const v = body.dokuTerminalId.trim();
+    if (v && !/^[A-Za-z0-9]{3,16}$/.test(v)) return res.status(400).json({ error: "Terminal ID harus 3-16 huruf/angka, tanpa spasi." });
+    values.dokuTerminalId = v || null;
+  }
+  if (typeof body.dokuPostalCode === "string") {
+    const v = body.dokuPostalCode.trim();
+    if (v && !/^\d{1,5}$/.test(v)) return res.status(400).json({ error: "Kode pos harus angka (maksimal 5 digit)." });
+    values.dokuPostalCode = v || null;
+  }
+  const dokuSnapPrivateKey = text(body.dokuSnapPrivateKey);
+  if (dokuSnapPrivateKey) {
+    try {
+      const keyObject = crypto.createPrivateKey(dokuSnapPrivateKey);
+      if (keyObject.asymmetricKeyType !== "rsa") throw new Error("bukan RSA");
+    } catch {
+      return res.status(400).json({ error: "Kunci privat tidak valid. Tempel seluruh isi file .pem (diawali -----BEGIN PRIVATE KEY-----)." });
+    }
+    values.dokuSnapPrivateKeyEnc = encryptSecret(dokuSnapPrivateKey);
+  }
   if (body.dokuEnvironment === "sandbox" || body.dokuEnvironment === "production") values.dokuEnvironment = body.dokuEnvironment;
   if (typeof body.qrisEnabled === "boolean") values.qrisEnabled = body.qrisEnabled;
   if (typeof body.cashPaymentEnabled === "boolean") values.cashPaymentEnabled = body.cashPaymentEnabled;
@@ -372,17 +447,30 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
 // wrong key is caught in the dashboard instead of at the first customer.
 configRouter.post("/payment/test", requireAdminAuth, async (req, res) => {
   const [config] = await db
-    .select({ xenditKey: tenantSettings.xenditSecretKey, clientId: tenantSettings.dokuClientId, dokuSecretEnc: tenantSettings.dokuSecretKeyEnc, dokuEnv: tenantSettings.dokuEnvironment, provider: tenantSettings.paymentProvider })
+    .select({ xenditKey: tenantSettings.xenditSecretKey, clientId: tenantSettings.dokuClientId, dokuSecretEnc: tenantSettings.dokuSecretKeyEnc, dokuEnv: tenantSettings.dokuEnvironment, provider: tenantSettings.paymentProvider, qrisMode: tenantSettings.dokuQrisMode, merchantId: tenantSettings.dokuMerchantId, terminalId: tenantSettings.dokuTerminalId, postalCode: tenantSettings.dokuPostalCode, snapKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc })
     .from(tenantSettings).where(eq(tenantSettings.tenantId, req.tenantId!));
   const provider = req.body?.provider === "doku" ? "doku" : req.body?.provider === "xendit" ? "xendit" : config?.provider === "doku" ? "doku" : "xendit";
 
   if (provider === "doku") {
     const secret = readStoredSecret(config?.dokuSecretEnc);
-    if (!config?.clientId || !secret) return res.status(400).json({ ok: false, message: "Client ID dan Secret Key DOKU belum disimpan." });
-    return res.json(await testDoku({ clientId: config.clientId, secretKey: secret, production: config.dokuEnv === "production" }));
+    if (!config?.clientId || !secret) return res.status(400).json({ ok: false, error: "Client ID dan Secret Key DOKU belum disimpan.", message: "Client ID dan Secret Key DOKU belum disimpan." });
+    const cfg: DokuCfg = { clientId: config.clientId, secretKey: secret, production: config.dokuEnv === "production" };
+    if (config.qrisMode === "snap") {
+      // Creates a real (unpaid, 5 minute) dynamic QRIS for Rp 1.000 — the only way to prove Merchant ID, Terminal ID and the RSA key all work.
+      const privateKeyPem = readStoredSecret(config.snapKeyEnc);
+      if (!config.merchantId || !config.terminalId || !privateKeyPem) return res.status(400).json({ ok: false, error: "Lengkapi Merchant ID, Terminal ID, dan kunci privat lalu klik Simpan QRIS langsung, baru tes.", message: "Lengkapi Merchant ID, Terminal ID, dan kunci privat lalu klik Simpan QRIS langsung, baru tes." });
+      try {
+        cfg.snap = { merchantId: config.merchantId, terminalId: config.terminalId, postalCode: config.postalCode || "10110", privateKeyPem };
+        const qr = await createDokuQris(cfg, { partnerReferenceNo: `test-${Date.now().toString(36)}`, amount: 1000, validityMinutes: 5 });
+        return res.json({ ok: true, message: `QRIS langsung berhasil dibuat (referensi DOKU ${qr.referenceNo || "-"}). Belum ada pembayaran yang terjadi.` });
+      } catch (error) {
+        return res.json({ ok: false, message: error instanceof Error ? error.message : "Gagal membuat QRIS" });
+      }
+    }
+    return res.json(await testDoku(cfg));
   }
   const key = readStoredSecret(config?.xenditKey);
-  if (!key) return res.status(400).json({ ok: false, message: "Secret Key Xendit belum disimpan." });
+  if (!key) return res.status(400).json({ ok: false, error: "Secret Key Xendit belum disimpan.", message: "Secret Key Xendit belum disimpan." });
   res.json(await testXenditQris(key));
 });
 

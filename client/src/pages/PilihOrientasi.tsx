@@ -51,7 +51,7 @@ export default function PilihOrientasi() {
   return (
     <ScreenLayoutBoundary screenKey="orientation">
       <KioskPage step="orientation">
-        <ScreenTitle title={config.orientationHeadline || "Tampilan Kamera"} subtitle="Pilih cara layar menampilkan dirimu saat berfoto." hint="Ketuk salah satu pilihan di bawah" />
+        <ScreenTitle title={config.orientationHeadline || "Tampilan Kamera"} subtitle="Cara layar menampilkan kamera saat berfoto." />
 
         <div className="flex flex-wrap justify-center gap-6">
           {OPTIONS.map((opt, i) => (
@@ -68,7 +68,7 @@ export default function PilihOrientasi() {
             >
               {opt.badge && <span className="k-chip k-chip-accent absolute -top-3 left-1/2 -translate-x-1/2">{opt.badge}</span>}
               {/* A tiny live demo of the difference: a person with a "label" held up, flipped or not */}
-              <div className="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/15 to-fg/5">
+              <div className="k-illus flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/15 to-fg/5">
                 <div className={`flex flex-col items-center gap-1 ${opt.sample}`}>
                   <Icon name="user" className="h-14 w-14 text-fg/70" strokeWidth={1.4} />
                   <span className="rounded-md bg-fg px-2.5 py-0.5 font-display text-sm font-semibold text-canvas">STUDIODO</span>
@@ -76,7 +76,7 @@ export default function PilihOrientasi() {
               </div>
               <div>
                 <p className="font-display text-2xl font-semibold">{opt.title}</p>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{opt.desc}</p>
+                <p className="k-desc mt-2 text-sm leading-relaxed text-muted">{opt.desc}</p>
               </div>
               <span className="k-btn k-btn-accent mt-auto w-full group-hover:brightness-110">Pilih</span>
             </motion.button>

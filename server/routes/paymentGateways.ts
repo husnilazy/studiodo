@@ -1,11 +1,14 @@
+import crypto from "node:crypto";
 import { Router } from "express";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { billingOrders, paymentGateways, platformSettings, superadmins } from "../db/schema.js";
-import { DEFAULT_PRIORITY, PROVIDERS, loadGateway, orderGateways, type GatewayConfig, type Provider } from "../lib/gateways.js";
+import { DEFAULT_PRIORITY, PROVIDERS, SUBSCRIPTION_PROVIDERS, loadGateway, orderGateways, type GatewayConfig, type Provider } from "../lib/gateways.js";
 import { encryptSecret, maskedTail } from "../lib/secretBox.js";
 import { testMidtrans } from "../lib/midtrans.js";
 import { testXendit } from "../lib/xenditBilling.js";
+import { createDokuQris, testDoku } from "../lib/doku.js";
+import { buildPlatformDokuCfg, loadPlatformDokuRow } from "../lib/platformDoku.js";
 import { logEvent } from "../lib/platformEvents.js";
 
 // Superadmin management of the platform's subscription-payment gateways (mounted under
@@ -68,7 +71,7 @@ async function describe(provider: Provider, cfg: GatewayConfig, since: Date) {
 // GET /api/superadmin/payment-gateways
 paymentGatewaysAdminRouter.get("/", async (_req, res) => {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const cfgs = await Promise.all(PROVIDERS.map(loadGateway));
+  const cfgs = await Promise.all(SUBSCRIPTION_PROVIDERS.map(loadGateway)); // subscriptions: Midtrans only
   const gateways = await Promise.all(cfgs.map((c) => describe(c.provider, c, since)));
   const [settings] = await db.select({ renewalWhatsapp: platformSettings.renewalWhatsapp }).from(platformSettings).limit(1);
   res.json({
@@ -77,6 +80,93 @@ paymentGatewaysAdminRouter.get("/", async (_req, res) => {
     checkoutOrder: orderGateways(cfgs).map((c) => c.provider),
     whatsappFallback: !!settings?.renewalWhatsapp,
   });
+});
+
+// --- STUDIODO's own DOKU account: collects kiosk QRIS for tenants whose money is "ditampung STUDIODO" (not subscriptions) ---
+async function describeDoku() {
+  const row = await loadPlatformDokuRow();
+  const cfg = buildPlatformDokuCfg(row);
+  const base = String(process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "") || "https://<alamat-server-anda>";
+  return {
+    configured: !!cfg,
+    clientId: row?.dokuClientId ?? "",
+    hasSecret: !!row?.dokuSecretKeyEnc,
+    environment: row?.dokuEnvironment === "production" ? "production" : "sandbox",
+    qrisMode: row?.dokuQrisMode === "snap" ? "snap" : "checkout",
+    merchantId: row?.dokuMerchantId ?? "",
+    terminalId: row?.dokuTerminalId ?? "",
+    postalCode: row?.dokuPostalCode ?? "",
+    hasPrivateKey: !!row?.dokuSnapPrivateKeyEnc,
+    snapReady: !!cfg?.snap,
+    notificationUrl: `${base}/api/payment/webhook/doku/<id-tenant>`,
+  };
+}
+
+paymentGatewaysAdminRouter.get("/doku", async (_req, res) => res.json(await describeDoku()));
+
+paymentGatewaysAdminRouter.put("/doku", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const values: Partial<typeof platformSettings.$inferInsert> = {};
+  const clientId = text(b.clientId);
+  if (clientId) {
+    if (clientId.length > 100 || /\s/.test(clientId)) return res.status(400).json({ error: "Client ID DOKU tidak valid (tanpa spasi)." });
+    values.dokuClientId = clientId;
+  }
+  const secret = text(b.secretKey);
+  if (secret) {
+    if (secret.length < 8 || secret.length > 300 || /\s/.test(secret)) return res.status(400).json({ error: "Secret Key DOKU tidak valid (minimal 8 karakter, tanpa spasi)." });
+    values.dokuSecretKeyEnc = encryptSecret(secret);
+  }
+  if (b.environment === "sandbox" || b.environment === "production") values.dokuEnvironment = b.environment;
+  if (b.qrisMode === "checkout" || b.qrisMode === "snap") values.dokuQrisMode = b.qrisMode;
+  if (typeof b.merchantId === "string") {
+    const v = b.merchantId.trim();
+    if (v.length > 64 || /\s/.test(v)) return res.status(400).json({ error: "Merchant ID DOKU tidak valid (tanpa spasi)." });
+    values.dokuMerchantId = v || null;
+  }
+  if (typeof b.terminalId === "string") {
+    const v = b.terminalId.trim();
+    if (v && !/^[A-Za-z0-9]{3,16}$/.test(v)) return res.status(400).json({ error: "Terminal ID harus 3-16 huruf/angka, tanpa spasi." });
+    values.dokuTerminalId = v || null;
+  }
+  if (typeof b.postalCode === "string") {
+    const v = b.postalCode.trim();
+    if (v && !/^\d{1,5}$/.test(v)) return res.status(400).json({ error: "Kode pos harus angka (maksimal 5 digit)." });
+    values.dokuPostalCode = v || null;
+  }
+  const privateKey = text(b.snapPrivateKey);
+  if (privateKey) {
+    try {
+      if (crypto.createPrivateKey(privateKey).asymmetricKeyType !== "rsa") throw new Error("bukan RSA");
+    } catch {
+      return res.status(400).json({ error: "Kunci privat tidak valid. Tempel seluruh isi file .pem (diawali -----BEGIN PRIVATE KEY-----)." });
+    }
+    values.dokuSnapPrivateKeyEnc = encryptSecret(privateKey);
+  }
+  if (b.clear === true) Object.assign(values, { dokuClientId: null, dokuSecretKeyEnc: null, dokuMerchantId: null, dokuTerminalId: null, dokuSnapPrivateKeyEnc: null, dokuQrisMode: "checkout" });
+  if (Object.keys(values).length === 0) return res.status(400).json({ error: "Tidak ada perubahan yang dikirim." });
+
+  const [existing] = await db.select({ id: platformSettings.id }).from(platformSettings).limit(1);
+  if (existing) await db.update(platformSettings).set(values).where(eq(platformSettings.id, existing.id));
+  else await db.insert(platformSettings).values(values);
+  logEvent({ category: "billing", action: "platform_doku.updated", message: `Akun DOKU STUDIODO diperbarui (${Object.keys(values).map((k) => k.replace(/Enc$/, "")).join(", ")})`, actorType: "superadmin", actorLabel: await actorEmail(req.superadminId) });
+  res.json(await describeDoku());
+});
+
+// POST /api/superadmin/payment-gateways/doku/test — checks the SAVED credentials (SNAP mode creates a real unpaid Rp 1.000 QRIS)
+paymentGatewaysAdminRouter.post("/doku/test", async (_req, res) => {
+  const cfg = buildPlatformDokuCfg(await loadPlatformDokuRow());
+  if (!cfg) return res.status(400).json({ ok: false, message: "Client ID dan Secret Key DOKU belum disimpan." });
+  if (cfg.snap) {
+    try {
+      const qr = await createDokuQris(cfg, { partnerReferenceNo: `test-${Date.now().toString(36)}`, amount: 1000, validityMinutes: 5 });
+      return res.json({ ok: true, message: `QRIS langsung berhasil dibuat (referensi DOKU ${qr.referenceNo || "-"}). Belum ada pembayaran yang terjadi.` });
+    } catch (error) {
+      return res.json({ ok: false, message: error instanceof Error ? error.message : "Gagal membuat QRIS" });
+    }
+  }
+  res.json(await testDoku(cfg));
 });
 
 // PUT /api/superadmin/payment-gateways/:provider

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { superadminApi, BLOG_CATEGORIES, type BlogPost, type BlogPostSummary } from "@/lib/superadminApi";
 import { ImageField } from "@/components/SiteContentPanel";
+import Select from "@/components/Select";
 
 // Superadmin blog manager: a list of posts and a Markdown editor. The public site renders
 // the body with its own restricted Markdown renderer, so only basic formatting is supported.
@@ -63,9 +64,9 @@ function Editor({ postId, onClose }: { postId: string | "new"; onClose: (changed
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-fg/60">
           Kategori
-          <select className={inputClass} value={draft.category} onChange={(e) => set({ category: e.target.value })}>
+          <Select className={inputClass} value={draft.category} onChange={(e) => set({ category: e.target.value })}>
             {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">
           Urutan panduan (opsional)

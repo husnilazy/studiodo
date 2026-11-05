@@ -5,7 +5,8 @@ import crypto from "node:crypto";
 // notification URL. Signing follows DOKU's "Non-SNAP" scheme: HMAC-SHA256 over
 //   Client-Id / Request-Id / Request-Timestamp / Request-Target [/ Digest]  joined by "\n", Base64, prefixed "HMACSHA256=".
 
-export type DokuCfg = { clientId: string; secretKey: string; production: boolean };
+export type DokuSnapCfg = { merchantId: string; terminalId: string; postalCode: string; privateKeyPem: string };
+export type DokuCfg = { clientId: string; secretKey: string; production: boolean; snap?: DokuSnapCfg };
 
 const base = (cfg: DokuCfg) => (cfg.production ? "https://api.doku.com" : "https://api-sandbox.doku.com");
 
@@ -38,10 +39,13 @@ export async function createDokuCheckout(
     ...(input.notificationUrl ? { additional_info: { override_notification_url: input.notificationUrl } } : {}),
   });
   const res = await fetch(`${base(cfg)}${target}`, { method: "POST", headers: headers(cfg, target, body), body, signal: AbortSignal.timeout(20_000) });
-  const json = (await res.json().catch(() => ({}))) as { response?: { payment?: { url?: string; token_id?: string } }; error_messages?: string[]; message?: string[] };
+  const json = (await res.json().catch(() => ({}))) as { response?: { payment?: { url?: string; token_id?: string } }; error_messages?: string[]; message?: string[] | string; error?: { message?: string; code?: string } | string };
   const url = json.response?.payment?.url;
   if (!res.ok || !url) {
-    throw new Error(json.error_messages?.join("; ") || json.message?.join?.("; ") || `DOKU menolak permintaan (HTTP ${res.status})`);
+    const detail = json.error_messages?.join("; ")
+      || (Array.isArray(json.message) ? json.message.join("; ") : json.message)
+      || (typeof json.error === "string" ? json.error : json.error?.message);
+    throw new Error(`${detail || "DOKU menolak permintaan"} (HTTP ${res.status}, ${cfg.production ? "produksi" : "sandbox"})`);
   }
   return { url, tokenId: json.response?.payment?.token_id };
 }
@@ -77,5 +81,98 @@ export async function testDoku(cfg: DokuCfg): Promise<{ ok: boolean; message: st
     return { ok: true, message: `Kredensial diterima DOKU (mode ${cfg.production ? "produksi" : "sandbox"}).` };
   } catch (error) {
     return { ok: false, message: `Tidak dapat menghubungi DOKU: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SNAP QRIS MPM: a real, dynamic QRIS code (qrContent) that any bank / e-wallet app can scan — unlike Checkout, whose "QR" is a
+// link to DOKU's pay page. Auth is two-step: an RSA-signed B2B access token (public half registered at DOKU as the "Merchant
+// Public Key"), then HMAC-SHA512 signed calls carrying that token. Field names follow developers.doku.com (SNAP QRIS guide).
+// ---------------------------------------------------------------------------------------------------------------------
+
+const snapTimestamp = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+async function dokuB2bToken(cfg: DokuCfg): Promise<string> {
+  if (!cfg.snap) throw new Error("Pengaturan QRIS langsung DOKU belum lengkap");
+  const cached = tokenCache.get(cfg.clientId);
+  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
+  const timestamp = snapTimestamp();
+  const signature = crypto.sign("RSA-SHA256", Buffer.from(`${cfg.clientId}|${timestamp}`), cfg.snap.privateKeyPem).toString("base64");
+  const res = await fetch(`${base(cfg)}/authorization/v1/access-token/b2b`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CLIENT-KEY": cfg.clientId, "X-TIMESTAMP": timestamp, "X-SIGNATURE": signature },
+    body: JSON.stringify({ grantType: "client_credentials" }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { accessToken?: string; expiresIn?: string | number; responseMessage?: string; responseCode?: string };
+  if (!res.ok || !json.accessToken) throw new Error(`Token DOKU ditolak: ${json.responseMessage || "tanpa pesan"} (${json.responseCode ?? res.status}) — pastikan Merchant Public Key terdaftar di DOKU`);
+  tokenCache.set(cfg.clientId, { token: json.accessToken, expiresAt: Date.now() + (Number(json.expiresIn) || 900) * 1000 });
+  return json.accessToken;
+}
+
+/** HMAC-SHA512 over METHOD:PATH:TOKEN:lowercase-hex-SHA256(body):TIMESTAMP, per the SNAP symmetric signature spec. */
+export function signDokuSnap(secretKey: string, method: string, path: string, token: string, body: string, timestamp: string): string {
+  const bodyHash = crypto.createHash("sha256").update(body).digest("hex").toLowerCase();
+  return crypto.createHmac("sha512", secretKey).update(`${method}:${path}:${token}:${bodyHash}:${timestamp}`).digest("base64");
+}
+
+async function snapPost<T>(cfg: DokuCfg, path: string, payload: unknown): Promise<{ status: number; json: T & { responseCode?: string; responseMessage?: string } }> {
+  const token = await dokuB2bToken(cfg);
+  const body = JSON.stringify(payload);
+  const timestamp = snapTimestamp();
+  const res = await fetch(`${base(cfg)}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-PARTNER-ID": cfg.clientId,
+      "X-EXTERNAL-ID": `${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`,
+      "X-TIMESTAMP": timestamp,
+      "X-SIGNATURE": signDokuSnap(cfg.secretKey, "POST", path, token, body, timestamp),
+      "CHANNEL-ID": "H2H",
+    },
+    body,
+    signal: AbortSignal.timeout(20_000),
+  });
+  return { status: res.status, json: (await res.json().catch(() => ({}))) as T & { responseCode?: string; responseMessage?: string } };
+}
+
+/** WIB (UTC+7) ISO-8601 timestamp `minutes` from now, e.g. 2026-11-04T23:15:00+07:00 — how DOKU wants validityPeriod. */
+function wibIn(minutes: number): string {
+  return new Date(Date.now() + minutes * 60_000 + 7 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+07:00");
+}
+
+/** Creates a dynamic QRIS. Returns the raw QRIS string (draw it as a QR) and DOKU's reference number (needed to query status). */
+export async function createDokuQris(cfg: DokuCfg, input: { partnerReferenceNo: string; amount: number; validityMinutes?: number }): Promise<{ qrContent: string; referenceNo: string }> {
+  if (!cfg.snap) throw new Error("Pengaturan QRIS langsung DOKU belum lengkap");
+  const { status, json } = await snapPost<{ qrContent?: string; referenceNo?: string }>(cfg, "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate", {
+    partnerReferenceNo: input.partnerReferenceNo.slice(0, 64),
+    amount: { value: `${Math.round(input.amount)}.00`, currency: "IDR" },
+    merchantId: cfg.snap.merchantId,
+    terminalId: cfg.snap.terminalId,
+    validityPeriod: wibIn(input.validityMinutes ?? 15),
+    additionalInfo: { postalCode: cfg.snap.postalCode, feeType: "1" },
+  });
+  if (status >= 400 || !json.qrContent) {
+    throw new Error(`${json.responseMessage || "DOKU menolak permintaan QRIS"} (kode ${json.responseCode ?? status}, ${cfg.production ? "produksi" : "sandbox"})`);
+  }
+  return { qrContent: json.qrContent, referenceNo: json.referenceNo ?? "" };
+}
+
+/** Asks DOKU for the state of a dynamic QRIS. paid = latestTransactionStatus "00" (SNAP: 00 success, 03 pending, 06 failed ...). */
+export async function queryDokuQris(cfg: DokuCfg, ref: { partnerReferenceNo: string; referenceNo: string }): Promise<{ paid: boolean; status: string }> {
+  if (!cfg.snap) return { paid: false, status: "" };
+  try {
+    const { json } = await snapPost<{ latestTransactionStatus?: string }>(cfg, "/snap-adapter/b2b/v1.0/qr/qr-mpm-query", {
+      originalReferenceNo: ref.referenceNo,
+      originalPartnerReferenceNo: ref.partnerReferenceNo,
+      serviceCode: "47",
+      merchantId: cfg.snap.merchantId,
+    });
+    const status = String(json.latestTransactionStatus ?? "");
+    return { paid: status === "00", status };
+  } catch {
+    return { paid: false, status: "" };
   }
 }

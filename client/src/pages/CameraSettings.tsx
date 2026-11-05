@@ -1,122 +1,10 @@
 import { useEffect, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
-import { checkTetherBridge, getCameraProperties, setCameraProperties, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth, type CameraProperties } from "@/lib/camera";
+import { checkTetherBridge, detectTetherCameras, startTetherLiveView, stopTetherLiveView, type DetectedCamera, type TetherBridgeHealth } from "@/lib/camera";
+import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
-
-const PROPERTY_LABELS: Record<string, string> = {
-  iso: "ISO",
-  shutterspeed: "Shutter Speed",
-  aperture: "Aperture",
-  whitebalance: "White Balance",
-};
-
-// ISO/shutter/aperture/WB control over the tethered camera — only works
-// through electron/digicam-bridge.cjs (digiCamControl), verified live
-// 2026-09-29 against a real Canon EOS 1300D via its "slc" single-command
-// API (see the comment block at the top of digicam-bridge.cjs for the full
-// verification notes — an earlier guess at the command syntax silently did
-// nothing, since every request to digiCamControl's "/" returns the same
-// static HTML whether or not the command was actually recognized). The
-// separate closed-source canon-bridge.exe doesn't implement /properties at
-// all, so this just fails to load and hides itself for that setup instead
-// of showing a broken/empty panel.
-function CameraPropertiesPanel({ bridgeUrl, enabled }: { bridgeUrl: string; enabled: boolean }) {
-  const [properties, setProperties] = useState<CameraProperties | null>(null);
-  const [pending, setPending] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [supported, setSupported] = useState(true);
-
-  const load = async () => {
-    if (!enabled || !bridgeUrl) return;
-    setLoading(true);
-    try {
-      setProperties(await getCameraProperties(bridgeUrl));
-      setSupported(true);
-    } catch {
-      setSupported(false);
-      setProperties(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setPending({});
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridgeUrl, enabled]);
-
-  if (!enabled || (!loading && !supported)) return null;
-
-  const dirty = Object.keys(pending).length > 0;
-
-  const apply = async () => {
-    if (!dirty) return;
-    setApplying(true);
-    try {
-      const results = await setCameraProperties(bridgeUrl, pending);
-      const failed = Object.entries(results).filter(([, r]) => !r.ok);
-      if (failed.length > 0) {
-        pushToast({ type: "error", title: "Sebagian pengaturan gagal diterapkan", sub: failed.map(([name, r]) => `${PROPERTY_LABELS[name] ?? name}: ${r.error}`).join(" · ") });
-      } else {
-        pushToast({ type: "success", title: "Pengaturan kamera diterapkan" });
-      }
-      setPending({});
-      await load();
-    } catch (error) {
-      pushToast({ type: "error", title: "Gagal menerapkan pengaturan kamera", sub: error instanceof Error ? error.message : undefined });
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  return (
-    <section className={sectionClass}>
-      <div className="flex items-center justify-between gap-3">
-        <div><p className="eyebrow">TETHER CONTROL</p><h2 className="font-display text-xl font-semibold">Pengaturan kamera</h2></div>
-        <button type="button" onClick={load} disabled={loading} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg disabled:opacity-50">
-          {loading ? "Memuat…" : "Refresh"}
-        </button>
-      </div>
-      {!properties ? (
-        <p className="mt-4 text-xs text-fg/40">Memuat pengaturan kamera...</p>
-      ) : (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {Object.entries(properties).map(([name, state]) => (
-            <Field key={name} label={PROPERTY_LABELS[name] ?? name}>
-              {state.error || state.choices.length === 0 ? (
-                <p className="mt-2 text-xs text-fg/30">Tidak tersedia di kamera ini</p>
-              ) : (
-                <select
-                  className={inputClass}
-                  value={pending[name] ?? state.value ?? ""}
-                  onChange={(e) => setPending((prev) => ({ ...prev, [name]: e.target.value }))}
-                >
-                  {state.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-                </select>
-              )}
-            </Field>
-          ))}
-        </div>
-      )}
-      <p className="mt-3 text-xs text-fg/40">Langsung mengubah kamera fisik yang terhubung — bukan preset, ini kontrol langsung ke hardware.</p>
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={apply}
-          disabled={!dirty || applying}
-          className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {applying && <Spinner size="sm" />}
-          {applying ? "Menerapkan…" : "Terapkan ke kamera"}
-        </button>
-      </div>
-    </section>
-  );
-}
 
 type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl">;
 const pickDraft = (config: BoothConfig): CameraDraft => ({
@@ -209,6 +97,7 @@ export default function CameraSettings() {
 
   const [bridgeHealth, setBridgeHealth] = useState<TetherBridgeHealth | null>(null);
   const [bridgeChecking, setBridgeChecking] = useState(false);
+  const [camTab, setCamTab] = useState<"setup" | "exposure">("setup");
 
   // Tests the DRAFT's url/mode — not yet-saved — so the admin can validate a
   // pending change before committing it with Simpan.
@@ -230,8 +119,70 @@ export default function CameraSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.cameraMode, draft.tetherBridgeUrl]);
 
+  // Auto-detect: look for connected cameras on this PC. If the saved bridge has no
+  // camera but another one does, switch to it automatically.
+  const [detected, setDetected] = useState<DetectedCamera[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const detectNow = async (autoPick: boolean) => {
+    setDetecting(true);
+    const found = await detectTetherCameras();
+    setDetected(found);
+    setDetecting(false);
+    if (autoPick && found.length > 0 && !found.some((camera) => camera.url === config.tetherBridgeUrl)) {
+      const pick = found[0];
+      set("cameraMode", "tether");
+      set("tetherBridgeUrl", pick.url);
+      update({ cameraMode: "tether", tetherBridgeUrl: pick.url });
+      pushToast({ type: "success", title: "Kamera terdeteksi", sub: pick.name });
+    }
+  };
+  useEffect(() => {
+    void detectNow(true);
+    const interval = setInterval(() => void detectNow(false), 6000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const chooseCamera = (camera: DetectedCamera) => {
+    set("cameraMode", "tether");
+    set("tetherBridgeUrl", camera.url);
+    update({ cameraMode: "tether", tetherBridgeUrl: camera.url });
+    pushToast({ type: "success", title: "Kamera dipilih", sub: camera.name });
+  };
+
+  const tetherReady = config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false);
+  const camTabs = [{ id: "setup", label: "Kamera & Sesi" }, { id: "exposure", label: "Eksposur & Live view" }] as const;
+
   return (
-    <div className="flex flex-col items-stretch gap-5">
+    <div className="flex flex-col items-stretch gap-4">
+      <nav className="flex gap-1 self-start rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Pengaturan kamera">
+        {camTabs.map((t) => (
+          <button key={t.id} type="button" onClick={() => setCamTab(t.id)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${camTab === t.id ? "bg-fg text-canvas shadow-md" : "text-fg/55 hover:text-fg"}`}>{t.label}</button>
+        ))}
+      </nav>
+      {camTab === "setup" && (
+      <div className="grid items-start gap-5 xl:grid-cols-2">
+      <section className={sectionClass}>
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="eyebrow">KAMERA TERSAMBUNG</p><h2 className="font-display text-xl font-semibold">Pilih kamera</h2></div>
+          <button type="button" onClick={() => void detectNow(true)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg">{detecting ? "Mencari..." : "Cari kamera"}</button>
+        </div>
+        {detected.length === 0 ? (
+          <p className="mt-3 text-sm text-fg/50">Belum ada kamera terdeteksi. Sambungkan kamera lewat USB, nyalakan, dan tutup EOS Utility / Imaging Edge. Pencarian diulang otomatis tiap beberapa detik; webcam tetap bisa dipakai lewat Mode kamera = Webcam.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {detected.map((camera) => {
+              const active = camera.url === config.tetherBridgeUrl && config.cameraMode === "tether";
+              return (
+                <li key={camera.url} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3">
+                  <div><p className="text-sm font-semibold">{camera.name}</p><p className="text-xs text-fg/40">{camera.url}</p></div>
+                  {active ? <span className="rounded-full border border-emerald-300/30 px-2 py-1 text-[0.625rem] text-emerald-200">DIPAKAI</span> : <button type="button" onClick={() => chooseCamera(camera)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Pakai</button>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Sesi Foto & Kamera</h2>
         <div className="mt-4 space-y-4">
@@ -269,7 +220,13 @@ export default function CameraSettings() {
               </div>
               <p className="mt-2 text-xs">
                 {bridgeHealth === null ? (
-                  <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif.</span>
+                  <span className="text-fg/40">Bridge default: electron/digicam-bridge.cjs di port 5510, meneruskan ke digiCamControl (port 5513). Pastikan digiCamControl sudah berjalan dengan webserver aktif. Bridge native Canon/Sony (tanpa digiCamControl, otomatis jalan bila terpasang): http://127.0.0.1:5514 — tutup EOS Utility/digiCamControl dulu.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine && bridgeHealth.state === "asleep" ? (
+                  <span className="text-amber-300">● Kamera tidur atau mati. Nyalakan kamera atau setengah-tekan shutter — bridge akan menyambung ulang otomatis.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine && bridgeHealth.cameraConnected === false ? (
+                  <span className="text-amber-300">● Bridge native aktif, tapi belum ada kamera Canon/Sony yang terdeteksi.{bridgeHealth.error ? ` ${bridgeHealth.error}.` : ""} Periksa kabel USB, nyalakan kamera, dan tutup EOS Utility / Imaging Edge.</span>
+                ) : bridgeHealth.ok && bridgeHealth.engine ? (
+                  <span className="text-emerald-300">● Bridge native aktif — {bridgeHealth.camera || "kamera"} terhubung ({bridgeHealth.engine === "sony" ? "Sony" : "Canon"} SDK)</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected === false ? (
                   <span className="text-amber-300">● digiCamControl jalan, tapi kamera Canon tidak terdeteksi. Periksa kabel USB dan pastikan kamera menyala.</span>
                 ) : bridgeHealth.ok && bridgeHealth.digicamReachable ? (
@@ -301,9 +258,70 @@ export default function CameraSettings() {
         </div>
       </section>
 
-      <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
-
-      <AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={config.cameraMode === "tether" && Boolean(bridgeHealth?.ok && bridgeHealth.digicamReachable && bridgeHealth.cameraConnected !== false)} />
+      <section className={`${sectionClass} xl:col-span-2`}>
+        <p className="eyebrow">PANDUAN</p>
+        <h2 className="font-display text-xl font-semibold">Kamera yang bisa dipakai &amp; cara menyambungkan</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { name: "Webcam / virtual camera", badge: "Paling mudah", steps: ["Colok webcam (atau nyalakan virtual camera seperti OBS / Camo / Iriun).", "Mode kamera = Webcam / virtual camera, lalu Simpan.", "Izinkan akses kamera bila diminta. Kualitas mengikuti webcam."] },
+            { name: "Canon DSLR / mirrorless via digiCamControl", badge: "Tether", steps: ["Pasang & buka digiCamControl, aktifkan webserver (File > Settings > Webserver).", "Sambungkan kamera lewat USB, nyalakan, mode M. Tutup EOS Utility.", "Mode kamera = Canon DSLR / tether bridge, URL http://127.0.0.1:5510, klik Cek koneksi."] },
+            { name: "Canon & Sony via bridge native", badge: "Tanpa digiCamControl", steps: ["Sambungkan kamera lewat USB dan nyalakan. Tutup EOS Utility / Imaging Edge / digiCamControl.", "Bridge native jalan otomatis di http://127.0.0.1:5514 bila terpasang.", "Mode kamera = tether, URL bridge 5514, klik Cek koneksi. Kamera juga muncul di daftar Pilih kamera."] },
+            { name: "Nikon", badge: "Belum tersedia", steps: ["SDK Nikon sudah ada di PC, tetapi bridge Nikon belum dibuat di aplikasi ini.", "Sementara pakai Webcam / virtual camera, atau Nikon Webcam Utility sebagai virtual camera."] },
+          ].map((cam) => (
+            <details key={cam.name} className="group rounded-2xl border border-fg/10 bg-fg/[0.03] p-4" open={cam.badge === "Paling mudah"}>
+              <summary className="cursor-pointer list-none">
+                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">{cam.badge}</span>
+                <p className="mt-2 text-sm font-semibold">{cam.name}</p>
+              </summary>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-fg/60">
+                {cam.steps.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </details>
+          ))}
+        </div>
+        <div className="mt-4 rounded-2xl border border-fg/10 p-4">
+          <p className="text-sm font-semibold">SDK resmi pabrikan yang dipakai</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="uppercase tracking-wider text-fg/45"><tr><th className="py-2 pr-3">SDK</th><th className="py-2 pr-3">Kamera</th><th className="py-2 pr-3">Status di STUDIODO</th><th className="py-2">Catatan</th></tr></thead>
+              <tbody className="text-fg/65">
+                {[
+                  { sdk: "Canon EDSDK 13.20", cam: "EOS DSLR / mirrorless Canon", status: "Aktif", tone: "ok", note: "Teruji di EOS 1300D: live view, jepret, ISO / speed / aperture / WB. Tutup EOS Utility." },
+                  { sdk: "Sony Camera Remote SDK (CrSDK) 2.x", cam: "Sony Alpha yang didukung CrSDK", status: "Aktif, belum teruji", tone: "warn", note: "Atur kamera ke mode \"PC Remote\" dan format JPEG. Tutup Imaging Edge." },
+                  { sdk: "Nikon SDK (MAID3 / Z-series)", cam: "D5300, D7100/7200, D750, D780, D800/810, Z5, Z6, Z50, dll.", status: "Belum tersambung", tone: "off", note: "File SDK sudah tersedia, tetapi bridge Nikon belum dibuat. Sementara pakai Webcam Utility atau webcam." },
+                  { sdk: "digiCamControl 2.1 (bukan SDK pabrikan)", cam: "Banyak model Canon & Nikon", status: "Aktif", tone: "ok", note: "Jalur alternatif lewat webserver digiCamControl, port 5510. Tidak bisa jalan bersamaan dengan bridge native." },
+                  { sdk: "EOS Webcam Utility (Canon)", cam: "EOS tertentu sebagai webcam", status: "Lewat mode Webcam", tone: "ok", note: "Memakai kamera sebagai virtual camera, tanpa kontrol eksposur dari admin." },
+                ].map((row) => (
+                  <tr key={row.sdk} className="border-t border-fg/10 align-top">
+                    <td className="py-2 pr-3 font-semibold text-fg/80">{row.sdk}</td>
+                    <td className="py-2 pr-3">{row.cam}</td>
+                    <td className="py-2 pr-3"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${row.tone === "ok" ? "bg-emerald-400/15 text-emerald-600" : row.tone === "warn" ? "bg-amber-300/20 text-amber-600" : "bg-fg/10 text-fg/50"}`}>{row.status}</span></td>
+                    <td className="py-2">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[11px] text-fg/40">Hanya satu program yang boleh memegang kamera pada satu waktu (bridge native, digiCamControl, EOS Utility, atau Imaging Edge).</p>
+        </div>
+        <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-fg/60">
+          <p className="font-semibold text-amber-600">Kalau kamera tidak terdeteksi</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <li>Pakai kabel USB data (bukan kabel charger saja) dan colok langsung ke port PC, bukan hub.</li>
+            <li>Hanya satu aplikasi yang boleh memakai kamera: tutup EOS Utility, Imaging Edge, atau digiCamControl yang tidak dipakai.</li>
+            <li>Matikan mode sleep / auto power-off kamera, lalu klik "Cari kamera" atau "Cek koneksi".</li>
+            <li>Atur eksposur dan lihat hasilnya langsung di tab "Eksposur &amp; Live view".</li>
+          </ul>
+        </div>
+      </section>
+      </div>
+      )}
+      {camTab === "exposure" && (
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <CameraPropertiesPanel bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} />
+          <div className="xl:sticky xl:top-0 xl:only:col-span-full"><AdminLiveView bridgeUrl={config.tetherBridgeUrl} enabled={tetherReady} /></div>
+        </div>
+      )}
     </div>
   );
 }

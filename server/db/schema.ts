@@ -54,6 +54,9 @@ export const tenants = pgTable("tenants", {
   // balance (see `withdrawals`). `qrisPlatformSince` marks when that began: only QRIS payments after it count.
   qrisSettlement: text("qris_settlement").notNull().default("direct"), // 'direct' | 'platform'
   qrisPlatformSince: timestamp("qris_platform_since"),
+  // Per-tenant override of the platform withdrawal policy (see lib/withdrawalPolicy.ts). null = follow the platform default;
+  // only the fields present here override it. `enabled: false` freezes this tenant's payouts.
+  withdrawalPolicy: jsonb("withdrawal_policy").$type<Record<string, unknown>>(),
   // Negotiated discount (0-90 %) a superadmin grants this tenant on every booth subscription it buys, on top of the
   // platform-wide volume tiers (platform_settings.volume_discounts). The better of the two applies — they do not stack.
   boothDiscountPercent: integer("booth_discount_percent").notNull().default(0),
@@ -89,8 +92,56 @@ export const tenantApplications = pgTable("tenant_applications", {
   reviewedBy: text("reviewed_by"), // superadmin email
   reviewedAt: timestamp("reviewed_at"),
   reviewNote: text("review_note"),
+  // --- Follow-up CRM (lib/leads.ts). `status` above is the review outcome; `pipelineStage` is where the lead is in the sales funnel.
+  pipelineStage: text("pipeline_stage").notNull().default("new"), // 'new' | 'contacted' | 'trial_given' | 'negotiation' | 'contract_sent' | 'active' | 'lost'
+  leadSource: text("lead_source"), // 'website' | 'whatsapp' | 'instagram' | 'referral' | 'event' | 'other'
+  lostReason: text("lost_reason"),
+  boothCount: integer("booth_count"), // what we ask on the first follow-up: how many booths, where, when, which payment setup
+  boothLocation: text("booth_location"),
+  plannedStart: text("planned_start"),
+  paymentSetup: text("payment_setup"), // 'own' (their own Midtrans/Xendit/DOKU) | 'platform' (STUDIODO default) | null = not asked yet
+  planSlug: text("plan_slug"), // plan the contract is drawn up for
+  contractMonths: integer("contract_months"), // contract term in months
+  assignedTo: text("assigned_to"),
+  lastContactedAt: timestamp("last_contacted_at"),
+  // Contract (lib/contract.ts). The token is the only credential of the public contract page; the snapshot freezes the terms
+  // that were sent, so later price changes never rewrite a contract someone already received.
+  contractToken: text("contract_token"),
+  contractStatus: text("contract_status").notNull().default("none"), // 'none' | 'draft' | 'sent' | 'signed'
+  contractSnapshot: jsonb("contract_snapshot").$type<Record<string, unknown>>(),
+  contractSentAt: timestamp("contract_sent_at"),
+  contractSignedAt: timestamp("contract_signed_at"),
+  contractSignedName: text("contract_signed_name"),
+  contractSignedIp: text("contract_signed_ip"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => [index("tenant_applications_status_idx").on(table.status)]);
+}, (table) => [
+  index("tenant_applications_status_idx").on(table.status),
+  index("tenant_applications_stage_idx").on(table.pipelineStage),
+  uniqueIndex("tenant_applications_contract_token_idx").on(table.contractToken),
+]);
+
+// Timeline of everything that happened with a lead: notes, stage moves, WhatsApp messages in/out, contract events.
+export const leadActivities = pgTable("lead_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => tenantApplications.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'note' | 'call' | 'stage' | 'whatsapp_out' | 'whatsapp_in' | 'contract' | 'task' | 'system'
+  body: text("body").notNull().default(""),
+  meta: jsonb("meta").$type<Record<string, unknown>>(), // e.g. { via: 'gateway' | 'manual', status: 'sent' | 'failed', providerId }
+  actor: text("actor"), // superadmin email, 'lead' for inbound, 'system'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("lead_activities_lead_idx").on(table.leadId, table.createdAt)]);
+
+// Follow-up tasks with a due date. A due task raises one reminder (remindedAt) in the Superadmin's activity feed.
+export const leadTasks = pgTable("lead_tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => tenantApplications.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  dueAt: timestamp("due_at").notNull(),
+  doneAt: timestamp("done_at"),
+  remindedAt: timestamp("reminded_at"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("lead_tasks_lead_idx").on(table.leadId), index("lead_tasks_due_idx").on(table.doneAt, table.dueAt)]);
 
 // Subscription tiers a superadmin defines platform-wide (not per-tenant) — the
 // "menu" tenants.plan is chosen from. Kept as a separate table (rather than a
@@ -164,6 +215,8 @@ export const superadmins = pgTable("superadmins", {
   // Two-factor sign-in (TOTP, see lib/totp.ts + routes/superadminTwoFactor.ts). The secret is encrypted at rest; it only counts
   // once totp_enabled_at is set (after the owner proved the authenticator app works). Recovery codes are stored as hashes.
   totpSecretEnc: text("totp_secret_enc"),
+  // 'owner' = full platform access; 'finance' = only money screens (withdrawals, balances, ledger, payout policy).
+  role: text("role").notNull().default("owner"),
   totpEnabledAt: timestamp("totp_enabled_at"),
   totpLastStep: integer("totp_last_step"), // last accepted 30-second step: a code can never be used twice
   recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
@@ -174,6 +227,29 @@ export const superadmins = pgTable("superadmins", {
 // the tenant-facing "Perpanjang" (renew) button should point.
 export const platformSettings = pgTable("platform_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // STUDIODO's own DOKU account for kiosk sales of platform-settled tenants (see lib/platformDoku.ts). Secrets are encrypted.
+  dokuClientId: text("doku_client_id"),
+  dokuSecretKeyEnc: text("doku_secret_key_enc"),
+  dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
+  dokuQrisMode: text("doku_qris_mode").notNull().default("checkout"), // 'checkout' | 'snap'
+  dokuMerchantId: text("doku_merchant_id"),
+  dokuTerminalId: text("doku_terminal_id"),
+  dokuPostalCode: text("doku_postal_code"),
+  dokuSnapPrivateKeyEnc: text("doku_snap_private_key_enc"),
+  // WhatsApp gateway for lead follow-up (lib/whatsapp.ts). Token encrypted and write-only; the webhook key guards the inbound URL.
+  waProvider: text("wa_provider").notNull().default("none"), // 'none' | 'fonnte'
+  waTokenEnc: text("wa_token_enc"),
+  waWebhookKeyEnc: text("wa_webhook_key_enc"),
+  leadTemplates: jsonb("lead_templates").$type<Record<string, string>>().notNull().default({}), // editable overrides of the default WhatsApp templates
+  // Who "Pihak Pertama" is on contracts (company name, address, contact). Plain text, edited in Superadmin; see lib/contract.ts.
+  contractIssuer: jsonb("contract_issuer").$type<{ name?: string; address?: string; contact?: string }>().notNull().default({}),
+  // Superadmin alerts (lib/adminAlerts.ts): the WhatsApp number that receives important alerts, and per-kind overrides { kind: { inApp?, whatsapp? } }.
+  adminWaNumber: text("admin_wa_number"),
+  adminAlertPrefs: jsonb("admin_alert_prefs").$type<Record<string, { inApp?: boolean; whatsapp?: boolean }>>().notNull().default({}),
+  // Automatic WhatsApp renewal reminders to existing tenants (lib/tenantWhatsapp.ts): { enabled, stages }. null = off.
+  tenantWaAuto: jsonb("tenant_wa_auto").$type<{ enabled: boolean; stages: string[] }>(),
+  // Daily morning summary to the owner's WhatsApp (lib/digest.ts): { enabled, hour } with the hour in WIB. null = off.
+  digestSettings: jsonb("digest_settings").$type<{ enabled: boolean; hour: number }>(),
   defaultTrialDays: integer("default_trial_days").notNull().default(7),
   // How long a NEW tenant's trial runs before subscriptionEndsAt is even reached —
   // distinct from gracePeriodDays below, which is what happens AFTER it's reached.
@@ -188,11 +264,37 @@ export const platformSettings = pgTable("platform_settings", {
   qrisFeePercent: numeric("qris_fee_percent", { precision: 5, scale: 2 }).notNull().default("0.70"),
   withdrawalMinAmount: integer("withdrawal_min_amount").notNull().default(50000),
   withdrawalFlatFee: integer("withdrawal_flat_fee").notNull().default(0),
+  // Platform-wide default withdrawal policy: when tenants may withdraw (any time or a schedule), limits, hold period.
+  withdrawalPolicy: jsonb("withdrawal_policy").$type<Record<string, unknown>>().notNull().default({}),
   // Volume discount on booth subscriptions: buying `minBooths` or more booths in one order takes `percent` off each of
   // them. Managed by the superadmin; the default is the "10+ booths" offer advertised on the website.
   volumeDiscounts: jsonb("volume_discounts").$type<{ minBooths: number; percent: number }[]>().notNull().default([{ minBooths: 10, percent: 10 }]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Money the platform holds for a platform-settled tenant, one immutable row per movement. The tenant's balance is
+//   Σ net_amount of these rows − withdrawals that are not rejected.
+// kind 'payment'    : a QRIS payment STUDIODO's gateway received for the tenant. gross/fee are a snapshot of the fee at that
+//                     moment (changing the fee later never rewrites old payments); available_at = paid time + hold days.
+// kind 'adjustment' : manual correction by a superadmin/finance user (net_amount may be negative), always with a note.
+// `ref` makes crediting idempotent (a webhook delivered twice cannot credit twice): unique per (tenant, kind, ref).
+export const walletLedger = pgTable("wallet_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'payment' | 'adjustment'
+  sessionId: uuid("session_id"),
+  ref: text("ref"),
+  grossAmount: numeric("gross_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  feeAmount: numeric("fee_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  netAmount: numeric("net_amount", { precision: 14, scale: 2 }).notNull(),
+  availableAt: timestamp("available_at").notNull().defaultNow(),
+  note: text("note"),
+  actor: text("actor"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("wallet_ledger_tenant_idx").on(table.tenantId, table.createdAt),
+  uniqueIndex("wallet_ledger_ref_idx").on(table.tenantId, table.kind, table.ref),
+]);
 
 // A tenant's request to pay out their QRIS balance to a bank account / e-wallet. The tenant asks (pending); a
 // superadmin transfers the money by hand and follows it up (processing → paid, or rejected with a reason). The
@@ -214,6 +316,12 @@ export const withdrawals = pgTable("withdrawals", {
   processedBy: text("processed_by"),
   requestedAt: timestamp("requested_at").notNull().defaultNow(),
   processedAt: timestamp("processed_at"),
+  // Four-eyes: large requests need a second person to approve before they can be processed/paid; the payer must differ from the approver.
+  requiresApproval: boolean("requires_approval").notNull().default(false),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  // A payout to a never-paid bank account cannot be processed until this moment (account-takeover protection).
+  holdUntil: timestamp("hold_until"),
 }, (table) => [index("withdrawals_tenant_id_idx").on(table.tenantId), index("withdrawals_status_idx").on(table.status)]);
 
 // Append-only platform activity/error log — didn't exist before. tenantId
@@ -349,6 +457,8 @@ export const vouchers = pgTable("vouchers", {
   cashAmount: numeric("cash_amount", { precision: 12, scale: 2 }),
   invoiceNumber: text("invoice_number"),
   customerName: text("customer_name"),
+  // Custom-frame voucher: redeeming it puts the session straight into this (customer-specific) template.
+  frameId: uuid("frame_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   index("vouchers_tenant_id_idx").on(table.tenantId),
@@ -522,6 +632,9 @@ export const templates = pgTable("templates", {
   style: text("style").notNull().default("Custom"),
   outputPreset: text("output_preset").notNull().default("4r"),
   active: boolean("active").notNull().default(true),
+  // Custom frames (category "__custom") are made for one customer and sold at the cashier: their price and who they are for.
+  price: numeric("price", { precision: 12, scale: 2 }),
+  customerName: text("customer_name"),
   // Set when the tenant installed this template from the marketplace catalog (null = they made it
   // themselves). Lets "install" be idempotent; the catalog entry can be removed without touching
   // installed copies (ON DELETE SET NULL).
@@ -550,6 +663,8 @@ export const tenantSettings = pgTable("tenant_settings", {
   socialInstagram: text("social_instagram"),
   socialTiktok: text("social_tiktok"),
   socialFacebook: text("social_facebook"),
+  socialYoutube: text("social_youtube"),
+  hashtag: text("hashtag"),
   websiteUrl: text("website_url"),
   address: text("address"),
   accentColor: text("accent_color").notNull().default("#7C3AED"),
@@ -570,6 +685,12 @@ export const tenantSettings = pgTable("tenant_settings", {
   dokuClientId: text("doku_client_id"),
   dokuSecretKeyEnc: text("doku_secret_key_enc"), // encrypted with lib/secretBox
   dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
+  // 'checkout' = hosted DOKU page (QR is a link, scan with the phone camera); 'snap' = DOKU SNAP QRIS MPM (QR is a real QRIS code any e-wallet can scan).
+  dokuQrisMode: text("doku_qris_mode").notNull().default("checkout"),
+  dokuMerchantId: text("doku_merchant_id"), // SNAP QRIS "Mall ID" issued by DOKU
+  dokuTerminalId: text("doku_terminal_id"), // SNAP QRIS terminal id, 3-16 alphanumerics
+  dokuPostalCode: text("doku_postal_code"), // SNAP QRIS additionalInfo.postalCode (numeric, max 5)
+  dokuSnapPrivateKeyEnc: text("doku_snap_private_key_enc"), // RSA private key (PEM), encrypted with lib/secretBox; public half registered as "Merchant Public Key" at DOKU
   storageDriver: text("storage_driver"), // 'local' | 'r2' | 'gdrive'; falls back to env/local when unset
   r2AccountId: text("r2_account_id"),
   r2Endpoint: text("r2_endpoint"),
@@ -813,7 +934,7 @@ export const creatorTemplates = pgTable("creator_templates", {
 // runs shifts with cash counting, hands out queue numbers and refunds with a supervisor PIN. Selling a package or print
 // also mints a one-use "cash" voucher the customer types at the kiosk, so the existing payment flow marks that session paid.
 // ---------------------------------------------------------------------------------------------------------------------
-export type PosOrderItem = { type: "package" | "print" | "product" | "custom"; refId?: string | null; name: string; qty: number; unitPrice: number };
+export type PosOrderItem = { type: "package" | "print" | "product" | "custom" | "frame"; refId?: string | null; name: string; qty: number; unitPrice: number };
 
 export const posSettings = pgTable("pos_settings", {
   tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
@@ -902,3 +1023,56 @@ export const posQueueTickets = pgTable("pos_queue_tickets", {
   index("pos_queue_tenant_day_idx").on(table.tenantId, table.queueDate),
   unique("pos_queue_tenant_day_seq_unique").on(table.tenantId, table.queueDate, table.seq),
 ]);
+
+// Tenant <-> STUDIODO help chat: one continuous thread per tenant (the "Bantuan" button in the tenant dashboard).
+export const supportThreads = pgTable("support_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("open"), // 'open' | 'resolved'
+  lastSender: text("last_sender"), // 'tenant' | 'admin'
+  lastBody: text("last_body"),
+  lastMessageAt: timestamp("last_message_at").notNull().defaultNow(),
+  adminLastReadAt: timestamp("admin_last_read_at"),
+  tenantLastReadAt: timestamp("tenant_last_read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("support_threads_tenant_idx").on(table.tenantId), index("support_threads_last_idx").on(table.lastMessageAt)]);
+
+export const supportMessages = pgTable("support_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  threadId: uuid("thread_id").notNull().references(() => supportThreads.id, { onDelete: "cascade" }),
+  sender: text("sender").notNull(), // 'tenant' | 'admin'
+  author: text("author"), // tenant admin email / superadmin email
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("support_messages_thread_idx").on(table.threadId, table.createdAt)]);
+
+// Alerts for the platform team (new sign-up, payment, withdrawal, help message, errors…). Created by lib/adminAlerts.ts from platform events.
+export const adminNotifications = pgTable("admin_notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(), // the event action, e.g. 'payment.received'
+  severity: text("severity").notNull().default("info"), // 'info' | 'success' | 'warning' | 'critical'
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"), // Superadmin section id to open, e.g. 'billing'
+  tenantId: uuid("tenant_id"),
+  readAt: timestamp("read_at"),
+  waSentAt: timestamp("wa_sent_at"),
+  waError: text("wa_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("admin_notifications_created_idx").on(table.createdAt), index("admin_notifications_read_idx").on(table.readAt)]);
+
+// Passwordless sign-in for tenant admins (Google, email link): the app starts a handoff, the user approves it in a browser, the app collects the token by polling. See lib/loginHandoff.ts.
+export const authHandoffs = pgTable("auth_handoffs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(), // 'google' | 'magic'
+  pollHash: text("poll_hash").notNull(), // the app proves it started the handoff with the secret behind this hash
+  confirmHash: text("confirm_hash"), // one-time secret carried by the confirm page / email link
+  email: text("email"),
+  adminId: uuid("admin_id").references(() => admins.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // 'pending' | 'verified' (identity proven, waiting for the user's OK) | 'approved' | 'failed' | 'used'
+  error: text("error"),
+  requestIp: text("request_ip"),
+  requestUa: text("request_ua"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("auth_handoffs_email_idx").on(table.email, table.createdAt)]);

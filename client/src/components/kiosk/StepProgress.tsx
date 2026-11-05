@@ -30,7 +30,7 @@ export default function StepProgress({ current }: { current: KioskStepKey }) {
   if (index === -1 || steps.length < 2) return null;
 
   return (
-    <nav aria-label={`Langkah ${index + 1} dari ${steps.length}`} className="pointer-events-none absolute left-0 right-0 top-4 z-20 flex justify-center px-4">
+    <nav aria-label={`Langkah ${index + 1} dari ${steps.length}`} className="step-progress pointer-events-none absolute left-0 right-0 top-4 z-20 flex justify-center px-4">
       <ol className="glass-panel flex max-w-full items-center gap-1 rounded-full px-3 py-2 sm:gap-2 sm:px-4">
         {steps.map((key, i) => {
           const done = i < index;

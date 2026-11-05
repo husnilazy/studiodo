@@ -1,14 +1,17 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { tenantSettings, tenants, sessions, vouchers, voucherRedemptions } from "../db/schema.js";
+import { tenantSettings, tenants, sessions, templates, vouchers, voucherRedemptions } from "../db/schema.js";
+import { resolveFrameUrl } from "../lib/frameUrl.js";
 import { and, eq } from "drizzle-orm";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 import { loadGateway } from "../lib/gateways.js";
 import { expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
-import { createDokuCheckout, dokuInvoicePaid, verifyDokuNotification, type DokuCfg } from "../lib/doku.js";
+import { createDokuCheckout, createDokuQris, dokuInvoicePaid, queryDokuQris, verifyDokuNotification, type DokuCfg } from "../lib/doku.js";
 import { decryptSecret, readStoredSecret } from "../lib/secretBox.js";
+import { loadPlatformDoku } from "../lib/platformDoku.js";
+import { creditPlatformPayment } from "../lib/qrisBalance.js";
 
 export const paymentRouter = Router();
 
@@ -52,17 +55,36 @@ async function getXenditConfig(tenantId: string) {
   };
 }
 
-// DOKU: the tenant opts in via tenantSettings.paymentProvider = 'doku'. Platform-settled tenants always stay on Xendit
-// (the platform's own gateway), since their money must land on STUDIODO's account.
+// DOKU: the tenant opts in via tenantSettings.paymentProvider = 'doku' (their own DOKU account). Platform-settled tenants use
+// STUDIODO's DOKU account instead (lib/platformDoku.ts), since their money must land on STUDIODO's account; if that is not
+// configured yet they fall back to the platform Xendit gateway so payments never stop.
 async function getDokuConfig(tenantId: string): Promise<DokuCfg | null> {
+  // Platform-settled tenants are collected on STUDIODO's own DOKU account (Superadmin -> Pembayaran), whatever the tenant picked.
+  const [owner] = await db.select({ settlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId));
+  if (owner?.settlement === "platform") return loadPlatformDoku();
   const [row] = await db.select({
     provider: tenantSettings.paymentProvider, clientId: tenantSettings.dokuClientId, secretEnc: tenantSettings.dokuSecretKeyEnc, environment: tenantSettings.dokuEnvironment, settlement: tenants.qrisSettlement,
+    qrisMode: tenantSettings.dokuQrisMode, merchantId: tenantSettings.dokuMerchantId, terminalId: tenantSettings.dokuTerminalId, postalCode: tenantSettings.dokuPostalCode, privateKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc,
   }).from(tenantSettings).innerJoin(tenants, eq(tenants.id, tenantSettings.tenantId)).where(eq(tenantSettings.tenantId, tenantId));
   if (!row || row.provider !== "doku" || row.settlement === "platform") return null;
   const secretKey = decryptSecret(row.secretEnc);
   if (!row.clientId || !secretKey) return null;
-  return { clientId: row.clientId, secretKey, production: row.environment === "production" };
+  const cfg: DokuCfg = { clientId: row.clientId, secretKey, production: row.environment === "production" };
+  // "QRIS langsung" (SNAP) needs the full set; anything missing falls back to the hosted checkout so payments never stop.
+  if (row.qrisMode === "snap") {
+    const privateKeyPem = decryptSecret(row.privateKeyEnc);
+    if (row.merchantId && row.terminalId && privateKeyPem) cfg.snap = { merchantId: row.merchantId, terminalId: row.terminalId, postalCode: row.postalCode || "10110", privateKeyPem };
+    else console.warn(`[doku] Mode QRIS langsung dipilih untuk tenant ${tenantId} tapi Merchant ID / Terminal ID / kunci privat belum lengkap - memakai Checkout.`);
+  }
+  return cfg;
 }
+
+// SNAP QRIS: the gateway reference is kept as "<partnerReferenceNo>|<DOKU referenceNo>" in xendit_invoice_id (both are needed to query it).
+const dokuQrisRef = (invoice: string, referenceNo: string) => `${invoice}|${referenceNo}`;
+const parseDokuQrisRef = (value: string | null | undefined) => {
+  const [partnerReferenceNo, referenceNo] = String(value ?? "").split("|");
+  return partnerReferenceNo && referenceNo ? { partnerReferenceNo, referenceNo } : null;
+};
 
 const dokuNotificationPath = (tenantId: string) => `/api/payment/webhook/doku/${tenantId}`;
 
@@ -146,7 +168,7 @@ async function completeAdditionalPrintPayment(tenantId: string, sessionId: strin
 // and an underpaid amount is ignored (a leaked webhook token/secret shouldn't be enough to mark an underpaid session as paid).
 // Only enforced when the payload carried a parseable amount: silently rejecting a genuine payment over a missed field would hurt real customers.
 async function settlePayment(tenantId: string, sessionId: string, paidAmount: number, method: string, label: string) {
-  const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending }).from(sessions).where(eq(sessions.id, sessionId));
+  const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending, additionalPrintsPaid: sessions.additionalPrintsPaid }).from(sessions).where(eq(sessions.id, sessionId));
   if (session?.tenantId !== tenantId) return;
   if (session.paymentPurpose === "additional_print") {
     const expected = session.additionalPrintsPending * (await getPrintingConfig(tenantId)).price;
@@ -154,6 +176,8 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari cetak tambahan yang diharapkan (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
       await completeAdditionalPrintPayment(tenantId, sessionId);
+      // Only money the gateway really received is credited to a platform-settled tenant's wallet (a voucher-paid extra print is not).
+      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`);
     }
   } else {
     const expected = Number(session.totalAmount ?? 0);
@@ -161,6 +185,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari total sesi (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
       await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, "session");
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
   }
@@ -185,13 +210,22 @@ paymentRouter.post("/qris", requireKioskAuth, requireActiveSubscription, async (
 
   if (doku) {
     try {
-      const url = await createDokuPayment(doku, tenantId, sessionId, amount);
+      // DOKU rejects a repeated invoice number, so every attempt ("Buat QRIS baru", a retry after an error) gets its own;
+      // the webhook strips the suffix again to find the session.
+      const invoice = `${sessionId}-q-${Date.now().toString(36)}`;
+      if (doku.snap) {
+        const qr = await createDokuQris(doku, { partnerReferenceNo: invoice, amount });
+        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo), paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+        return res.json({ demo: false, qrString: qr.qrContent, invoiceId: invoice, provider: "doku", direct: true });
+      }
+      const url = await createDokuPayment(doku, tenantId, invoice, amount);
       // xenditInvoiceId doubles as the gateway reference (for DOKU: the invoice number) so /status can double-check a missed notification.
-      await db.update(sessions).set({ xenditInvoiceId: sessionId, paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
-      return res.json({ demo: false, qrString: url, invoiceId: sessionId, provider: "doku" });
+      await db.update(sessions).set({ xenditInvoiceId: invoice, paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      return res.json({ demo: false, qrString: url, invoiceId: invoice, provider: "doku" });
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
       console.error("[doku] gagal membuat checkout", err);
-      return res.status(502).json({ error: "Gagal membuat pembayaran DOKU. Periksa Client ID / Secret Key." });
+      return res.status(502).json({ error: `Gagal membuat pembayaran DOKU: ${reason}` });
     }
   }
 
@@ -253,6 +287,11 @@ paymentRouter.post("/additional-print", requireKioskAuth, requireActiveSubscript
   if (doku) {
     try {
       const invoice = `${sessionId}-additional-${Date.now()}`;
+      if (doku.snap) {
+        const qr = await createDokuQris(doku, { partnerReferenceNo: invoice, amount });
+        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo) }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+        return res.json({ demo: false, qrString: qr.qrContent, invoiceId: invoice, amount, provider: "doku", direct: true });
+      }
       const url = await createDokuPayment(doku, tenantId, invoice, amount);
       await db.update(sessions).set({ xenditInvoiceId: invoice }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
       return res.json({ demo: false, qrString: url, invoiceId: invoice, amount, provider: "doku" });
@@ -306,6 +345,7 @@ paymentRouter.post("/additional-print/voucher", requireKioskAuth, requireActiveS
   const found = await findRedeemableVoucher(tenantId, code);
   if ("error" in found) return res.status(found.status).json({ error: found.error });
   const voucher = found.voucher;
+  if (voucher.frameId) return res.status(400).json({ error: "Voucher frame custom hanya untuk memulai sesi foto, bukan cetak tambahan." });
   const chargeAmount = quantity * config.price;
 
   if (voucher.voucherType === "cash") {
@@ -359,7 +399,9 @@ paymentRouter.get("/status/:sessionId", requireKioskAuth, async (req, res) => {
     const due = ref?.invoice && Date.now() - (lastDokuCheck.get(sid) ?? 0) > 4000; // DOKU is asked at most every 4s per session
     if (due) lastDokuCheck.set(sid, Date.now());
     const doku = due ? await getDokuConfig(req.tenantId!) : null;
-    if (doku && ref?.invoice && await dokuInvoicePaid(doku, ref.invoice)) {
+    const qrisRef = parseDokuQrisRef(ref?.invoice);
+    const paid = doku && ref?.invoice && (qrisRef && doku.snap ? (await queryDokuQris(doku, qrisRef)).paid : await dokuInvoicePaid(doku, ref.invoice));
+    if (paid) {
       await settlePayment(req.tenantId!, String(req.params.sessionId), NaN, "doku", "doku-status");
       const [fresh] = await db.select({ paymentStatus: sessions.paymentStatus, additionalPrintsPaid: sessions.additionalPrintsPaid, additionalPrintsPending: sessions.additionalPrintsPending }).from(sessions).where(eq(sessions.id, String(req.params.sessionId)));
       if (fresh) return res.json({ status: fresh.paymentStatus, additionalPrintsPaid: fresh.additionalPrintsPaid, additionalPrintsPending: fresh.additionalPrintsPending });
@@ -367,6 +409,15 @@ paymentRouter.get("/status/:sessionId", requireKioskAuth, async (req, res) => {
   }
   res.json({ status: session.paymentStatus, additionalPrintsPaid: session.additionalPrintsPaid, additionalPrintsPending: session.additionalPrintsPending });
 });
+
+// The customer-specific frame a custom-frame voucher is bound to, shaped like a /api/frames entry. Also pins it on the session.
+async function applyVoucherFrame(tenantId: string, sessionId: string, frameId: string | null) {
+  if (!frameId) return null;
+  const [t] = await db.select().from(templates).where(and(eq(templates.id, frameId), eq(templates.tenantId, tenantId)));
+  if (!t) return null;
+  await db.update(sessions).set({ frameId: t.id }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+  return { id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, outputPreset: t.outputPreset };
+}
 
 paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
@@ -390,7 +441,8 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
       tenantId, voucherId: voucher.id, sessionId, redemptionPurpose: "session",
       originalAmount: sessionAmount.toFixed(2), discountAmount: "0.00", finalAmount: sessionAmount.toFixed(2),
     });
-    return res.json({ valid: true, amount: sessionAmount, discount: 0, cash: true, invoiceNumber: voucher.invoiceNumber });
+    const frame = await applyVoucherFrame(tenantId, sessionId, voucher.frameId);
+    return res.json({ valid: true, amount: sessionAmount, discount: 0, cash: true, invoiceNumber: voucher.invoiceNumber, frame });
   }
 
   const originalAmount = Number(session.totalAmount ?? 0);
@@ -413,7 +465,8 @@ paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, asyn
     originalAmount: originalAmount.toFixed(2), discountAmount: discount.toFixed(2), finalAmount: amount.toFixed(2),
   });
   if (amount === 0) expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
-  res.json({ valid: true, amount, discount, voucherCode: voucher.code });
+  const frame = await applyVoucherFrame(tenantId, sessionId, voucher.frameId);
+  res.json({ valid: true, amount, discount, voucherCode: voucher.code, frame });
 });
 
 // Xendit webhook (for production mode) — one URL per tenant, registered by that tenant in their own Xendit dashboard
@@ -461,9 +514,31 @@ paymentRouter.post("/webhook/doku/:tenantId", async (req, res) => {
   const event = req.body;
   const status = String(event?.transaction?.status ?? "").toUpperCase();
   const invoice = String(event?.order?.invoice_number ?? "");
-  const sessionId = invoice.split("-additional-")[0];
+  const sessionId = invoice.split(/-(?:additional|q)-/)[0];
   if (sessionId && status === "SUCCESS") {
     await settlePayment(tenantId, sessionId, Number(event?.order?.amount ?? NaN), "doku", "doku-webhook");
   }
   res.status(200).json({ ok: true });
+});
+
+// DOKU QRIS notify URL (DOKU Back Office -> QRIS Notify URL). The payload format is not documented well, so the body is logged (to learn
+// it) and is NEVER trusted: at most it names a partner reference, and the payment is only settled when DOKU itself confirms it via a
+// signed status query. Anyone can call this URL; the worst they can do is trigger one status check.
+paymentRouter.post("/webhook/doku-qris/:tenantId", async (req, res) => {
+  const tenantId = String(req.params.tenantId);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  console.log("[doku-qris] notifikasi diterima", JSON.stringify(body).slice(0, 1500));
+  const partnerRef = String(body.originalPartnerReferenceNo ?? body.partnerReferenceNo ?? (body.order as { invoice_number?: string } | undefined)?.invoice_number ?? "");
+  const sessionId = partnerRef.split(/-(?:additional|q)-/)[0];
+  if (/^[0-9a-f-]{36}$/i.test(sessionId)) {
+    try {
+      const doku = await getDokuConfig(tenantId);
+      const [ref] = await db.select({ invoice: sessions.xenditInvoiceId }).from(sessions).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      const qrisRef = parseDokuQrisRef(ref?.invoice);
+      if (doku?.snap && qrisRef && (await queryDokuQris(doku, qrisRef)).paid) await settlePayment(tenantId, sessionId, NaN, "doku", "doku-qris-notify");
+    } catch (error) {
+      console.error("[doku-qris] gagal memproses notifikasi", error);
+    }
+  }
+  res.status(200).json({ responseCode: "2005600", responseMessage: "Successful" });
 });

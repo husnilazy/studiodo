@@ -10,6 +10,7 @@ import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { resolvePackageLayout } from "@/lib/kioskStyles";
 
 const EVENT_PACKAGE_ID = "event-session";
 
@@ -19,7 +20,7 @@ function formatIDR(v: string | number) {
 
 function Feature({ icon, label }: { icon: string; label: string }) {
   return (
-    <li className="flex items-center gap-3 text-sm md:text-base">
+    <li className="flex items-center gap-3 text-sm md:text-base landscape:gap-2 landscape:text-sm">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
         <Icon name={icon} className="h-4 w-4" />
       </span>
@@ -45,29 +46,27 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
       className="glass-panel kinetic-card-hover relative flex h-full flex-col overflow-hidden rounded-[2rem] text-left"
     >
       {pkg.thumbnailUrl && (
-        <div className="h-36 shrink-0 overflow-hidden">
+        <div className="h-36 shrink-0 overflow-hidden landscape:h-20">
           <img src={pkg.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         </div>
       )}
-      <div className="flex flex-1 flex-col p-7 md:p-8">
-        <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{pkg.name}</h2>
-        {pkg.description && <p className="mt-1.5 text-sm text-muted md:text-base">{pkg.description}</p>}
+      <div className="flex flex-1 flex-col p-7 md:p-8 landscape:p-4 landscape:md:p-5">
+        <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl landscape:text-xl landscape:md:text-2xl">{pkg.name}</h2>
+        {pkg.description && <p className="mt-1.5 text-sm text-muted md:text-base landscape:mt-0.5 landscape:text-sm">{pkg.description}</p>}
 
-        <p className="mt-5 font-display text-3xl font-semibold tracking-tight text-accent md:text-4xl">{isFree ? "Gratis" : formatIDR(pkg.price)}</p>
-        <p className="mt-1 text-xs text-muted">sekali bayar, semua sudah termasuk</p>
+        <p className="mt-5 font-display text-3xl font-semibold tracking-tight text-accent md:text-4xl landscape:mt-2 landscape:text-2xl landscape:md:text-3xl">{isFree ? "Gratis" : formatIDR(pkg.price)}</p>
 
-        <ul className="mt-6 flex flex-col gap-3">
+        <ul className="mt-6 flex flex-col gap-3 landscape:mt-2 landscape:flex-row landscape:flex-wrap landscape:gap-x-4 landscape:gap-y-1">
           <Feature icon="camera" label={`${pkg.photoCount} foto`} />
           {pkg.hasGif && <Feature icon="gif" label="GIF animasi" />}
           {pkg.hasVideo && <Feature icon="video" label="Video singkat" />}
           {pkg.hasStopMotion && <Feature icon="video" label="Video stop motion" />}
-          <Feature icon="smile" label="Filter & stiker seru" />
-          <Feature icon="download" label="Unduh lewat QR code" />
+          <span className="k-desc contents"><Feature icon="download" label="Unduh lewat QR code" /></span>
         </ul>
 
         {/* Extras are shown up front (they used to hide behind a collapsed row that customers never opened) */}
         {extras.length > 0 && (
-          <div className="mt-6 rounded-2xl border border-fg/10 bg-fg/5 p-4">
+          <div className="mt-6 rounded-2xl border border-fg/10 bg-fg/5 p-4 landscape:mt-3 landscape:p-3">
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Tambahan (opsional)</p>
             <div className="flex flex-col gap-2">
               {extras.map((extra) => {
@@ -94,11 +93,57 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
           </div>
         )}
 
-        <div className="mt-auto pt-7"><button type="button" onClick={() => onChoose(pkg, selectedExtras)} className="k-btn k-btn-accent k-btn-lg w-full">
+        <div className="mt-auto pt-7 landscape:pt-3"><button type="button" onClick={() => onChoose(pkg, selectedExtras)} className="k-btn k-btn-accent k-btn-lg w-full landscape:!min-h-[3rem] landscape:!py-2">
           Pilih paket ini
           {extrasTotal > 0 && <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm">{formatIDR(total)}</span>}
           <Icon name="arrow-right" className="h-5 w-5" />
         </button></div>
+      </div>
+    </motion.article>
+  );
+}
+
+/** "Daftar" layout: one compact row per package, add-ons as chips — fastest to scan, used by the Minimalis style. */
+function PackageRow({ pkg, index, onChoose }: { pkg: Package; index: number; onChoose: (pkg: Package, extras: string[]) => void }) {
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  const extras = pkg.extraPrints ?? [];
+  const extrasTotal = extras.filter((e) => selectedExtras.includes(e.id)).reduce((sum, e) => sum + Number(e.price), 0);
+  const total = Number(pkg.price) + extrasTotal;
+  const isFree = Number(pkg.price) === 0;
+  const toggleExtra = (id: string) => setSelectedExtras((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
+  const included = [`${pkg.photoCount} foto`, pkg.hasGif && "GIF", pkg.hasVideo && "Video", pkg.hasStopMotion && "Stop motion"].filter(Boolean).join("  ·  ");
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.07, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="glass-panel flex w-full flex-col gap-4 rounded-3xl p-5 text-left md:flex-row md:items-center md:gap-6 md:p-6"
+    >
+      {pkg.thumbnailUrl && <img src={pkg.thumbnailUrl} alt="" className="h-24 w-full shrink-0 rounded-2xl object-cover md:h-28 md:w-28" />}
+      <div className="min-w-0 flex-1">
+        <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{pkg.name}</h2>
+        <p className="mt-1 text-sm font-semibold text-accent md:text-base">{included}</p>
+        {pkg.description && <p className="mt-1 text-sm text-muted md:text-base">{pkg.description}</p>}
+        {extras.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {extras.map((extra) => {
+              const checked = selectedExtras.includes(extra.id);
+              return (
+                <button key={extra.id} type="button" onClick={() => toggleExtra(extra.id)} aria-pressed={checked} className={`flex min-h-[2.5rem] items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition ${checked ? "border-accent bg-accent/10 font-semibold" : "border-fg/15 hover:border-fg/35"}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${checked ? "border-accent bg-accent text-on-accent" : "border-fg/30"}`}>{checked && <Icon name="check" className="h-2.5 w-2.5" strokeWidth={4} />}</span>
+                  {extra.name} <span className="text-accent">+{formatIDR(extra.price)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center justify-between gap-5 md:flex-col md:items-end md:gap-3">
+        <p className="font-display text-3xl font-semibold tracking-tight md:text-4xl">{isFree ? "Gratis" : formatIDR(total)}</p>
+        <button type="button" onClick={() => onChoose(pkg, selectedExtras)} className="k-btn k-btn-accent">
+          Pilih <Icon name="arrow-right" className="h-5 w-5" />
+        </button>
       </div>
     </motion.article>
   );
@@ -112,6 +157,7 @@ export default function PilihPaket() {
   const boothConfig = useBoothConfig((state) => state.config);
   const offlineModeEnabled = boothConfig.offlineModeEnabled;
   const eventActive = isEventActive(boothConfig);
+  const packageLayout = resolvePackageLayout(boothConfig);
   // Mounted inside the WYSIWYG editor (ScreenBuilder.tsx) too — if this tenant has an event live, the
   // auto-redirect below would otherwise bounce the admin straight out of the editor.
   const positionable = usePositionableContext();
@@ -181,7 +227,7 @@ export default function PilihPaket() {
   return (
     <ScreenLayoutBoundary screenKey="packages">
       <KioskPage step="packages">
-        <ScreenTitle title={boothConfig.packageHeadline || "Pilih Paket"} subtitle="Mau berfoto berapa kali hari ini?" hint="Ketuk “Pilih paket ini” pada paket yang kamu mau" />
+        <ScreenTitle title={boothConfig.packageHeadline || "Pilih Paket"} />
 
         {eventActive && (
           <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-5 py-3 text-center text-sm text-emerald-700">
@@ -207,10 +253,27 @@ export default function PilihPaket() {
           <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-center text-sm text-amber-700">Mode offline aktif. Paket terakhir tersimpan di perangkat.</p>
         )}
 
-        {!eventActive && (
+        {!eventActive && packageLayout === "list" && (
+          <div className="flex w-full max-w-[1100px] flex-col gap-4">
+            {packages.map((pkg, i) => <PackageRow key={pkg.id} pkg={pkg} index={i} onChoose={choose} />)}
+          </div>
+        )}
+        {!eventActive && packageLayout === "carousel" && (
+          <>
+            <div className="pkg-carousel">
+              {packages.map((pkg, i) => (
+                <div key={pkg.id} className="pkg-slot flex">
+                  <div className="w-full"><PackageCard pkg={pkg} index={i} onChoose={choose} /></div>
+                </div>
+              ))}
+            </div>
+            {packages.length > 1 && <p className="-mt-4 flex items-center gap-2 text-sm text-muted"><Icon name="arrow-left" className="h-4 w-4" /> Geser untuk melihat paket lain <Icon name="arrow-right" className="h-4 w-4" /></p>}
+          </>
+        )}
+        {!eventActive && packageLayout === "grid" && (
           <div className="grid w-full max-w-[1500px] items-stretch gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 17rem), 1fr))" }}>
             {packages.map((pkg, i) => (
-              <div key={pkg.id} className="mx-auto w-full max-w-[34rem]">
+              <div key={pkg.id} className="pkg-slot mx-auto w-full max-w-[34rem]">
                 <PackageCard pkg={pkg} index={i} onChoose={choose} />
               </div>
             ))}

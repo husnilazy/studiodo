@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { printLayoutFromConfig } from "@/lib/printLayout";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
@@ -15,6 +16,8 @@ import type { LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { buildStickerAssets } from "@/lib/builtinStickers";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
+import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
+import { Icon } from "@/components/kiosk/Icons";
 import { addPendingStrip, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
@@ -61,6 +64,8 @@ const IconMinus = ({ className }: IconProps) => (
 // The URL's extension decides GIF vs video. Local fallbacks are blob: URLs, so SesiFoto tags those with a
 // "#clip.gif" / "#clip.video" fragment — strip query/fragment before looking at the extension.
 const isGifUrl = (url: string) => url.split(/[?#]/)[0].toLowerCase().endsWith(".gif");
+// The session store knows what each result file is; the address is only a fallback.
+const kindIsGif = (kinds: Record<string, "gif" | "video">, url: string) => (kinds[url] ? kinds[url] === "gif" : isGifUrl(url));
 
 function canvasToJpegBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
@@ -110,7 +115,7 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl, mediaPipeline } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
@@ -126,6 +131,10 @@ export default function Hasil() {
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
+  // Optional pop-up before the result (set in Admin > Flow Kiosk): may the photos be posted on the booth's social media?
+  const [consentAnswered, setConsentAnswered] = useState(false);
+  // The result screen shows only preview + QR + main actions (no scrolling); the contact form and extra prints open as a panel.
+  const [panel, setPanel] = useState<"customer" | "extra" | null>(null);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState<"idle" | "ok" | "error">("idle");
@@ -134,6 +143,8 @@ export default function Hasil() {
   const [printError, setPrintError] = useState<string | null>(null);
   const autoPrintTriggeredRef = useRef(false);
   const [keyboardField, setKeyboardField] = useState<"whatsapp" | "email" | null>(null);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+  useKeyboardAvoid(keyboardField !== null, keyboardRef, keyboardField);
   const [customerSaved, setCustomerSaved] = useState(false);
   const [additionalPrintConfig, setAdditionalPrintConfig] = useState<{ enabled: boolean; label: string; price: number; max: number } | null>(null);
   const [additionalQuantity, setAdditionalQuantity] = useState(1);
@@ -183,6 +194,9 @@ export default function Hasil() {
     if (!sessionId) return;
     if (!selectedPackage?.hasGif && !selectedPackage?.hasVideo) return;
     if (mediaUrls.length > 0) return; // already have it from the live session's own store
+    // The capture screen is still composing/uploading the GIF/video in the background: the local files land in the store
+    // by themselves, so just show the "preparing" state instead of asking the server (which does not have it yet).
+    if (mediaPipeline === "working") { setAwaitingMedia(true); return; }
     let cancelled = false;
     let attempts = 0;
     const MAX_ATTEMPTS = 10;
@@ -194,7 +208,8 @@ export default function Hasil() {
         const urls = [data?.gifUrl, data?.videoUrl].filter(Boolean) as string[];
         if (urls.length > 0) {
           if (!cancelled) {
-            urls.forEach((url) => setMediaUrl(url));
+            if (data?.gifUrl) setMediaUrl(data.gifUrl, "gif");
+            if (data?.videoUrl) setMediaUrl(data.videoUrl, "video");
             setAwaitingMedia(false);
           }
           return;
@@ -218,7 +233,12 @@ export default function Hasil() {
     // Intentionally only keyed on sessionId — mediaUrls.length is read once
     // up front to decide whether to start polling at all, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, mediaPipeline === "working"]);
+
+  // The local GIF/video arrived (or the build finished): stop showing the "preparing" state and release the auto-reset hold.
+  useEffect(() => {
+    if (mediaUrls.length > 0) setAwaitingMedia(false);
+  }, [mediaUrls.length]);
 
   useEffect(() => {
     if (!hasStopMotion || stripRendering || stopMotionStartedRef.current || !sessionId || photoUrls.length === 0 || positionable?.editMode) return;
@@ -386,6 +406,19 @@ export default function Hasil() {
     };
   }, [sessionId, additionalPayment, awaitingMedia, stopMotionState, printStage === "preparing" || printStage === "sending" || printStage === "printing"]);
 
+  useEffect(() => {
+    if (!customerSaved || panel !== "customer") return;
+    const timer = window.setTimeout(() => setPanel(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [customerSaved, panel]);
+
+  const answerConsent = (value: boolean) => {
+    setConsent(value);
+    setConsentAnswered(true);
+    // Stored right away (not only on "Simpan biodata"), with whatever contact details exist so far since the endpoint replaces them.
+    if (sessionId) void api.updateCustomer(sessionId, { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: value }).catch(() => undefined);
+  };
+
   const saveCustomer = async () => {
     if (!sessionId || savingCustomer) return;
     setSavingCustomer(true);
@@ -414,6 +447,7 @@ export default function Hasil() {
           dataUrl: printDataUrl,
           printerName: config.printerName,
           copies,
+          ...printLayoutFromConfig(config),
         });
         if (result.ok) {
           // The printer has the job; keep the animation up until the physical print leaves the Windows queue.
@@ -526,7 +560,7 @@ export default function Hasil() {
   const previewCount = 1 + mediaUrls.length + (showExtraMediaSlide ? 1 : 0) + (hasStopMotion ? 1 : 0);
   const stopMotionIndex = hasStopMotion ? previewCount - 1 : -1;
   const currentMediaUrl = previewIndex > 0 && previewIndex !== stopMotionIndex && previewIndex <= mediaUrls.length ? mediaUrls[previewIndex - 1] : null;
-  const currentMediaIsGif = currentMediaUrl ? isGifUrl(currentMediaUrl) : false;
+  const currentMediaIsGif = currentMediaUrl ? kindIsGif(mediaKinds, currentMediaUrl) : false;
 
   // A media src that fails to load (e.g. a transient permission-propagation
   // hiccup right after upload) used to just sit there as a permanently
@@ -542,20 +576,32 @@ export default function Hasil() {
     ? `${currentMediaUrl}${currentMediaUrl.includes("?") ? "&" : "?"}r=${mediaLoadRetry}`
     : currentMediaUrl;
 
-  const mediaMaxH = wide ? "max-h-[calc(100vh-390px)]" : "max-h-[clamp(280px,46vh,520px)]";
+  const mediaMaxH = wide ? "max-h-[calc(100vh-clamp(250px,36vh,390px))]" : "max-h-[clamp(280px,46vh,520px)]";
   const hasMedia = Boolean(selectedPackage?.hasGif || selectedPackage?.hasVideo || selectedPackage?.hasStopMotion);
 
   return (
     <ScreenLayoutBoundary screenKey="result">
     <div className="kinetic-page relative h-full">
+    {config.features.socialConsentPopup && !consentAnswered && !positionable?.editMode && photoUrls.length > 0 && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Izin unggah ke sosial media">
+        <motion.div initial={{ opacity: 0, scale: 0.94, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.25 }} className="glass-panel w-full max-w-md rounded-[2rem] p-7 text-center">
+          <h2 className="font-display text-2xl font-semibold leading-tight">Boleh fotomu kami unggah di sosial media?</h2>
+          <p className="mt-3 text-base text-muted">Hasil fotomu bisa kami posting di sosial media {config.brandName || "kami"}{config.hashtag ? ` (${config.hashtag.startsWith("#") ? config.hashtag : `#${config.hashtag}`})` : ""}. Kamu bisa memilih tidak, hasilmu tetap bisa diunduh.</p>
+          <div className="mt-6 flex flex-col gap-3">
+            <button type="button" onClick={() => answerConsent(true)} className="k-btn k-btn-accent k-btn-lg w-full">Ya, boleh</button>
+            <button type="button" onClick={() => answerConsent(false)} className="k-btn w-full">Tidak, terima kasih</button>
+          </div>
+        </motion.div>
+      </div>
+    )}
     <StepProgress current="result" />
-    <div className={`flex h-full flex-col px-5 sm:px-10 ${wide ? "overflow-hidden pb-5 pt-[112px]" : "overflow-y-auto pb-8 pt-[4.75rem]"}`}>
+    <div className={`flex h-full flex-col px-5 sm:px-10 ${wide ? "overflow-hidden pb-4 pt-[clamp(68px,11vh,112px)]" : "overflow-y-auto pb-8 pt-[4.75rem]"}`}>
       {/* The "new session" button lives at the TOP, next to the title — at the bottom of a scrolling page customers never found it. */}
       <header className="mx-auto flex w-full max-w-[1500px] shrink-0 flex-wrap items-center justify-between gap-4 pb-4">
         <Positionable id="heading" type="text" label="Judul">
           <div>
-            <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Cantik! Hasilmu sudah jadi."}</h1>
-            <p className="mt-1 text-base text-muted">Scan QR di samping dan bawa pulang semua momen serumu.</p>
+            <h1 className={`font-display font-semibold tracking-tight ${wide ? "text-4xl" : "text-3xl sm:text-5xl"}`}>{config.resultHeadline || "Hasil Foto"}</h1>
+            <p className="k-subtitle mt-1 text-base text-muted">Scan QR untuk mengunduh hasil.</p>
           </div>
         </Positionable>
         <div className="flex items-center gap-4">
@@ -569,19 +615,19 @@ export default function Hasil() {
       <main className={`mx-auto grid w-full max-w-[1500px] gap-5 ${wide ? "min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(430px,36%)]" : "grid-cols-1"}`}>
         {/* Result card: only the finished frame, plus the GIF/video when the package has one (tabs). */}
         <section className="glass-panel flex min-h-0 min-w-0 flex-col rounded-[2rem] p-5">
-          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
+          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
+            <div className="k-desc flex items-center gap-2.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPreview className="h-[18px] w-[18px]" /></span>
               <h3 className="font-display text-lg font-semibold">Hasil Fotomu</h3>
             </div>
             {previewCount > 1 && (
-              <div role="tablist" className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.04] p-1">
+              <div role="tablist" className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-full border border-fg/10 bg-fg/[0.04] p-1">
                 {Array.from({ length: previewCount }).map((_, index) => {
                   const isStopMotionTab = index === stopMotionIndex;
                   const url = !isStopMotionTab && index > 0 && index <= mediaUrls.length ? mediaUrls[index - 1] : null;
-                  const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (isGifUrl(url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
+                  const label = index === 0 ? "Foto" : isStopMotionTab ? "Stop Motion" : url ? (kindIsGif(mediaKinds, url) ? "GIF" : "Video") : awaitingMedia ? "GIF / Video" : "GIF gagal";
                   return (
-                    <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
+                    <button key={index} role="tab" aria-selected={previewIndex === index} type="button" onClick={() => setPreviewIndex(index)} className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${previewIndex === index ? "bg-fg text-canvas shadow-md" : "text-muted hover:text-fg"}`}>
                       {isStopMotionTab && stopMotionState === "making" && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
                       {!isStopMotionTab && !url && index > 0 && awaitingMedia && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
                       {label}
@@ -647,38 +693,79 @@ export default function Hasil() {
           </div>
         </section>
 
-        <aside className={`flex min-w-0 flex-col gap-4 ${wide ? "min-h-0 overflow-y-auto pr-1" : ""}`}>
-          {/* QR only — no clickable extras next to it (those got tapped by accident and distracted from scanning). */}
-          <div className="glass-panel flex items-center gap-5 rounded-[2rem] p-5">
-            <div className="relative shrink-0">
-              {stripRendering && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="absolute h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
-                </div>
-              )}
-              <div className={`rounded-2xl bg-white p-3 shadow-xl transition-opacity duration-500 ${stripRendering ? "opacity-0" : "opacity-100"}`}>
-                <canvas ref={qrCanvasRef} className="block !h-[184px] !w-[184px] rounded-lg" />
-              </div>
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-display text-[22px] font-semibold leading-tight">Bawa pulang momenmu</h3>
-              <p className="mt-1.5 text-[15px] leading-relaxed text-fg/60">Buka kamera HP, arahkan ke kode ini — foto{hasMedia ? ", GIF, dan video" : ""} kamu langsung bisa diunduh.</p>
-              <div className="mt-3">
-                {uploadStatus === "pending" && <span className="inline-flex items-center gap-2 rounded-full bg-fg/[0.06] px-3 py-1 text-xs font-semibold text-fg/60"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan hasil…</span>}
-                {uploadStatus === "ok" && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1 text-xs font-semibold text-emerald-600"><IconCheck className="h-3.5 w-3.5" />Hasil tersimpan</span>}
+        <aside className={`flex min-w-0 flex-col gap-3 [&>*]:shrink-0 ${wide ? "min-h-0 justify-start overflow-hidden" : ""}`}>
+          {/* Share card: brand, a big QR with a scanning sweep, what is inside the download, then the tenant's socials.
+              QR only — nothing clickable here (taps next to the QR distracted from scanning). */}
+          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="glass-panel overflow-hidden rounded-[2rem]">
+            <div className="flex items-center gap-3 bg-gradient-to-r from-accent/20 via-accent/10 to-transparent px-5 py-2.5">
+              {config.logoUrl ? <img src={config.logoUrl} alt={config.brandName} className="h-9 max-w-[9rem] object-contain" /> : <span className="font-display text-lg font-semibold tracking-tight">{config.brandName}</span>}
+              <div className="ml-auto">
+                {uploadStatus === "pending" && <span className="inline-flex items-center gap-2 rounded-full bg-fg/[0.07] px-3 py-1 text-xs font-semibold text-fg/65"><span className="h-3 w-3 animate-spin rounded-full border-2 border-fg/25 border-t-accent" />Menyimpan…</span>}
+                {uploadStatus === "ok" && <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-semibold text-emerald-600"><IconCheck className="h-3.5 w-3.5" />Siap diunduh</span>}
                 {uploadStatus === "error" && <span className="inline-flex rounded-full bg-red-400/12 px-3 py-1 text-xs font-semibold text-red-500">Belum tersimpan — hubungi crew</span>}
               </div>
             </div>
-          </div>
 
-          {/* Shown only when auto-print is off; with auto-print the strip already prints itself (a second button just invites mashing). */}
+            <div className="flex flex-col items-center gap-3 p-4">
+              <div className="relative shrink-0">
+                {stripRendering && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center">
+                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-fg/15 border-t-accent" />
+                  </div>
+                )}
+                <div className={`relative rounded-3xl bg-white p-4 shadow-2xl ring-1 ring-black/5 transition-opacity duration-500 ${stripRendering ? "opacity-0" : "opacity-100"}`}>
+                  {/* corner brackets */}
+                  {["left-1.5 top-1.5 border-l-[3px] border-t-[3px] rounded-tl-xl", "right-1.5 top-1.5 border-r-[3px] border-t-[3px] rounded-tr-xl", "bottom-1.5 left-1.5 border-b-[3px] border-l-[3px] rounded-bl-xl", "bottom-1.5 right-1.5 border-b-[3px] border-r-[3px] rounded-br-xl"].map((c) => (
+                    <span key={c} className={`pointer-events-none absolute h-6 w-6 border-accent ${c}`} />
+                  ))}
+                  <canvas ref={qrCanvasRef} className="relative block !h-[clamp(100px,min(20vh,34vw),220px)] !w-[clamp(100px,min(20vh,34vw),220px)] rounded-lg" />
+                  {config.animationsEnabled && !stripRendering && <span className="k-scan-line pointer-events-none absolute inset-x-4 h-0.5 rounded-full bg-accent/70 shadow-[0_0_14px_var(--accent)]" />}
+                </div>
+              </div>
+
+              <div className="min-w-0 text-center">
+                <h3 className="font-display text-2xl font-semibold leading-tight [@media(max-height:760px)]:text-xl">Scan &amp; unduh</h3>
+                <p className="k-desc mt-1 text-[15px] leading-snug text-fg/60 [@media(max-height:760px)]:hidden">Arahkan kamera HP ke kode ini.</p>
+                <div className="mt-3 flex flex-wrap justify-center gap-2 [@media(max-height:760px)]:hidden">
+                  {[
+                    { icon: "camera", label: `${photoUrls.filter(Boolean).length} foto`, show: true },
+                    { icon: "gif", label: "GIF", show: Boolean(selectedPackage?.hasGif) },
+                    { icon: "video", label: "Video", show: Boolean(selectedPackage?.hasVideo) },
+                    { icon: "video", label: "Stop motion", show: hasStopMotion },
+                  ].filter((c) => c.show).map((c) => (
+                    <span key={c.label} className="inline-flex items-center gap-1.5 rounded-full bg-accent/12 px-3 py-1.5 text-[13px] font-semibold text-accent"><Icon name={c.icon} className="h-4 w-4" />{c.label}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+          </motion.div>
+
+          {/* Main actions. Print is shown only when auto-print is off (with auto-print the strip already prints itself). */}
           {!config.autoPrintEnabled && (
-            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-[76px] !w-full !gap-3 !px-8 !py-5 !text-[26px] whitespace-nowrap">
-              <IconPrinter className="h-8 w-8" />
+            <button type="button" onClick={() => printNow()} disabled={printing || !stripDataUrl} className="k-btn k-btn-primary !min-h-[64px] !w-full !gap-3 !px-8 !py-4 !text-[22px] whitespace-nowrap">
+              <IconPrinter className="h-7 w-7" />
               {printing ? "Mencetak…" : "Cetak foto"}
             </button>
           )}
-
+          <div className={`grid gap-3 ${additionalPrintConfig?.enabled ? "grid-cols-2" : "grid-cols-1"}`}>
+            <button type="button" onClick={() => setPanel("customer")} className="k-btn !min-h-[52px] !gap-2 !px-4 !py-3 !text-[16px] whitespace-nowrap">
+              <IconPhone className="h-5 w-5" /> {customerSaved ? "Tersimpan" : "Kirim hasil"}
+            </button>
+            {additionalPrintConfig?.enabled && (
+              <button type="button" onClick={() => setPanel("extra")} className="k-btn !min-h-[52px] !gap-2 !px-4 !py-3 !text-[16px] whitespace-nowrap">
+                <IconPrinter className="h-5 w-5" /> Tambah cetak
+              </button>
+            )}
+          </div>
+        </aside>
+      </main>
+      {panel && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null); }}>
+          <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[2rem]">
+            <button type="button" onClick={() => setPanel(null)} aria-label="Tutup" className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-fg/10 text-lg font-semibold text-fg/70 hover:bg-fg/20">×</button>
+            {panel === "customer" && (
+              <>
           {/* Informasi Pelanggan */}
           <div className="glass-panel rounded-[2rem] p-5">
             <div className="mb-3 flex items-center gap-2.5">
@@ -688,11 +775,11 @@ export default function Hasil() {
             <div className="space-y-2">
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/35"><IconPhone className={iconBase} /></span>
-                <input value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} onFocus={() => setKeyboardField("whatsapp")} type="tel" inputMode="tel" placeholder="Nomor WhatsApp" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
+                <input data-kb-target value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} onFocus={() => setKeyboardField("whatsapp")} type="tel" inputMode="tel" placeholder="Nomor WhatsApp" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
               </div>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/35"><IconMail className={iconBase} /></span>
-                <input value={email} onChange={(event) => setEmail(event.target.value)} onFocus={() => setKeyboardField("email")} type="email" placeholder="Email (opsional)" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
+                <input data-kb-target value={email} onChange={(event) => setEmail(event.target.value)} onFocus={() => setKeyboardField("email")} type="email" placeholder="Email (opsional)" className="w-full rounded-xl border border-fg/10 bg-fg/[0.06] py-2.5 pl-10 pr-3 outline-none focus:border-accent" />
               </div>
               <label className="flex gap-2 text-xs text-fg/55"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /> Izinkan hasil digunakan untuk galeri {config.brandName}</label>
               <button onClick={saveCustomer} disabled={savingCustomer} className="w-full rounded-xl border border-fg/15 px-4 py-2.5 text-sm hover:border-accent disabled:opacity-50">{savingCustomer ? "Menyimpan..." : "Simpan biodata"}</button>
@@ -704,7 +791,9 @@ export default function Hasil() {
             </div>
           </div>
 
-          {additionalPrintConfig?.enabled && (
+              </>
+            )}
+          {additionalPrintConfig?.enabled && panel === "extra" && (
             <div className="glass-panel rounded-[2rem] p-5">
               <div className="mb-3 flex items-center gap-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><IconPrinter className="h-[18px] w-[18px]" /></span>
@@ -767,8 +856,9 @@ export default function Hasil() {
               )}
             </div>
           )}
-        </aside>
-      </main>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {printStage !== "idle" && (
           <motion.div key="print-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-canvas/80 p-6 backdrop-blur-md" role="status" aria-live="polite">
@@ -809,8 +899,8 @@ export default function Hasil() {
       </AnimatePresence>
 
       {keyboardField && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeyboardField(null); }}>
-          <div className="w-full max-w-4xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/10 p-3 pb-4 sm:p-5 sm:pb-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeyboardField(null); }}>
+          <div ref={keyboardRef} className="w-full max-w-4xl">
             <div className="mb-2 flex items-center justify-between rounded-2xl border border-fg/10 bg-canvas/95 px-4 py-3 text-sm text-muted">
               <div><span>{keyboardField === "whatsapp" ? "Isi nomor WhatsApp" : "Isi email"}</span><p className="mt-1 max-w-[420px] truncate text-base font-semibold text-fg">{keyboardValue || "Belum ada ketikan"}</p></div>
               <button onClick={() => setKeyboardField(null)} className="rounded-lg px-3 py-1 text-fg/60 hover:bg-fg/10 hover:text-fg">Tutup</button>

@@ -1,6 +1,6 @@
 {
   "name": "studiodo-kiosk",
-  "version": "0.1.20",
+  "version": "0.1.31",
   "description": "STUDIODO Photobooth — Kiosk + Admin, Electron .exe",
   "author": "Frameless Creative",
   "main": "electron/main.cjs",
@@ -14,12 +14,15 @@
     "build:client": "node ./node_modules/vite/bin/vite.js build --config client/vite.config.ts",
     "build:server": "node ./node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run build:client && npm run build:server",
+    "superadmin:dev": "node ./node_modules/electron/cli.js superadmin-app/main.cjs",
+    "superadmin:dist": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --config superadmin-app/electron-builder.json --win nsis portable",
     "dist": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
     "dist:publish": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable --publish always",
     "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:push": "node ./node_modules/drizzle-kit/bin.cjs push",
     "db:studio": "node ./node_modules/drizzle-kit/bin.cjs studio",
+    "r2:cors": "node ./node_modules/tsx/dist/cli.mjs server/scripts/setR2Cors.ts",
     "tenant:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createTenant.ts",
     "superadmin:create": "node ./node_modules/tsx/dist/cli.mjs server/scripts/createSuperadmin.ts",
     "test": "vitest run"
@@ -45,8 +48,13 @@
         "to": "canon-bridge",
         "filter": [
           "canon-bridge.exe",
-          "CanonEDSDK.dll",
+          "canon-bridge.dll",
           "EDSDK.dll",
+          "EdsImage.dll",
+          "sony_core.dll",
+          "Cr_Core.dll",
+          "monitor_protocol*.dll",
+          "CrAdapter/*.dll",
           "*.json"
         ]
       }
@@ -90,6 +98,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
+    "@aws-sdk/s3-request-presigner": "^3.1106.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/sora": "^5.3.0",
     "@fontsource-variable/space-grotesk": "^5.3.0",
@@ -108,6 +117,7 @@
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.9",
     "postgres": "^3.4.5",
+    "puppeteer-core": "^23.11.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

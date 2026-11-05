@@ -166,15 +166,16 @@ export default function LiveMonitorPanel() {
         )}
       </div>
 
+      <div className="space-y-5 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-5 xl:space-y-0">
       {data.booths.length === 0 ? (
         <p className={`${panel} text-fg/55`}>Belum ada booth. Buat kiosk key di menu Kiosk lalu pasangkan di komputer booth.</p>
       ) : booths.length === 0 ? (
         <p className={`${panel} text-fg/55`}>Tidak ada booth di tampilan ini.</p>
       ) : (
-        <ul className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">{booths.map((b) => <BoothCard key={b.id} booth={b} now={now} />)}</ul>
+        <ul className="grid gap-4 lg:grid-cols-2 xl:grid-cols-1 min-[1700px]:grid-cols-2">{booths.map((b) => <BoothCard key={b.id} booth={b} now={now} />)}</ul>
       )}
 
-      <section className={panel}>
+      <section className={`${panel} xl:sticky xl:top-0 xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto`}>
         <h3 className="font-display text-xl font-semibold">Aktivitas terbaru hari ini</h3>
         {data.recent.length === 0 ? <p className="mt-3 text-sm text-fg/45">Belum ada sesi hari ini.</p> : (
           <ul className="mt-3 divide-y divide-fg/10">
@@ -191,6 +192,7 @@ export default function LiveMonitorPanel() {
           </ul>
         )}
       </section>
+      </div>
     </div>
   );
 }

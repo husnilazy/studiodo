@@ -1,0 +1,11 @@
+storage
+runtime
+dist
+logs
+native
+electron
+docs
+*.log
+.env*
+/admin-preview*.png
+/traffic-monitor.png

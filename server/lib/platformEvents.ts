@@ -1,5 +1,6 @@
 import { db } from "../db/client.js";
 import { platformEvents } from "../db/schema.js";
+import { raiseAlertFromEvent } from "./adminAlerts.js";
 
 type Level = "info" | "warning" | "error";
 type Category = "tenant" | "billing" | "kiosk" | "auth" | "system";
@@ -28,5 +29,5 @@ export function logEvent(input: LogEventInput) {
     actorType: input.actorType,
     actorLabel: input.actorLabel,
     metadata: input.metadata,
-  }).catch((error) => console.error("[platform-events] Gagal mencatat event", input.action, error));
+  }).then(() => raiseAlertFromEvent(input)).catch((error) => console.error("[platform-events] Gagal mencatat event", input.action, error));
 }

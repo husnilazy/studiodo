@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { superadminApi, type NotificationSeverity, type SentNotification, type SuperadminTenant } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → "Notifikasi": send a message to every tenant, or to one, that shows up in the bell of their web dashboard.
 // The same table also carries future automatic notifications (customer messages, billing, booth alerts), so this
@@ -73,10 +74,10 @@ export function NotificationsAdminPanel({ tenants }: { tenants: SuperadminTenant
         <p className="mt-1 text-xs text-fg/50">Muncul di bel dashboard tenant dan halaman Notifikasi mereka.</p>
         <div className="mt-4 space-y-3">
           <label className="block text-sm font-medium">Penerima
-            <select value={target} onChange={(e) => setTarget(e.target.value)} className={inputClass}>
+            <Select value={target} onChange={(e) => setTarget(e.target.value)} className={inputClass}>
               <option value="">Semua tenant ({tenantCount || tenants.length})</option>
               {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            </Select>
           </label>
           <div>
             <p className="text-sm font-medium">Jenis</p>

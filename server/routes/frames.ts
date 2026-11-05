@@ -8,6 +8,7 @@ import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
+import { CUSTOM_FRAME_CATEGORY } from "../lib/pos.js";
 
 export const framesRouter = Router();
 framesRouter.param("id", validateUuidParam("Frame tidak ditemukan"));
@@ -95,6 +96,7 @@ framesRouter.get("/manage", requireAdminAuth, async (req, res) => {
     db.select({
       id: templates.id, name: templates.name, orientation: templates.orientation, category: templates.category, style: templates.style,
       outputPreset: templates.outputPreset, active: templates.active, createdAt: templates.createdAt,
+      price: templates.price, customerName: templates.customerName,
       imageUrl: sql<string | null>`case when left(${templates.frameImageUrl}, 5) = 'data:' then null else ${templates.frameImageUrl} end`,
       slotCount: sql<number>`coalesce(jsonb_array_length(${templates.slots}), 0)::int`,
     }).from(templates).where(eq(templates.tenantId, tenantId)).orderBy(templates.createdAt),
@@ -128,7 +130,7 @@ framesRouter.get("/", requireKioskAuth, async (req, res) => {
 
   const merged = [
     ...customTemplates
-      .filter((t) => t.orientation === orientation && t.category !== STOP_MOTION_CATEGORY)
+      .filter((t) => t.orientation === orientation && t.category !== STOP_MOTION_CATEGORY && t.category !== CUSTOM_FRAME_CATEGORY)
       .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category, style: t.style, outputPreset: t.outputPreset })),
     ...overlays
       .filter((o) => o.orientation === orientation)
@@ -141,7 +143,7 @@ framesRouter.get("/", requireKioskAuth, async (req, res) => {
 // POST /api/frames — admin: persist an uploaded frame for every kiosk client
 framesRouter.post("/", requireAdminAuth, async (req, res) => {
   const tenantId = req.tenantId!;
-  const { id, name, frameImageUrl, slots, canvasWidth, canvasHeight, orientation, category, style, outputPreset } = req.body;
+  const { id, name, frameImageUrl, slots, canvasWidth, canvasHeight, orientation, category, style, outputPreset, price, customerName } = req.body;
   if (!String(name ?? "").trim() || !String(frameImageUrl ?? "").startsWith("data:image/") || !Array.isArray(slots)) {
     return res.status(400).json({ error: "Data frame tidak valid" });
   }
@@ -169,6 +171,7 @@ framesRouter.post("/", requireAdminAuth, async (req, res) => {
     category: String(category ?? "custom"),
     style: String(style ?? "Custom"),
     outputPreset: String(outputPreset ?? "4r"),
+    ...(String(category ?? "") === CUSTOM_FRAME_CATEGORY ? { price: String(Math.max(0, Math.round(Number(price) || 0))), customerName: String(customerName ?? "").trim().slice(0, 100) || null } : {}),
   };
   // Every current caller (FrameManagement.tsx, AdminPlaceholder.tsx) just
   // `await`s this call and either re-fetches via GET /frames or already has the
@@ -189,6 +192,7 @@ framesRouter.post("/", requireAdminAuth, async (req, res) => {
       category: values.category,
       style: values.style,
       outputPreset: values.outputPreset,
+      ...("price" in values ? { price: values.price, customerName: values.customerName } : {}),
       // tenantId intentionally not in `set` — an update can't reassign ownership
     },
   }).returning({ id: templates.id, name: templates.name, slots: templates.slots });
@@ -204,8 +208,10 @@ framesRouter.post("/", requireAdminAuth, async (req, res) => {
 // PATCH /api/frames/:id — admin: edit metadata and slot layout
 framesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
   const tenantId = req.tenantId!;
-  const { name, frameImageUrl, slots, canvasWidth, canvasHeight, orientation, category, style, outputPreset } = req.body;
+  const { name, frameImageUrl, slots, canvasWidth, canvasHeight, orientation, category, style, outputPreset, price, customerName } = req.body;
   const values = {
+    ...(price !== undefined ? { price: String(Math.max(0, Math.round(Number(price) || 0))) } : {}),
+    ...(customerName !== undefined ? { customerName: String(customerName ?? "").trim().slice(0, 100) || null } : {}),
     ...(name !== undefined ? { name: String(name).trim() } : {}),
     ...(frameImageUrl !== undefined ? { frameImageUrl: await resolveFrameImageUrl(tenantId, frameImageUrl) } : {}),
     ...(slots !== undefined ? { slots } : {}),

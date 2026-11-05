@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { superadminApi, type GatewayInfo, type GatewaysOverview } from "@/lib/superadminApi";
+import { superadminApi, type GatewayInfo, type GatewaysOverview, type PlatformDokuInfo } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Pengaturan → "Pembayaran langganan": the gateways STUDIODO uses to collect subscription fees
 // from tenants. Secrets are write-only (the server never sends them back, only a masked tail), checkout tries
@@ -88,10 +89,10 @@ function GatewayCard({ gateway, onChanged }: { gateway: GatewayInfo; onChanged: 
         {gateway.provider === "midtrans" && (
           <label className="text-sm text-fg/60">
             Mode
-            <select className={inputClass} value={environment} onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}>
+            <Select className={inputClass} value={environment} onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}>
               <option value="sandbox">Sandbox (uji coba)</option>
               <option value="production">Produksi (uang sungguhan)</option>
-            </select>
+            </Select>
           </label>
         )}
         <label className={`text-sm text-fg/60 ${gateway.provider === "midtrans" ? "sm:col-span-2" : ""}`}>
@@ -136,6 +137,63 @@ function GatewayCard({ gateway, onChanged }: { gateway: GatewayInfo; onChanged: 
   );
 }
 
+/** STUDIODO's own DOKU account: collects kiosk QRIS for tenants whose money is "ditampung STUDIODO". Secrets are write-only. */
+function PlatformDokuCard() {
+  const [info, setInfo] = useState<PlatformDokuInfo | null>(null);
+  const [form, setForm] = useState({ clientId: "", secretKey: "", environment: "sandbox", qrisMode: "checkout", merchantId: "", terminalId: "", postalCode: "", snapPrivateKey: "" });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const apply = (d: PlatformDokuInfo) => { setInfo(d); setForm({ clientId: d.clientId, secretKey: "", environment: d.environment, qrisMode: d.qrisMode, merchantId: d.merchantId, terminalId: d.terminalId, postalCode: d.postalCode, snapPrivateKey: "" }); };
+  useEffect(() => { superadminApi.getPlatformDoku().then((d) => d && apply(d)).catch((e) => setMessage(e instanceof Error ? e.message : "Gagal memuat")); }, []);
+  const set = (key: keyof typeof form, value: string) => setForm((f) => ({ ...f, [key]: value }));
+
+  const save = async () => {
+    setBusy(true); setMessage("");
+    try {
+      const body: Record<string, unknown> = { ...form };
+      if (!form.secretKey) delete body.secretKey;
+      if (!form.snapPrivateKey) delete body.snapPrivateKey;
+      if (!form.clientId) delete body.clientId;
+      const d = await superadminApi.savePlatformDoku(body);
+      if (d) apply(d);
+      setMessage("Tersimpan.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Gagal menyimpan"); } finally { setBusy(false); }
+  };
+  const test = async () => {
+    setBusy(true); setMessage("");
+    try { const r = await superadminApi.testPlatformDoku(); setMessage(r ? `${r.ok ? "✓" : "✗"} ${r.message}` : ""); } catch (e) { setMessage(e instanceof Error ? e.message : "Tes gagal"); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="mt-8 rounded-2xl border border-fg/10 bg-fg/5 p-5">
+      <p className="text-xs uppercase tracking-[.16em] text-accent">QRIS KIOSK TENANT</p>
+      <h3 className="mt-1 font-display text-lg font-semibold">Akun DOKU STUDIODO</h3>
+      <p className="mt-1 text-sm text-fg/50">Dipakai customer photobooth tenant yang uangnya "ditampung STUDIODO". Pembayaran masuk ke akun DOKU ini, lalu jadi saldo tenant (menu Saldo &amp; Kebijakan). Tenant dengan akun DOKU sendiri tidak terpengaruh.</p>
+      <p className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold ${info?.configured ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>{info?.configured ? "Terhubung" : "Belum diisi — tenant platform memakai Xendit platform sebagai cadangan"}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="text-sm text-fg/60">Client ID<input className={inputClass} value={form.clientId} onChange={(e) => set("clientId", e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Secret Key {info?.hasSecret && <span className="text-xs text-emerald-300">(tersimpan)</span>}<input className={inputClass} type="password" autoComplete="off" placeholder={info?.hasSecret ? "kosongkan bila tidak diganti" : ""} value={form.secretKey} onChange={(e) => set("secretKey", e.target.value)} /></label>
+        <label className="text-sm text-fg/60">Mode<Select className={inputClass} value={form.environment} onChange={(e) => set("environment", e.target.value)}><option value="sandbox">Sandbox (uji coba)</option><option value="production">Produksi</option></Select></label>
+        <label className="text-sm text-fg/60">Tampilan QRIS<Select className={inputClass} value={form.qrisMode} onChange={(e) => set("qrisMode", e.target.value)}><option value="checkout">Halaman DOKU (Checkout)</option><option value="snap">QRIS langsung (SNAP)</option></Select></label>
+      </div>
+      {form.qrisMode === "snap" && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <label className="text-sm text-fg/60">Merchant ID<input className={inputClass} value={form.merchantId} onChange={(e) => set("merchantId", e.target.value)} /></label>
+          <label className="text-sm text-fg/60">Terminal ID<input className={inputClass} value={form.terminalId} onChange={(e) => set("terminalId", e.target.value)} /></label>
+          <label className="text-sm text-fg/60">Kode pos<input className={inputClass} value={form.postalCode} onChange={(e) => set("postalCode", e.target.value)} /></label>
+          <label className="text-sm text-fg/60 sm:col-span-3">Kunci privat RSA (.pem) {info?.hasPrivateKey && <span className="text-xs text-emerald-300">(tersimpan)</span>}<textarea className={`${inputClass} h-24 font-mono text-xs`} placeholder={info?.hasPrivateKey ? "kosongkan bila tidak diganti" : "-----BEGIN PRIVATE KEY-----"} value={form.snapPrivateKey} onChange={(e) => set("snapPrivateKey", e.target.value)} /></label>
+        </div>
+      )}
+      <p className="mt-3 text-xs leading-relaxed text-fg/40">Notifikasi pembayaran dikirim ke <code className="break-all">{info?.notificationUrl}</code> (otomatis per transaksi). Mode QRIS langsung: daftarkan juga URL Notify yang sama di DOKU Back Office; sistem juga mengecek status ke DOKU tiap beberapa detik jika notifikasi telat.</p>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" disabled={busy} onClick={save} className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Simpan</button>
+        <button type="button" disabled={busy || !info?.configured} onClick={test} className="rounded-xl border border-fg/20 px-4 py-2 text-sm font-semibold disabled:opacity-40">Tes koneksi</button>
+        {message && <span role="status" className="text-sm text-fg/70">{message}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function PaymentGatewaysPanel() {
   const [data, setData] = useState<GatewaysOverview | null>(null);
   const [error, setError] = useState("");
@@ -150,7 +208,7 @@ export function PaymentGatewaysPanel() {
     <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <p className="text-xs uppercase tracking-[.16em] text-accent">PEMBAYARAN LANGGANAN</p>
       <h2 className="mt-2 font-display text-xl font-semibold">Gateway untuk membayar langganan tenant</h2>
-      <p className="mt-1 text-sm text-fg/45">Dipakai tenant di portal web saat memperpanjang langganan. Ini akun milik STUDIODO; QRIS di kiosk memakai akun Xendit tiap tenant (diatur di Admin tenant).</p>
+      <p className="mt-1 text-sm text-fg/45">Dipakai tenant di portal web saat memperpanjang langganan. Hanya Midtrans yang dipakai untuk langganan. QRIS kiosk tenant memakai akun DOKU STUDIODO (di bawah) atau akun milik tenant sendiri.</p>
 
       {error && <p role="alert" className="mt-4 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
       {!data && !error && <p role="status" className="mt-4 text-sm text-fg/50">Memuat pengaturan pembayaran…</p>}
@@ -167,6 +225,7 @@ export function PaymentGatewaysPanel() {
           </div>
         </>
       )}
+      <PlatformDokuCard />
     </section>
   );
 }

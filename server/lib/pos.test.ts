@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { PosError, computeTotals, expectedCash, kioskPortionOf, orderNumber, pickNextTicket, priceCart, queueLabel, refundAmount, refundStatus, settlePayment, wibDay, type Catalog } from "./pos.js";
+import { PosError, computeTotals, expectedCash, kioskPortionOf, orderNumber, pickNextTicket, priceCart, customFrameOf, queueLabel, refundAmount, refundStatus, settlePayment, wibDay, type Catalog } from "./pos.js";
 
 const catalog: Catalog = {
   packages: new Map([["pk1", { name: "Strip", price: 25000 }]]),
   prints: new Map([["pr1", { name: "Cetak +1", price: 10000 }]]),
   products: new Map([["pd1", { name: "Es Teh", price: 8000 }]]),
+  frames: new Map([["fr1", { name: "Frame custom · Rina", price: 35000 }]]),
 };
 
 describe("priceCart", () => {
@@ -79,5 +80,20 @@ describe("refunds", () => {
     expect(refundStatus(100, 0)).toBe("paid");
     expect(refundStatus(100, 40)).toBe("partial_refund");
     expect(refundStatus(100, 100)).toBe("refunded");
+  });
+});
+
+describe("custom frame sale", () => {
+  it("prices the frame from the database and binds it to the voucher", () => {
+    const items = priceCart([{ type: "package", refId: "pk1" }, { type: "frame", refId: "fr1", unitPrice: 1 }], catalog);
+    expect(items[1]).toMatchObject({ type: "frame", unitPrice: 35000 });
+    expect(customFrameOf(items)).toEqual({ frameId: "fr1" });
+    // the frame fee is paid at the cashier; only the package is covered by the booth voucher
+    expect(kioskPortionOf(items)).toBe(25000);
+  });
+  it("needs a package, and only one frame", () => {
+    expect(() => customFrameOf(priceCart([{ type: "frame", refId: "fr1" }], catalog))).toThrow(PosError);
+    expect(() => priceCart([{ type: "frame", refId: "fr1", qty: 2 }], catalog)).toThrow(PosError);
+    expect(customFrameOf(priceCart([{ type: "package", refId: "pk1" }], catalog))).toBeNull();
   });
 });

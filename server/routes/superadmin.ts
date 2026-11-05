@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates, withdrawals } from "../db/schema.js";
 import { computeQrisBalance } from "../lib/qrisBalance.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
-import { signSuperadminToken } from "../lib/jwt.js";
+import { signAdminToken, signSuperadminToken } from "../lib/jwt.js";
 import { sessionVersion } from "../lib/sessionGuard.js";
 import { issueTwoFactorChallenge, twoFactorAdminRouter, twoFactorLoginRouter } from "./superadminTwoFactor.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
@@ -18,6 +18,14 @@ import { paymentGatewaysAdminRouter } from "./paymentGateways.js";
 import { reconcileOrder } from "../lib/billing.js";
 import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
+import { contentStudioAdminRouter } from "./contentStudio.js";
+import { superadminFinanceRouter } from "./superadminFinance.js";
+import { superadminTenantWaRouter } from "./superadminTenantWa.js";
+import { superadminInsightsRouter } from "./superadminInsights.js";
+import { supportAdminRouter, alertsAdminRouter } from "./supportAlerts.js";
+import { superadminLeadsRouter, addActivity as addLeadActivity, onboardingUrl } from "./superadminLeads.js";
+import { renderTemplate, resolveTemplates, whatsappFallbackLink } from "../lib/leads.js";
+import { portalBaseUrl } from "../lib/urls.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -74,11 +82,38 @@ superadminRouter.post("/logout", requireSuperadminAuth, (_req, res) => {
 });
 
 superadminRouter.get("/me", requireSuperadminAuth, async (req, res) => {
-  const [superadmin] = await db.select({ email: superadmins.email, totp: superadmins.totpEnabledAt }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
-  res.json({ email: superadmin?.email, twoFactorEnabled: !!superadmin?.totp });
+  const [superadmin] = await db.select({ email: superadmins.email, totp: superadmins.totpEnabledAt, role: superadmins.role }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  res.json({ email: superadmin?.email, twoFactorEnabled: !!superadmin?.totp, role: superadmin?.role ?? "owner" });
 });
 
 superadminRouter.use(requireSuperadminAuth);
+
+// A 'finance' account only reaches the money screens (and its own 2FA); everything else is the owner's.
+const FINANCE_ALLOWED = [/^\/2fa(\/|$)/, /^\/finance(\/|$)/, /^\/withdrawals(\/|$)/, /^\/tenants\/[0-9a-f-]{36}\/qris-balance$/i];
+// The role rarely changes, so it is remembered for a short while instead of costing a database round trip on every single request
+// (the dashboard fires many in parallel, and on a remote database each one adds noticeable latency).
+const roleCache = new Map<string, { role: string | undefined; at: number }>();
+const ROLE_TTL_MS = 30_000;
+superadminRouter.use(async (req, res, next) => {
+  const id = req.superadminId!;
+  let hit = roleCache.get(id);
+  if (!hit || Date.now() - hit.at > ROLE_TTL_MS) {
+    const [row] = await db.select({ role: superadmins.role }).from(superadmins).where(eq(superadmins.id, id));
+    hit = { role: row?.role, at: Date.now() };
+    roleCache.set(id, hit);
+    if (roleCache.size > 200) roleCache.clear();
+  }
+  if (hit.role === "finance" && !FINANCE_ALLOWED.some((pattern) => pattern.test(req.path))) {
+    return res.status(403).json({ error: "Akun finance hanya bisa mengakses menu keuangan." });
+  }
+  next();
+});
+superadminRouter.use("/finance", superadminFinanceRouter);
+superadminRouter.use("/leads", superadminLeadsRouter);
+superadminRouter.use("/tenant-wa", superadminTenantWaRouter);
+superadminRouter.use(superadminInsightsRouter);
+superadminRouter.use("/support", supportAdminRouter);
+superadminRouter.use("/alerts", alertsAdminRouter);
 superadminRouter.use("/2fa", twoFactorAdminRouter);
 superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);
@@ -88,6 +123,7 @@ superadminRouter.use("/assets", siteAssetsAdminRouter);
 superadminRouter.use("/payment-gateways", paymentGatewaysAdminRouter);
 superadminRouter.use("/licenses", licensesAdminRouter);
 superadminRouter.use("/notifications", notificationsAdminRouter);
+superadminRouter.use("/content-studio", contentStudioAdminRouter);
 
 // Snapshot label for platformEvents.actorLabel — resolved once per request
 // rather than joined in SQL, since it's only needed for the handful of
@@ -405,6 +441,19 @@ superadminRouter.post("/tenants/:id/extend", async (req, res) => {
   res.json(row);
 });
 
+// POST /api/superadmin/tenants/:id/impersonate — "lihat sebagai tenant": a 30-minute, READ-ONLY admin session for support. Every
+// request that would change data is refused by the admin auth middleware (blocksWrite), and the access is recorded in the log.
+superadminRouter.post("/tenants/:id/impersonate", async (req, res) => {
+  const [tenant] = await db.select({ id: tenants.id, name: tenants.name }).from(tenants).where(eq(tenants.id, req.params.id));
+  if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  const [admin] = await db.select().from(admins).where(eq(admins.tenantId, tenant.id)).orderBy(admins.createdAt).limit(1);
+  if (!admin) return res.status(409).json({ error: "Tenant ini belum punya akun admin." });
+  const [me] = await db.select({ email: superadmins.email }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  const token = signAdminToken({ adminId: admin.id, tenantId: tenant.id, pv: sessionVersion(admin.passwordHash), ro: true, imp: me?.email ?? "superadmin" }, { expiresIn: "30m" });
+  logEvent({ tenantId: tenant.id, level: "warning", category: "auth", action: "tenant.impersonated", message: `${me?.email ?? "Superadmin"} membuka dashboard ${tenant.name} dalam mode lihat saja`, actorType: "superadmin", actorLabel: me?.email ?? null });
+  res.json({ token, tenantName: tenant.name, adminEmail: admin.email, expiresInMinutes: 30 });
+});
+
 // GET /api/superadmin/tenants/:id — single tenant detail: profile, kiosk keys,
 // tenant admins, and payment history. Powers the detail drawer in the dashboard.
 superadminRouter.get("/tenants/:id", async (req, res) => {
@@ -534,10 +583,11 @@ superadminRouter.post("/tenant-applications/:id/reject", async (req, res) => {
   const note = req.body?.note ? String(req.body.note).trim() : null;
   const actorLabel = await currentSuperadminEmail(req);
   const [row] = await db.update(tenantApplications)
-    .set({ status: "rejected", reviewedBy: actorLabel, reviewedAt: new Date(), reviewNote: note })
+    .set({ status: "rejected", pipelineStage: "lost", lostReason: note, reviewedBy: actorLabel, reviewedAt: new Date(), reviewNote: note })
     .where(and(eq(tenantApplications.id, req.params.id), eq(tenantApplications.status, "pending")))
     .returning();
   if (!row) return res.status(404).json({ error: "Aplikasi tidak ditemukan atau sudah diproses" });
+  await addLeadActivity(row.id, "stage", `Batal${note ? ` (${note})` : ""}`, actorLabel, { to: "lost" });
   logEvent({ category: "tenant", action: "application.rejected", message: `Aplikasi tenant "${row.businessName}" ditolak`, actorType: "superadmin", actorLabel });
   res.json(row);
 });
@@ -550,6 +600,7 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
   const [application] = await db.select().from(tenantApplications).where(eq(tenantApplications.id, req.params.id));
   if (!application) return res.status(404).json({ error: "Aplikasi tidak ditemukan" });
   if (application.status !== "pending") return res.status(409).json({ error: "Aplikasi sudah diproses" });
+  if (!application.ownerEmail) return res.status(400).json({ error: "Lead ini belum punya email — isi email pemilik dulu (dipakai untuk login admin tenant)" });
 
   const slug = String(req.body?.slug ?? "").trim().toLowerCase();
   const password = String(req.body?.password ?? "");
@@ -561,7 +612,8 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
   const [existingEmail] = await db.select({ id: admins.id }).from(admins).where(eq(admins.email, application.ownerEmail));
   if (existingEmail) return res.status(409).json({ error: "Email pemilik sudah dipakai sebagai admin tenant lain" });
 
-  const { defaultTrialDays } = await getOrCreatePlatformSettings();
+  const settings = await getOrCreatePlatformSettings();
+  const { defaultTrialDays } = settings;
   const trialDays = req.body?.trialDays === undefined || req.body.trialDays === "" ? defaultTrialDays : Math.round(Number(req.body.trialDays));
   if (!Number.isFinite(trialDays) || trialDays < 1 || trialDays > 3650) return res.status(400).json({ error: "Lama trial harus 1–3650 hari" });
   const subscriptionEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
@@ -591,9 +643,10 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
 
   const actorLabel = await currentSuperadminEmail(req);
   await db.update(tenantApplications)
-    .set({ status: "converted", convertedTenantId: tenant.id, reviewedBy: actorLabel, reviewedAt: new Date() })
+    .set({ status: "converted", pipelineStage: "active", convertedTenantId: tenant.id, reviewedBy: actorLabel, reviewedAt: new Date() })
     .where(eq(tenantApplications.id, application.id));
 
+  await addLeadActivity(application.id, "stage", "Dijadikan tenant — tahap Aktif", actorLabel, { to: "active", tenantId: tenant.id });
   logEvent({
     tenantId: tenant.id,
     category: "tenant",
@@ -605,9 +658,19 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
 
   // Welcome email with a one-time "set your password" link (never the password itself).
   const [createdAdmin] = await db.select({ id: admins.id, hash: admins.passwordHash }).from(admins).where(eq(admins.email, application.ownerEmail));
-  if (createdAdmin) void deliver(application.ownerEmail, welcomeTenantMail({ ownerName: application.ownerName, businessName: application.businessName, email: application.ownerEmail, setupUrl: resetLink("tenant", createdAdmin.id, createdAdmin.hash, SETUP_TTL_MS), trialDays }), { tenantId: tenant.id, what: "selamat datang tenant" });
+  const setupUrl = createdAdmin ? resetLink("tenant", createdAdmin.id, createdAdmin.hash, SETUP_TTL_MS) : null;
+  if (createdAdmin && setupUrl) void deliver(application.ownerEmail, welcomeTenantMail({ ownerName: application.ownerName, businessName: application.businessName, email: application.ownerEmail, setupUrl, trialDays }), { tenantId: tenant.id, what: "selamat datang tenant" });
 
-  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays });
+  // Ready-to-send WhatsApp message with the login details and the trial key (the key is only known right now). The password the
+  // superadmin typed is never included; the owner sets their own through the one-time link.
+  const welcomeTemplate = resolveTemplates(settings.leadTemplates).find((t) => t.key === "welcome_login")!.text;
+  const welcome = renderTemplate(welcomeTemplate, {
+    nama: application.ownerName.trim().split(/\s+/)[0], usaha: application.businessName, masa_trial: trialDays, link_login: portalBaseUrl(),
+    email_login: application.ownerEmail, link_setup: setupUrl, key_trial: rawKioskKey, link_panduan: onboardingUrl(),
+  }).text;
+  await addLeadActivity(application.id, "system", `Tenant dibuat (login ${application.ownerEmail}, trial ${trialDays} hari, key trial dibuat). Pesan login siap dikirim.`, actorLabel);
+
+  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays, whatsappMessage: welcome, whatsappLink: whatsappFallbackLink(application.ownerWhatsapp, welcome) });
 });
 
 // --- Activity & error log -------------------------------------------------
@@ -903,6 +966,11 @@ superadminRouter.delete("/plans/:id", async (req, res) => {
   res.json({ ok: true, deleted: true });
 });
 
+/** Encrypted secrets (gateway keys, WhatsApp token…) are write-only: even their ciphertext must not reach the browser. */
+function withoutSecrets<T extends Record<string, unknown>>(row: T): Partial<T> {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !/Enc$/.test(key))) as Partial<T>;
+}
+
 async function getOrCreatePlatformSettings() {
   const [existing] = await db.select().from(platformSettings).limit(1);
   if (existing) return existing;
@@ -912,7 +980,7 @@ async function getOrCreatePlatformSettings() {
 
 // GET /api/superadmin/settings — platform-wide defaults (trial length, renewal links)
 superadminRouter.get("/settings", async (_req, res) => {
-  res.json(await getOrCreatePlatformSettings());
+  res.json(withoutSecrets(await getOrCreatePlatformSettings()));
 });
 
 // PATCH /api/superadmin/settings
@@ -995,6 +1063,10 @@ superadminRouter.get("/withdrawals", async (req, res) => {
       processedBy: withdrawals.processedBy,
       requestedAt: withdrawals.requestedAt,
       processedAt: withdrawals.processedAt,
+      requiresApproval: withdrawals.requiresApproval,
+      approvedBy: withdrawals.approvedBy,
+      approvedAt: withdrawals.approvedAt,
+      holdUntil: withdrawals.holdUntil,
     })
     .from(withdrawals)
     .innerJoin(tenants, eq(tenants.id, withdrawals.tenantId))
@@ -1025,6 +1097,13 @@ superadminRouter.patch("/withdrawals/:id", async (req, res) => {
   if (next === "processing" && current.status !== "pending") return res.status(409).json({ error: "Permintaan ini sudah diproses." });
 
   const email = await currentSuperadminEmail(req);
+  if (next !== "rejected") {
+    if (current.holdUntil && current.holdUntil.getTime() > Date.now()) {
+      return res.status(409).json({ error: `Rekening tujuan ini baru pertama kali dipakai, ditahan sampai ${current.holdUntil.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WIB. Hubungi tenant lewat kontak yang sudah terdaftar untuk memastikan rekening ini benar.`, code: "account_hold" });
+    }
+    if (current.requiresApproval && !current.approvedBy) return res.status(409).json({ error: "Nominal ini butuh persetujuan orang kedua sebelum diproses.", code: "needs_approval" });
+    if (current.requiresApproval && next === "paid" && current.approvedBy === email) return res.status(403).json({ error: "Yang menyetujui dan yang membayar harus dua orang berbeda.", code: "same_person" });
+  }
   const patch: Partial<typeof withdrawals.$inferInsert> = { status: next, processedBy: email, processedAt: next === "processing" ? null : new Date() };
   if (adminNote !== undefined) patch.adminNote = adminNote;
   if (transferReference !== undefined) patch.transferReference = transferReference;
@@ -1039,6 +1118,28 @@ superadminRouter.patch("/withdrawals/:id", async (req, res) => {
     actorType: "superadmin",
     actorLabel: email,
     metadata: { withdrawalId: current.id, status: next },
+  });
+  res.json(row);
+});
+
+// POST /api/superadmin/withdrawals/:id/approve — the second pair of eyes for a large request
+superadminRouter.post("/withdrawals/:id/approve", async (req, res) => {
+  const [current] = await db.select().from(withdrawals).where(eq(withdrawals.id, String(req.params.id)));
+  if (!current) return res.status(404).json({ error: "Permintaan tidak ditemukan" });
+  if (!current.requiresApproval) return res.status(409).json({ error: "Permintaan ini tidak butuh persetujuan." });
+  if (current.status === "paid" || current.status === "rejected") return res.status(409).json({ error: "Permintaan ini sudah final." });
+  if (current.approvedBy) return res.status(409).json({ error: `Sudah disetujui oleh ${current.approvedBy}.` });
+  const email = await currentSuperadminEmail(req);
+  if (current.processedBy && current.processedBy === email) return res.status(403).json({ error: "Orang yang memproses tidak boleh menyetujui permintaannya sendiri.", code: "same_person" });
+  const [row] = await db.update(withdrawals).set({ approvedBy: email, approvedAt: new Date() }).where(eq(withdrawals.id, current.id)).returning();
+  logEvent({
+    tenantId: current.tenantId,
+    category: "billing",
+    action: "withdrawal.approved",
+    message: `Penarikan QRIS Rp ${Number(current.amount).toLocaleString("id-ID")} disetujui.`,
+    actorType: "superadmin",
+    actorLabel: email,
+    metadata: { withdrawalId: current.id },
   });
   res.json(row);
 });

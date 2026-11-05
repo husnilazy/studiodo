@@ -13,8 +13,14 @@ import { screenLayoutsRouter } from "./routes/screenLayouts.js";
 import { vouchersRouter } from "./routes/vouchers.js";
 import { googleRouter } from "./routes/google.js";
 import { authRouter } from "./routes/auth.js";
+import { authAltRouter } from "./routes/authAlt.js";
 import { kioskKeysRouter } from "./routes/kioskKeys.js";
 import { superadminRouter } from "./routes/superadmin.js";
+import { publicLeadsRouter } from "./routes/publicLeads.js";
+import { supportTenantRouter } from "./routes/supportAlerts.js";
+import { runLeadReminders } from "./lib/leadReminders.js";
+import { runTenantWaReminders } from "./lib/tenantWhatsapp.js";
+import { runDailyDigest } from "./lib/digest.js";
 import { withdrawalsRouter } from "./routes/withdrawals.js";
 import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
@@ -92,6 +98,7 @@ app.use("/api/config", screenLayoutsRouter);
 app.use("/api/vouchers", vouchersRouter);
 app.use("/api/google", googleRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/auth", authAltRouter);
 app.use("/api/kiosk-keys", kioskKeysRouter);
 app.use("/api/superadmin", superadminRouter);
 app.use("/api/withdrawals", withdrawalsRouter);
@@ -104,9 +111,11 @@ app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
 app.use("/api/public", publicInvoiceRouter);
+app.use("/api/public", publicLeadsRouter);
 app.use("/api/public", publicAssetsRouter);
 app.use("/api/creator", creatorPortalRouter);
 app.use("/api/portal/notifications", notificationsTenantRouter);
+app.use("/api/portal/support", supportTenantRouter);
 app.use("/api/portal/directory", directoryTenantRouter);
 app.use("/api/portal/marketplace", marketplaceTenantRouter);
 app.use("/api/crm", crmRouter);
@@ -198,9 +207,31 @@ function startNotificationRules() {
   setInterval(run, 30 * 60 * 1000);
 }
 
-app.listen(PORT, () => {
-  console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
-  checkDatabase();
-  startKeepDbWarm();
-  startNotificationRules();
-});
+// Follow-up reminders: tasks that came due since the last run raise one entry in the activity feed. Idempotent.
+function startLeadReminders() {
+  const run = () => runLeadReminders().catch((error: any) => console.error("[STUDIODO] pengingat follow-up gagal:", error?.message ?? error));
+  setTimeout(run, 90_000);
+  setInterval(run, 15 * 60 * 1000);
+  // Automatic WhatsApp renewal reminders to tenants (off until the owner switches it on; idempotent, only 08:00–20:00 WIB).
+  const runTenantWa = () => runTenantWaReminders().catch((error: any) => console.error("[STUDIODO] pengingat WhatsApp tenant gagal:", error?.message ?? error));
+  setTimeout(runTenantWa, 150_000);
+  setInterval(runTenantWa, 30 * 60 * 1000);
+  // Morning summary to the owner's WhatsApp (off until switched on; at most once per WIB day).
+  const runDigest = () => runDailyDigest().catch((error: any) => console.error("[STUDIODO] ringkasan pagi gagal:", error?.message ?? error));
+  setTimeout(runDigest, 180_000);
+  setInterval(runDigest, 10 * 60 * 1000);
+}
+
+// On Vercel the platform calls the exported app per request (api/index.js): there is no long-lived process to listen on a
+// port or to run the keep-alive / notification timers. The PC-hosted kiosk API keeps running those.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[STUDIODO] server jalan di http://localhost:${PORT}`);
+    checkDatabase();
+    startKeepDbWarm();
+    startNotificationRules();
+    startLeadReminders();
+  });
+}
+
+export default app;

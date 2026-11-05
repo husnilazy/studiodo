@@ -1,6 +1,7 @@
 import AdminKeyboard from "@/components/AdminKeyboard";
-import { openAdminFromKiosk } from "@/lib/adminEntry";
-import { useCallback, useEffect, useState } from "react";
+import { printLayoutFromConfig } from "@/lib/printLayout";
+import { openAdminFromKiosk, OPERATOR_REQUEST_EVENT } from "@/lib/adminEntry";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useBoothConfig, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { api } from "@/lib/api";
 import { getApiBaseUrl, isKioskPaired } from "@/lib/apiConfig";
@@ -25,29 +26,116 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
  * this runs in public-facing spaces, same "secret combo" model as the existing
  * admin shortcut (Ctrl+Shift+A).
  */
+function PinPad({ pin, onSuccess, onCancel }: { pin: string; onSuccess: () => void; onCancel: () => void }) {
+  const [value, setValueState] = useState("");
+  const valueRef = useRef("");
+  const setValue = (next: string | ((current: string) => string)) => {
+    valueRef.current = typeof next === "function" ? next(valueRef.current) : next;
+    setValueState(valueRef.current);
+  };
+  const [failures, setFailures] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const [wrong, setWrong] = useState(false);
+  const locked = lockedUntil > now;
+
+  useEffect(() => {
+    if (!locked) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [locked]);
+
+  const press = (digit: string) => {
+    if (locked) return;
+    setWrong(false);
+    const next = (valueRef.current + digit).slice(0, 8);
+    setValue(next);
+    if (next.length === pin.length) {
+      if (next === pin) { onSuccess(); return; }
+      const count = failures + 1;
+      setFailures(count);
+      setWrong(true);
+      setValue("");
+      if (count % 5 === 0) { setLockedUntil(Date.now() + 30000); setNow(Date.now()); }
+    }
+  };
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (/^[0-9]$/.test(event.key)) press(event.key);
+      else if (event.key === "Backspace") setValue((v) => v.slice(0, -1));
+      else if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
+  return (
+    <div className="force-dark fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-label="PIN operator">
+      <div className="w-full max-w-xs rounded-3xl border border-white/10 bg-[#14141c] p-6 text-center text-white shadow-2xl">
+        <p className="eyebrow">OPERATOR</p>
+        <h2 className="font-display text-xl font-bold">Masukkan PIN</h2>
+        <div className="my-5 flex justify-center gap-3" aria-live="polite">
+          {Array.from({ length: pin.length }).map((_, index) => <span key={index} className={`h-3.5 w-3.5 rounded-full border ${index < value.length ? "border-accent bg-accent" : "border-white/30"}`} />)}
+        </div>
+        <p className={`mb-3 h-4 text-xs ${locked || wrong ? "text-red-400" : "text-transparent"}`}>{locked ? `Terlalu banyak salah. Coba lagi ${Math.ceil((lockedUntil - now) / 1000)} dtk` : "PIN salah"}</p>
+        <div className="grid grid-cols-3 gap-2">
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => <button key={digit} type="button" onClick={() => press(digit)} disabled={locked} className="rounded-2xl bg-white/[0.07] py-4 text-xl font-semibold transition active:scale-95 disabled:opacity-40">{digit}</button>)}
+          <button type="button" onClick={onCancel} className="rounded-2xl py-4 text-sm text-white/60">Batal</button>
+          <button type="button" onClick={() => press("0")} disabled={locked} className="rounded-2xl bg-white/[0.07] py-4 text-xl font-semibold transition active:scale-95 disabled:opacity-40">0</button>
+          <button type="button" onClick={() => setValue((v) => v.slice(0, -1))} className="rounded-2xl py-4 text-sm text-white/60" aria-label="Hapus angka terakhir">Hapus</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OperatorConsole() {
   const [open, setOpen] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("diagnostik");
+
+  // Every way of opening the console (hidden corner taps, Ctrl+Shift+O) goes through here so the crew PIN is always asked.
+  const requestOpen = useCallback(() => {
+    const pin = useBoothConfig.getState().config.operatorPin;
+    if (pin && /^[0-9]{4,8}$/.test(pin)) setPinOpen(true);
+    else setOpen(true);
+  }, []);
+  const openRef = useRef(false);
+  openRef.current = open;
+  const toggle = useCallback(() => {
+    setPinOpen(false);
+    if (openRef.current) setOpen(false);
+    else requestOpen();
+  }, [requestOpen]);
+
+  useEffect(() => {
+    window.addEventListener(OPERATOR_REQUEST_EVENT, requestOpen);
+    return () => window.removeEventListener(OPERATOR_REQUEST_EVENT, requestOpen);
+  }, [requestOpen]);
 
   useEffect(() => {
     if (!window.studiodo?.onOperatorConsoleToggle) return;
-    return window.studiodo.onOperatorConsoleToggle(() => setOpen((o) => !o));
-  }, []);
+    return window.studiodo.onOperatorConsoleToggle(toggle);
+  }, [toggle]);
 
   // Dev/browser fallback (no Electron IPC available under `npm run dev:client` alone).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "o") {
         event.preventDefault();
-        setOpen((o) => !o);
+        toggle();
       } else if (event.key === "Escape") {
         setOpen(false);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [toggle]);
 
+  if (pinOpen) {
+    return <PinPad pin={useBoothConfig.getState().config.operatorPin} onCancel={() => setPinOpen(false)} onSuccess={() => { setPinOpen(false); setOpen(true); }} />;
+  }
   if (!open) return null;
 
   return (
@@ -296,7 +384,7 @@ function PrinterPanel() {
     ctx.fillText("TEST PRINT", canvas.width / 2, canvas.height / 2 - 30);
     ctx.font = "32px sans-serif";
     ctx.fillText("Operator Console", canvas.width / 2, canvas.height / 2 + 40);
-    const result = await window.studiodo.printImage({ dataUrl: canvas.toDataURL("image/jpeg", 0.92), printerName: config.printerName, copies: 1 });
+    const result = await window.studiodo.printImage({ dataUrl: canvas.toDataURL("image/jpeg", 0.92), printerName: config.printerName, copies: 1, ...printLayoutFromConfig(config) });
     if (result.ok) {
       setTestStatus("ok");
     } else {

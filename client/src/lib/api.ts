@@ -37,6 +37,11 @@ export interface QrisBalance {
   available: number;
   paymentCount: number;
   rules: { feePercent: number; minAmount: number; flatFee: number };
+  /** Received but still in the hold period (not withdrawable yet). */
+  onHold?: number;
+  adjustments?: number;
+  policy?: { enabled: boolean; mode: "anytime" | "window"; minAmount: number; maxAmount: number; dailyMaxAmount: number; dailyMaxCount: number; holdDays: number; cooldownHours: number; flatFee: number | null };
+  window?: { open: boolean; label: string; nextOpenAt: string | null };
 }
 export interface WithdrawalRow {
   id: string;
@@ -52,6 +57,7 @@ export interface WithdrawalRow {
   transferReference: string | null;
   requestedAt: string;
   processedAt: string | null;
+  holdUntil?: string | null;
 }
 export interface WithdrawalOverview {
   balance: QrisBalance;
@@ -87,7 +93,94 @@ export function kioskAuthHeaders(): Record<string, string> {
   return { "x-kiosk-key": key, "x-device-id": getDeviceId(), ...(token ? { "x-device-token": token } : {}) };
 }
 
+// Big images/videos in admin saves (frame art, package photos, branding, screen-builder assets) travel as base64 data: URIs. A
+// serverless host rejects request bodies over ~4.5 MB, so those are first PUT straight to object storage with a short-lived
+// presigned URL and the save then carries the final https URL (the server already passes real URLs through unchanged).
+// Any failure — storage is not R2, bucket CORS not set up yet, offline — leaves the data: URI in place: the old path.
+const OFFLOAD_MIN_CHARS = 400_000;
+const OFFLOAD_PATHS = /^\/(packages|frames|config)(\/|$|\?)/;
+const DATA_URI = /^data:((?:image|video)\/[\w.+-]+);base64,/;
+
+function uploadFolderFor(path: string): string {
+  if (path.startsWith("/packages")) return "packages";
+  if (path.startsWith("/frames")) return "templates";
+  if (path.startsWith("/config/screen-layout")) return "layouts";
+  return "branding";
+}
+
+type PresignedUpload = { direct: boolean; uploadUrl?: string; url?: string; headers?: Record<string, string> };
+
+async function putToStorage(blob: Blob, folder: string): Promise<string | null> {
+  const contentType = blob.type === "image/jpg" ? "image/jpeg" : blob.type;
+  const meta = await request<PresignedUpload>("/config/upload-url", { method: "POST", body: JSON.stringify({ folder, contentType, size: blob.size }) });
+  if (!meta?.direct || !meta.uploadUrl || !meta.url) return null;
+  const put = await fetch(meta.uploadUrl, { method: "PUT", headers: meta.headers, body: blob });
+  return put.ok ? meta.url : null;
+}
+
+async function offloadDataUris(path: string, body: string): Promise<string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  const folder = uploadFolderFor(path);
+  const done = new Map<string, string | null>();
+  const walk = async (node: unknown): Promise<unknown> => {
+    if (typeof node === "string") {
+      if (node.length < OFFLOAD_MIN_CHARS || !DATA_URI.test(node)) return node;
+      if (!done.has(node)) {
+        try {
+          done.set(node, await putToStorage(await (await fetch(node)).blob(), folder));
+        } catch {
+          done.set(node, null);
+        }
+      }
+      return done.get(node) ?? node;
+    }
+    if (Array.isArray(node)) return Promise.all(node.map(walk));
+    if (node && typeof node === "object") {
+      const entries = await Promise.all(Object.entries(node).map(async ([k, v]) => [k, await walk(v)] as const));
+      return Object.fromEntries(entries);
+    }
+    return node;
+  };
+  return JSON.stringify(await walk(parsed));
+}
+
+// Admin list screens (packages, frames, kiosk keys, vouchers, withdrawals) re-fetched the same data on every tab switch,
+// and each request is a full round trip to the cloud server. Reads are now reused for a few seconds and identical requests
+// that are already in flight are shared; ANY write clears the cache, so a saved change is never hidden behind stale data.
+const READ_CACHE_TTL_MS = 15_000;
+const CACHEABLE_READS = /^\/(packages|frames|kiosk-keys|vouchers|withdrawals)(\/|\?|$)/;
+const readCache = new Map<string, { at: number; value: unknown }>();
+const readInFlight = new Map<string, Promise<unknown>>();
+
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    readCache.clear();
+    readInFlight.clear();
+  } else if (adminToken && !options?.body && CACHEABLE_READS.test(path)) {
+    const key = `${adminToken.slice(-12)}|${path}`;
+    const hit = readCache.get(key);
+    if (hit && Date.now() - hit.at < READ_CACHE_TTL_MS) return hit.value as T | undefined;
+    const pending = readInFlight.get(key);
+    if (pending) return pending as Promise<T | undefined>;
+    const promise = requestUncached<T>(path, options)
+      .then((value) => { readCache.set(key, { at: Date.now(), value }); return value; })
+      .finally(() => readInFlight.delete(key));
+    readInFlight.set(key, promise);
+    return promise;
+  }
+  return requestUncached<T>(path, options);
+}
+
+async function requestUncached<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  if (adminToken && typeof options?.body === "string" && options.body.length >= OFFLOAD_MIN_CHARS && OFFLOAD_PATHS.test(path)) {
+    options = { ...options, body: await offloadDataUris(path, options.body) };
+  }
   const kioskKey = getKioskKey();
   let res: Response;
   const timeoutController = new AbortController();
@@ -204,6 +297,22 @@ function crmQs(params: CrmQuery) {
   return qs.toString();
 }
 
+// Upload responses can carry local-storage paths ("/storage/..."). Those resolve against the kiosk's own origin and show
+// blank previews on the result screen, so anchor them to the API server's origin (no-op for absolute URLs / same-origin APIs).
+function absoluteAssetUrl<T>(value: T): T {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return value;
+  const base = getApiBaseUrl();
+  if (!/^https?:\/\//i.test(base)) return value;
+  try { return `${new URL(base).origin}${value}` as unknown as T; } catch { return value; }
+}
+function absolutizeMedia<T extends Record<string, any> | null | undefined>(row: T): T {
+  if (!row || typeof row !== "object") return row;
+  const out: Record<string, any> = { ...row };
+  for (const key of ["stripUrl", "gifUrl", "videoUrl", "stopMotionUrl"]) if (key in out) out[key] = absoluteAssetUrl(out[key]);
+  for (const key of ["mediaUrls", "slotClipUrls"]) if (Array.isArray(out[key])) out[key] = out[key].map(absoluteAssetUrl);
+  return out as T;
+}
+
 export const api = {
   getCrmCustomers: (params: CrmQuery = {}) =>
     request<{ items: CrmCustomer[]; total: number; limit: number; offset: number; summary: { customers: number; withWhatsapp: number; consent: number; returning: number; new30d: number; lifetimeSpend: number }; tags: string[] }>(`/crm/customers?${crmQs(params)}`),
@@ -219,6 +328,11 @@ export const api = {
   upgradeKioskBinding: (body: { newDeviceId?: string }) =>
     request<{ deviceToken: string; deviceId: string | null }>("/kiosk-keys/upgrade-binding", { method: "POST", body: JSON.stringify(body) }),
   loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  // Passwordless sign-in (Google / email link) — see server/lib/loginHandoff.ts
+  getLoginProviders: () => request<{ google: boolean; googleButton: boolean; googleClientId: string | null; magic: boolean }>("/auth/providers"),
+  startGoogleHandoff: () => request<{ id: string; poll: string; url: string; expiresInSeconds: number }>("/auth/handoff/google", { method: "POST", body: "{}" }),
+  startMagicHandoff: (email: string) => request<{ id: string; poll: string; expiresInSeconds: number }>("/auth/handoff/magic", { method: "POST", body: JSON.stringify({ email }) }),
+  pollHandoff: (id: string, poll: string) => request<{ status: "pending" | "verified" | "approved" | "failed" | "expired" | "invalid"; token?: string; error?: string }>(`/auth/handoff/${id}/poll`, { method: "POST", body: JSON.stringify({ poll }) }),
   logoutAdmin: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   getMe: () => request<{
     tenantId: string;
@@ -305,6 +419,16 @@ export const api = {
   },
   // Admin: send a branding video (.mp4/.mov) to the server, which converts it; returns its hosted URL.
   uploadBrandingVideo: async (file: File) => {
+    // An .mp4 up to 40 MB goes straight to storage (no size limit from the API host). The server's re-encode/shrink step is skipped
+    // for it; .mov and bigger files still go through the server, which converts them.
+    if (file.type === "video/mp4" && file.size <= 40 * 1024 * 1024) {
+      try {
+        const url = await putToStorage(file, "branding");
+        if (url) return { url, sizeBytes: file.size, converted: false };
+      } catch {
+        // fall through to the server upload
+      }
+    }
     const form = new FormData();
     form.append("file", file, file.name);
     const res = await fetch(`${getApiBaseUrl()}/config/branding-video`, { method: "POST", body: form, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined });
@@ -321,7 +445,7 @@ export const api = {
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Media upload gagal: ${res.status}`);
-    return res.json();
+    return absolutizeMedia(await res.json());
   },
   // The short clip captured at one specific photo shot (slotIndex), as
   // opposed to uploadMedia above which is the combined all-slots-at-once clip.
@@ -333,7 +457,7 @@ export const api = {
     const kioskKey = getKioskKey();
     const res = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/slot-media`, { method: "POST", body: form, headers: kioskKey ? kioskAuthHeaders() : undefined });
     if (!res.ok) throw new Error(`Slot media upload gagal: ${res.status}`);
-    return res.json();
+    return absolutizeMedia(await res.json());
   },
   uploadStrip: async (sessionId: string, blob: Blob) => {
     const form = new FormData();
@@ -356,8 +480,12 @@ export const api = {
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
   getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
   markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
+  // Help chat with the STUDIODO team ("Bantuan")
+  getSupport: () => request<SupportChat>("/portal/support"),
+  sendSupport: (body: string) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body }) }),
+  readSupport: () => request<{ unread: number }>("/portal/support/read", { method: "POST" }),
   startQris: (sessionId: string) =>
-    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
+    request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string; direct?: boolean }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
   startAdditionalPrint: (sessionId: string, quantity: number) => request<{ demo: boolean; qrString: string; amount: number; expiresInSeconds?: number }>("/payment/additional-print", { method: "POST", body: JSON.stringify({ sessionId, quantity }) }),
   redeemAdditionalPrintVoucher: (sessionId: string, code: string, quantity: number) =>
@@ -365,9 +493,10 @@ export const api = {
   getPrintingConfig: () => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing"),
   updatePrintingConfig: (body: { enabled: boolean; label: string; price: number; max: number }) => request<{ enabled: boolean; label: string; price: number; max: number }>("/config/printing", { method: "PATCH", body: JSON.stringify(body) }),
   redeemVoucher: (sessionId: string, code: string) =>
-    request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
-  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production" }>("/config/payment"),
-  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production" }) =>
+    request<{ valid: boolean; amount: number; discount: number; cash?: boolean; invoiceNumber?: string; frame?: { id: string; name: string; imageUrl: string; slots: any[]; canvasWidth: number; canvasHeight: number; orientation: string; outputPreset?: string } | null }>("/payment/voucher", { method: "POST", body: JSON.stringify({ sessionId, code }) }),
+  getPaymentConfig: () => request<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; hasDokuSnapKey?: boolean }>("/config/payment"),
+  testPaymentConnection: (provider: "xendit" | "doku") => request<{ ok: boolean; message: string }>("/config/payment/test", { method: "POST", body: JSON.stringify({ provider }) }),
+  updatePaymentConfig: (body: { secretKey?: string; webhookToken?: string; paymentProvider?: "xendit" | "doku"; dokuClientId?: string; dokuSecretKey?: string; dokuEnvironment?: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; dokuSnapPrivateKey?: string }) =>
     request<{ ok: boolean }>("/config/payment", { method: "PATCH", body: JSON.stringify(body) }),
   updateCashPaymentConfig: (enabled: boolean) => request<{ enabled: boolean }>("/config/cash-payment", { method: "PATCH", body: JSON.stringify({ enabled }) }),
   createCashVoucher: (body: { amount: number; customerName?: string }) => request<any>("/vouchers/cash", { method: "POST", body: JSON.stringify(body) }),
@@ -418,6 +547,8 @@ export const api = {
   deletePackage: (id: string) => request<{ ok: boolean; deleted: boolean; softDeleted: boolean; id: string }>(`/packages/${id}`, { method: "DELETE" }),
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
+
+export interface SupportChat { status: "open" | "resolved"; unread: number; messages: { id: string; sender: "tenant" | "admin"; body: string; createdAt: string }[] }
 
 export interface AdminNotification {
   id: string;

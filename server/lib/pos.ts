@@ -2,11 +2,15 @@ import type { PosOrderItem } from "../db/schema.js";
 
 // Pure POS rules (no I/O) so they can be unit-tested: pricing a cart, totals, cash-drawer maths, queue numbering and refunds.
 
+/** Templates in this category are made for one customer: hidden from the kiosk picker, sold at the cashier, delivered by voucher. */
+export const CUSTOM_FRAME_CATEGORY = "__custom";
+
 export type CartLine = { type: PosOrderItem["type"]; refId?: string | null; name?: string; qty?: number; unitPrice?: number };
 export type Catalog = {
   packages: Map<string, { name: string; price: number }>;
   prints: Map<string, { name: string; price: number }>; // keyed `${packageId}:${printId}` (extra-print ids are only unique within a package)
   products: Map<string, { name: string; price: number }>;
+  frames: Map<string, { name: string; price: number }>; // custom frames sold at the cashier (templates in category __custom)
 };
 
 export class PosError extends Error {
@@ -21,6 +25,7 @@ export function priceCart(lines: CartLine[], catalog: Catalog): PosOrderItem[] {
   if (lines.length > 50) throw new PosError("Terlalu banyak item dalam satu transaksi");
   return lines.map((line) => {
     const qty = Math.floor(Number(line.qty ?? 1));
+    if (line.type === "frame" && qty !== 1) throw new PosError("Satu frame custom per transaksi");
     if (!Number.isFinite(qty) || qty < 1 || qty > 99) throw new PosError("Jumlah item harus antara 1 dan 99");
     if (line.type === "custom") {
       const unitPrice = money(Number(line.unitPrice));
@@ -29,7 +34,7 @@ export function priceCart(lines: CartLine[], catalog: Catalog): PosOrderItem[] {
       if (!Number.isFinite(unitPrice) || unitPrice <= 0 || unitPrice > 100_000_000) throw new PosError(`Harga "${name}" tidak valid`);
       return { type: "custom", refId: null, name, qty, unitPrice };
     }
-    const source = line.type === "package" ? catalog.packages : line.type === "print" ? catalog.prints : line.type === "product" ? catalog.products : null;
+    const source = line.type === "package" ? catalog.packages : line.type === "print" ? catalog.prints : line.type === "product" ? catalog.products : line.type === "frame" ? catalog.frames : null;
     if (!source) throw new PosError("Jenis item tidak dikenal");
     const found = line.refId ? source.get(String(line.refId)) : undefined;
     if (!found) throw new PosError(`Item "${line.name ?? line.refId ?? "?"}" sudah tidak tersedia`);
@@ -111,3 +116,12 @@ export function refundAmount(order: { items: PosOrderItem[]; subtotal: number; t
 }
 
 export const refundStatus = (total: number, refunded: number) => (refunded <= 0 ? "paid" : refunded >= total ? "refunded" : "partial_refund");
+
+/** A custom-frame sale: exactly one frame line, which must come with a package (the voucher pays that package at the booth). */
+export function customFrameOf(items: PosOrderItem[]): { frameId: string } | null {
+  const frames = items.filter((i) => i.type === "frame");
+  if (frames.length === 0) return null;
+  if (frames.length > 1) throw new PosError("Satu transaksi hanya boleh berisi satu frame custom");
+  if (!items.some((i) => i.type === "package")) throw new PosError("Frame custom harus dibeli bersama paket foto (voucher dipakai untuk sesi paket itu)");
+  return { frameId: String(frames[0].refId) };
+}

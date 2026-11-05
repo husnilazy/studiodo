@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { superadminApi, type SiteContentField, type SiteContentSection } from "@/lib/superadminApi";
 import { getApiBaseUrl } from "@/lib/apiConfig";
+import Select from "@/components/Select";
 
 // Superadmin editor for the marketing website's content. Fully generic: it renders
 // whatever field schema the server sends (server/lib/siteContent.ts), so adding a
@@ -119,10 +120,10 @@ function FieldsEditor({ fields, values, onChange }: { fields: SiteContentField[]
           return (
             <label key={f.key} className="text-sm text-fg/60">
               {f.label}
-              <select className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)}>
+              <Select className={inputClass} value={value} onChange={(e) => set(f.key, e.target.value)}>
                 <option value="">— tanpa ikon —</option>
                 {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              </Select>
               {f.hint && <span className="mt-1 block text-xs text-fg/35">{f.hint}</span>}
             </label>
           );

@@ -4,6 +4,7 @@ import { api, getAdminToken } from "./api";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
 import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
+import type { CaptureLayoutId, IdleLayoutId, KioskStyleId, PackageLayoutId } from "./kioskStyles";
 
 export type CaptureVibe = "Electric" | "Cotton Candy" | "Ocean" | "Sunset" | "Mono";
 export type CameraMode = "webcam" | "tether";
@@ -42,6 +43,9 @@ export interface BoothConfig {
   socialTiktok: string;
   socialFacebook: string;
   websiteUrl: string;
+  socialYoutube: string;
+  /** Shown on the customer's result page, e.g. "#studiodo". */
+  hashtag: string;
   address: string;
   logoScale: number;
   accentColor: string;
@@ -64,6 +68,12 @@ export interface BoothConfig {
   eventMaxPhotosPerSession: number;
   eventHasGif: boolean;
   eventHasVideo: boolean;
+  /** Whole-look style (Default / Minimalis / Sinematik / Ceria), see lib/kioskStyles.ts. */
+  kioskStyle: KioskStyleId;
+  /** "auto" = the layout that belongs to the style. */
+  idleLayout: IdleLayoutId;
+  packageLayout: PackageLayoutId;
+  captureLayout: CaptureLayoutId;
   buttonStyle: ButtonStyle;
   buttonSize: ButtonSize;
   /** Whole-kiosk text/element scale in percent (90–130); 100 = the automatic screen-based size. */
@@ -108,6 +118,8 @@ export interface BoothConfig {
     advancedPhotoEditor: boolean;
     stickers: boolean;
     customerForm: boolean;
+    /** Pop-up asked before the result screen: may the photos be posted on the booth's social media? Off by default. */
+    socialConsentPopup: boolean;
     shareQr: boolean;
     download: boolean;
     print: boolean;
@@ -123,6 +135,8 @@ export interface BoothConfig {
   sessionTimerMinutes: number;
   cameraMode: CameraMode;
   tetherBridgeUrl: string;
+  /** Camera settings saved from Admin > Kamera ({ iso: "400", shutterspeed: "1/125", ... }), pushed back to the camera when a session's live view starts. Device-local: depends on this PC's camera. */
+  cameraPreset: Record<string, string>;
   qrisEnabled: boolean;
   stripLayout: StripLayout;
   stripTemplate: StripVisualTemplate;
@@ -135,6 +149,19 @@ export interface BoothConfig {
   autoPrintEnabled: boolean;
   printCopies: number;
   printerName: string | null;
+  /** Physical sheet size sent to the printer driver. The strip is always rendered for it, so it must match the paper loaded. */
+  printPaperSize: "4r" | "5r" | "6r" | "a4";
+  /** cover = fill the sheet (edges may be cropped); contain = whole image visible with white edges. */
+  printFit: "cover" | "contain";
+  /** White margin around the print, in mm (0 = borderless). */
+  printMarginMm: number;
+  /** Print the strip twice side by side on one sheet (2x6 strips on 4R paper, cut in half). */
+  printTwoUp: boolean;
+  /** Crew PIN (digits) asked before the on-site operator console opens from the kiosk. Empty = no PIN. Device-local. */
+  operatorPin: string;
+  /** Which screen corner the hidden crew taps are counted in. */
+  operatorEntryCorner: "bl" | "br" | "tl" | "tr";
+  operatorEntryTaps: 3 | 5;
   offlineModeEnabled: boolean;
   kioskFlow: KioskFlowConfig;
 }
@@ -148,6 +175,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   socialTiktok: "",
   socialFacebook: "",
   websiteUrl: "",
+  socialYoutube: "",
+  hashtag: "",
   address: "",
   logoScale: 100,
   accentColor: THEME_PRESETS.light.accentColor,
@@ -170,6 +199,10 @@ const DEFAULT_CONFIG: BoothConfig = {
   eventMaxPhotosPerSession: 0,
   eventHasGif: false,
   eventHasVideo: true,
+  kioskStyle: "default",
+  idleLayout: "auto",
+  packageLayout: "auto",
+  captureLayout: "auto",
   buttonStyle: "rounded",
   buttonSize: "medium",
   uiScale: 100,
@@ -181,19 +214,19 @@ const DEFAULT_CONFIG: BoothConfig = {
   backgroundGradientEnd: THEME_PRESETS.light.backgroundGradientEnd,
   animationsEnabled: true,
   keyboardScale: 100,
-  promoText: "Promo hari ini: cetak 2x, gratis 1x!",
-  idleStartText: "Sentuh layar untuk mulai",
+  promoText: "",
+  idleStartText: "Sentuh untuk mulai",
   idleHeadline: "STUDIODO",
-  idleSubheadline: "Abadikan momen, bagikan senyum.",
+  idleSubheadline: "",
   idleShowHeadline: true,
   idleShowSubheadline: true,
   packageHeadline: "Pilih Paket",
   orientationHeadline: "Tampilan Kamera",
   paymentHeadline: "Pembayaran",
-  captureHeadline: "Siap untuk momenmu?",
-  previewHeadline: "Momenmu, siap diedit.",
+  captureHeadline: "Sesi Foto",
+  previewHeadline: "Edit Foto",
   frameHeadline: "Pilih Frame",
-  resultHeadline: "Hasil fotomu sudah siap.",
+  resultHeadline: "Hasil Foto",
   idleCoverUrl: null,
   idleCoverType: "image",
   idleLogoVideoUrl: null,
@@ -221,6 +254,7 @@ const DEFAULT_CONFIG: BoothConfig = {
     advancedPhotoEditor: true,
     stickers: true,
     customerForm: true,
+    socialConsentPopup: false,
     shareQr: true,
     download: true,
     print: true,
@@ -233,6 +267,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   sessionTimerMinutes: 5,
   cameraMode: "webcam",
   tetherBridgeUrl: "http://localhost:5510",
+  cameraPreset: {},
   qrisEnabled: true,
   stripLayout: "classic-vertical",
   stripTemplate: "solid",
@@ -243,6 +278,13 @@ const DEFAULT_CONFIG: BoothConfig = {
   autoPrintEnabled: true,
   printCopies: 1,
   printerName: null,
+  printPaperSize: "4r",
+  printFit: "cover",
+  printMarginMm: 0,
+  printTwoUp: false,
+  operatorPin: "",
+  operatorEntryCorner: "bl",
+  operatorEntryTaps: 5,
   offlineModeEnabled: false,
   kioskFlow: DEFAULT_KIOSK_FLOW,
 };
@@ -268,7 +310,24 @@ function upgradeLegacyTheme(config: Partial<BoothConfig> | undefined): Partial<B
   return next;
 }
 
+// Wordy default copy from earlier versions. A tenant who never edited it gets the short, informative text instead;
+// anything they wrote themselves is untouched.
+const OLD_COPY: Partial<Record<keyof BoothConfig, string[]>> = {
+  idleSubheadline: ["Abadikan momen, bagikan senyum."],
+  captureHeadline: ["Siap untuk momenmu?"],
+  previewHeadline: ["Momenmu, siap diedit.", "Percantik fotomu"],
+  resultHeadline: ["Hasil fotomu sudah siap.", "Cantik! Hasilmu sudah jadi."],
+  promoText: ["Promo hari ini: cetak 2x, gratis 1x!"],
+  idleStartText: ["Sentuh layar untuk mulai"],
+};
+
 function mergeConfig(config?: Partial<BoothConfig>): BoothConfig {
+  if (config) {
+    config = { ...config };
+    for (const [key, olds] of Object.entries(OLD_COPY) as [keyof BoothConfig, string[]][]) {
+      if (olds.includes(String(config[key] ?? ""))) (config as Record<string, unknown>)[key] = DEFAULT_CONFIG[key];
+    }
+  }
   const tetherBridgeUrl = config?.tetherBridgeUrl?.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1):5513\/?$/, "$1$2:5510") ?? DEFAULT_CONFIG.tetherBridgeUrl;
   return {
     ...DEFAULT_CONFIG,
@@ -313,9 +372,9 @@ export const useBoothConfig = create<BoothConfigStore>()(
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
-const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "printerName", "offlineModeEnabled", "kioskFlow"];
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "operatorPin", "operatorEntryCorner", "operatorEntryTaps", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
-const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "websiteUrl", "address"] as const;
+const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 
 // True while WE are writing server data into the store, so that write is not mistaken for an admin edit and pushed back.
 let applyingRemote = false;
@@ -435,6 +494,7 @@ export function applyThemeToDocument(config: BoothConfig) {
   root.style.setProperty("--font-display", pairing.display);
   root.style.setProperty("--font-body", pairing.body);
   root.dataset.themeMode = config.themeMode ?? "light";
+  root.dataset.kioskStyle = config.kioskStyle ?? "default";
   root.dataset.buttonStyle = config.buttonStyle;
   root.dataset.buttonSize = config.buttonSize ?? "medium";
   root.style.setProperty("--ui-scale", String(Math.max(80, Math.min(140, config.uiScale ?? 100)) / 100));

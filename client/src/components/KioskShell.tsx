@@ -98,7 +98,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
       {/* Pending sync badge */}
       {pendingCount > 0 && isOnline && (
-        <div className={`absolute right-4 top-10 z-50 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] backdrop-blur-sm ${syncInProgress ? "border-sky-400/40 bg-sky-500/10 text-sky-700" : "border-accent/30 bg-accent/10 text-accent"}`}>
+        <div className={`k-sync-badge absolute right-4 top-10 z-50 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] backdrop-blur-sm ${syncInProgress ? "border-sky-400/40 bg-sky-500/10 text-sky-700" : "border-accent/30 bg-accent/10 text-accent"}`}>
           {syncInProgress && <span className="h-1 w-1 animate-spin rounded-full border border-sky-400 border-t-transparent" />}
           {syncInProgress ? "Sync..." : `${pendingCount} pending`}
         </div>

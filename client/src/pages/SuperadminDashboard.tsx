@@ -1,6 +1,13 @@
 import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import { Icon } from "@/components/kiosk/Icons";
+import LeadsPanel from "@/components/LeadsPanel";
+import AlertsPanel from "@/components/AlertsPanel";
+import { TenantWaAutoPanel, TenantWhatsAppCard } from "@/components/TenantWhatsApp";
+import InsightsPanel from "@/components/InsightsPanel";
+import CommandPalette from "@/components/CommandPalette";
+import SupportInboxPanel from "@/components/SupportInboxPanel";
+import { useAdminAlerts } from "@/lib/useAdminAlerts";
 import { BrandLogo } from "@/components/BrandLogo";
 import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
 import NetProgressBar from "@/components/NetProgressBar";
@@ -10,6 +17,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   superadminApi,
   getSuperadminToken,
+  prefetchSuperadmin,
   setSuperadminToken,
   SuperadminApiError,
   type SuperadminTenant,
@@ -35,9 +43,14 @@ const BillingOrdersPanel = lazy(() => import("@/components/BillingOrdersPanel").
 const LicensesPanel = lazy(() => import("@/components/LicensesPanel").then((m) => ({ default: m.LicensesPanel })));
 const SuperadminSecurityPanel = lazy(() => import("@/components/SuperadminSecurityPanel").then((m) => ({ default: m.SuperadminSecurityPanel })));
 const PaymentGatewaysPanel = lazy(() => import("@/components/PaymentGatewaysPanel").then((m) => ({ default: m.PaymentGatewaysPanel })));
+const ContentStudioPanel = lazy(() => import("@/components/ContentStudioPanel").then((m) => ({ default: m.ContentStudioPanel })));
 const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) => ({ default: m.EmailLogPanel })));
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
+import SuperadminFinancePanel from "@/components/SuperadminFinancePanel";
+import Select from "@/components/Select";
+import { setAdminToken } from "@/lib/api";
+import { pushToast } from "@/lib/toastStore";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -329,9 +342,9 @@ function ProfileFieldsGrid({ value, onChange }: { value: Partial<TenantProfileFi
         <input className={inputClass} placeholder="628xxxxxxxxxx" value={value.ownerWhatsapp ?? ""} onChange={(e) => onChange({ ownerWhatsapp: e.target.value })} />
       </label>
       <label className="text-sm text-fg/60">Jenis usaha
-        <select className={inputClass} value={value.businessType ?? ""} onChange={(e) => onChange({ businessType: e.target.value })}>
+        <Select className={inputClass} value={value.businessType ?? ""} onChange={(e) => onChange({ businessType: e.target.value })}>
           {BUSINESS_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="text-sm text-fg/60">Kota
         <input className={inputClass} value={value.city ?? ""} onChange={(e) => onChange({ city: e.target.value })} />
@@ -633,20 +646,20 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
           <p className="mt-1 text-sm text-fg/45">Semua perubahan tenant/billing/plan, dan error server yang belum tertangani.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
             <option value="all">Semua level</option>
             <option value="info">Info</option>
             <option value="warning">Warning</option>
             <option value="error">Error</option>
-          </select>
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
+          </Select>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="all">Semua kategori</option>
             {Object.entries(CATEGORY_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+          </Select>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
             <option value="">Semua tenant</option>
             {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -679,126 +692,6 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
 // signup form — POST /api/tenant-applications. Converting reuses all the
 // data the applicant already typed, so the only thing a superadmin still has
 // to decide is the tenant's slug and initial admin password.
-function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
-  const [applications, setApplications] = useState<TenantApplication[]>([]);
-  const [showAll, setShowAll] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [convertingId, setConvertingId] = useState<string | null>(null);
-  const [convertDraft, setConvertDraft] = useState({ slug: "", password: "" });
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<{ kioskKey: string; adminEmail: string } | null>(null);
-
-  const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-  const load = () => {
-    setLoading(true);
-    superadminApi.getTenantApplications(showAll ? "all" : "pending").then((rows) => setApplications(rows ?? [])).finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showAll]);
-
-  const startConvert = (application: TenantApplication) => {
-    setConvertingId(application.id);
-    setConvertDraft({ slug: slugify(application.businessName), password: "" });
-    setError("");
-    setResult(null);
-  };
-
-  const submitConvert = async (application: TenantApplication) => {
-    setError("");
-    try {
-      const created = await superadminApi.convertApplication(application.id, convertDraft);
-      if (!created) throw new Error("Gagal mengonversi aplikasi");
-      setResult({ kioskKey: created.kioskKey, adminEmail: created.adminEmail });
-      setConvertingId(null);
-      load();
-      onConverted();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengonversi aplikasi");
-    }
-  };
-
-  const reject = async (application: TenantApplication) => {
-    if (!window.confirm(`Tolak aplikasi "${application.businessName}"?`)) return;
-    await superadminApi.rejectApplication(application.id).catch(() => undefined);
-    load();
-  };
-
-  return (
-    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[.16em] text-accent">APLIKASI TENANT</p>
-          <h2 className="mt-2 font-display text-xl font-semibold">{applications.length} {showAll ? "aplikasi" : "menunggu review"}</h2>
-          <p className="mt-1 text-sm text-fg/45">Masuk dari form pendaftaran publik STUDIODO (landing page).</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setShowAll((v) => !v)} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{showAll ? "Hanya pending" : "Lihat semua"}</button>
-          <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
-        </div>
-      </div>
-
-      {result && (
-        <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-          <p className="text-sm font-semibold text-emerald-200">Tenant berhasil dibuat dari aplikasi ini.</p>
-          <p className="mt-1 text-xs text-emerald-100/70">Admin: {result.adminEmail}</p>
-          <code className="mt-2 block overflow-x-auto rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/80">{result.kioskKey}</code>
-          <p className="mt-1 text-xs text-emerald-100/50">Kiosk API key — hanya tampil sekali, tempel ke layar "Setup / Pair kiosk ini".</p>
-        </div>
-      )}
-
-      <div className="mt-4 space-y-3">
-        {applications.map((application) => (
-          <div key={application.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-display text-lg font-semibold">{application.businessName}</p>
-                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""} <span title={application.emailVerifiedAt ? `Terverifikasi ${formatDate(application.emailVerifiedAt)}` : "Pengaju belum mengklik tautan verifikasi di email"} className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${application.emailVerifiedAt ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{application.emailVerifiedAt ? "Email terverifikasi ✓" : "Email belum diverifikasi"}</span></p>
-                <p className="mt-1 text-xs text-fg/35">
-                  {[application.businessType, application.city, application.referralSource ? `via ${application.referralSource}` : null].filter(Boolean).join(" · ")}
-                </p>
-                {application.message && <p className="mt-2 text-sm text-fg/60">"{application.message}"</p>}
-                <p className="mt-1 text-xs text-fg/30">Diajukan {formatDate(application.createdAt)}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <WhatsAppFollowUp phone={application.ownerWhatsapp} context="application" vars={{ owner: application.ownerName, business: application.businessName }} />
-                {application.status !== "pending" ? (
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>
-                    {application.status === "converted" ? "Diterima" : "Ditolak"}
-                  </span>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => startConvert(application)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Terima & buat tenant</button>
-                    <button type="button" onClick={() => reject(application)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-red-300 hover:border-red-400">Tolak</button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {convertingId === application.id && (
-              <div className="mt-4 rounded-xl border border-accent/20 bg-accent/[0.04] p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm text-fg/60">Slug tenant
-                    <input className={inputClass} value={convertDraft.slug} onChange={(e) => setConvertDraft({ ...convertDraft, slug: slugify(e.target.value) })} />
-                  </label>
-                  <label className="text-sm text-fg/60">Password admin awal
-                    <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={convertDraft.password} onChange={(e) => setConvertDraft({ ...convertDraft, password: e.target.value })} autoComplete="new-password" />
-                  </label>
-                </div>
-                {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => submitConvert(application)} disabled={!convertDraft.slug || convertDraft.password.length < 6} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">Buat tenant</button>
-                  <button type="button" onClick={() => setConvertingId(null)} className="rounded-lg border border-fg/15 px-4 py-2 text-xs">Batal</button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        {!loading && applications.length === 0 && <p className="py-6 text-center text-sm text-fg/40">{showAll ? "Belum ada aplikasi masuk." : "Tidak ada aplikasi yang menunggu review."}</p>}
-      </div>
-    </section>
-  );
-}
-
 function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onSelectTenant: (id: string) => void; reloadRef?: React.MutableRefObject<(() => void) | null> }) {
   const [tenants, setTenants] = useState<SuperadminTenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -890,7 +783,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                   </td>
                   <td className="p-3 text-fg/60">{tenant.adminEmail ?? "-"}</td>
                   <td className="p-3">
-                    <select
+                    <Select
                       className="w-28 rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={knownPlan ? draft.plan : "__custom__"}
                       onChange={(e) => {
@@ -900,10 +793,10 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                     >
                       {!knownPlan && <option value="__custom__">{draft.plan || "(kosong)"}</option>}
                       {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td className="p-3">
-                    <select
+                    <Select
                       className="rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={draft.status}
                       onChange={(e) => setDrafts({ ...drafts, [tenant.id]: { ...draft, status: e.target.value } })}
@@ -911,7 +804,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                       <option value="active">active</option>
                       <option value="trial">trial</option>
                       <option value="suspended">suspended</option>
-                    </select>
+                    </Select>
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
@@ -1050,10 +943,10 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
                 <input className={inputClass} type="number" min={1} max={3650} placeholder="Kosong = default platform" value={draft.trialDays} onChange={(e) => setDraft({ ...draft, trialDays: e.target.value })} />
               </label>
               <label className="text-sm text-fg/60">Plan awal (opsional)
-                <select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
+                <Select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
                   <option value="">Trial (default)</option>
                   {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
-                </select>
+                </Select>
               </label>
             </div>
 
@@ -1127,20 +1020,20 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Catat pembayaran</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-fg/60 sm:col-span-2">Plan (opsional — isi otomatis nominal & periode)
-          <select className={inputClass} value={planId} onChange={(e) => applyPlan(e.target.value)}>
+          <Select className={inputClass} value={planId} onChange={(e) => applyPlan(e.target.value)}>
             <option value="">Tanpa plan (manual)</option>
             {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {money(Number(plan.price))}{BILLING_LABEL[plan.billingInterval]}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Nominal (Rp)<input className={inputClass} type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
         <label className="text-sm text-fg/60">Perpanjang (hari)<input className={inputClass} type="number" min={1} value={periodDays} onChange={(e) => setPeriodDays(e.target.value)} /></label>
         <label className="text-sm text-fg/60">Metode
-          <select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>
+          <Select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="manual">Manual</option>
             <option value="transfer">Transfer bank</option>
             <option value="cash">Cash</option>
             <option value="other">Lainnya</option>
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       </div>
@@ -1231,6 +1124,17 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
 
   const refreshAll = () => { load(); onChanged(); };
 
+  // Opens the tenant's own dashboard with a read-only token; AdminAuthGate shows the banner and the way back.
+  const viewAsTenant = async (id: string, name: string) => {
+    try {
+      const r = await superadminApi.impersonateTenant(id);
+      if (!r) return;
+      setAdminToken(r.token);
+      try { sessionStorage.setItem("studiodo-impersonating", JSON.stringify({ tenant: name, email: r.adminEmail })); } catch { /* the banner just won't show the name */ }
+      window.location.hash = "#/admin";
+    } catch (err) { pushToast({ type: "error", title: err instanceof Error ? err.message : "Gagal membuka mode lihat saja" }); }
+  };
+
   const saveProfile = async () => {
     setSavingProfile(true);
     setProfileMessage("");
@@ -1253,7 +1157,12 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
           <h2 className="mt-2 font-display text-xl font-semibold">{tenant?.name ?? (loading ? "Memuat…" : "Tenant tidak ditemukan")}</h2>
           {tenant && <p className="mt-1 text-sm text-fg/45">{tenant.slug} · dibuat {formatDate(tenant.createdAt)}</p>}
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-fg/30">Tutup</button>
+        <div className="flex items-center gap-2">
+          {tenant && (
+            <button type="button" onClick={() => void viewAsTenant(tenant.id, tenant.name)} title="Buka dashboard tenant ini dalam mode lihat saja (30 menit, tercatat di log)" className="rounded-lg border border-accent/40 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/10">Lihat sebagai tenant</button>
+          )}
+          <button type="button" onClick={onClose} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-fg/30">Tutup</button>
+        </div>
       </div>
 
       {tenant && (
@@ -1330,6 +1239,8 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
               </div>
             </div>
 
+            <TenantWhatsAppCard tenantId={tenantId} />
+
             <TenantDiscountForm tenant={tenant} onSaved={refreshAll} />
 
             <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
@@ -1362,10 +1273,13 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "billing" | "withdrawals" | "notifications" | "email" | "settings";
+type Section = "overview" | "insights" | "alerts" | "support" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
+    { id: "insights", label: "Wawasan", icon: "sparkles" },
+    { id: "alerts", label: "Pusat Notifikasi", icon: "bell" },
+    { id: "support", label: "Bantuan Tenant", icon: "mail" },
     { id: "events", label: "Aktivitas & Error", icon: "activity" },
     { id: "notifications", label: "Notifikasi", icon: "bell" },
     { id: "email", label: "Email", icon: "mail" },
@@ -1373,11 +1287,12 @@ const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon
   { title: "Tenant", items: [
     { id: "tenants", label: "Tenant", icon: "users" },
     { id: "licenses", label: "Lisensi & Trial", icon: "lock" },
-    { id: "applications", label: "Aplikasi Tenant", icon: "user-plus" },
+    { id: "applications", label: "Calon Tenant (CRM)", icon: "user-plus" },
   ] },
   { title: "Keuangan", items: [
     { id: "billing", label: "Pembayaran", icon: "card" },
     { id: "withdrawals", label: "Penarikan QRIS", icon: "wallet" },
+    { id: "finance", label: "Saldo & Kebijakan", icon: "chart" },
     { id: "plans", label: "Plans", icon: "box" },
   ] },
   { title: "Konten", items: [
@@ -1385,6 +1300,7 @@ const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon
     { id: "blog", label: "Blog", icon: "file" },
     { id: "marketplace", label: "Marketplace", icon: "image" },
     { id: "creators", label: "Kreator", icon: "sparkles" },
+    { id: "instagram", label: "Konten Instagram", icon: "image" },
   ] },
   { title: "Sistem", items: [{ id: "settings", label: "Pengaturan", icon: "sliders" }] },
 ];
@@ -1394,11 +1310,14 @@ export default function SuperadminDashboard() {
   useAdminThemeScope();
   const [status, setStatus] = useState<"checking" | "needsLogin" | "authenticated">("checking");
   const [email, setEmail] = useState<string | null>(null);
+  // "finance" accounts only see the money screens (the server enforces it too, see routes/superadmin.ts).
+  const [role, setRole] = useState<"owner" | "finance">("owner");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [tenants, setTenants] = useState<SuperadminTenant[]>([]);
   const [section, setSection] = useState<Section>("overview");
   const [pendingApplicationCount, setPendingApplicationCount] = useState(0);
   const [openWithdrawalCount, setOpenWithdrawalCount] = useState(0);
+  const { summary: alertSummary, refresh: refreshAlerts } = useAdminAlerts(status === "authenticated");
   const [creatorQueueCount, setCreatorQueueCount] = useState(0);
   const [marketReportCount, setMarketReportCount] = useState(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -1410,7 +1329,8 @@ export default function SuperadminDashboard() {
   // the full table mounted to know which tenants exist.
   const loadTenantsForFilter = () => { superadminApi.getTenants().then((rows) => setTenants(rows ?? [])).catch(() => undefined); };
   const loadPendingApplicationCount = () => {
-    superadminApi.getTenantApplications("pending").then((rows) => setPendingApplicationCount((rows ?? []).length)).catch(() => undefined);
+    // Badge = follow-ups that need a person today: overdue tasks plus brand-new leads nobody has answered yet.
+    superadminApi.getLeadSummary().then((sum) => setPendingApplicationCount((sum?.overdue ?? 0) + (sum?.funnel.find((f) => f.stage === "new")?.count ?? 0))).catch(() => undefined);
   };
 
   useEffect(() => {
@@ -1434,6 +1354,9 @@ export default function SuperadminDashboard() {
       loadPlans();
       loadTenantsForFilter();
       loadPendingApplicationCount();
+      // Warm the most-opened screens in the background so the first click on each is answered from memory.
+      if (role !== "finance") prefetchSuperadmin(["/overview", "/security-alerts", "/fleet-alerts", "/leads", "/finance/overview", "/withdrawals?status=open", "/billing/orders"]);
+      else prefetchSuperadmin(["/finance/overview", "/withdrawals?status=open"]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -1445,6 +1368,7 @@ export default function SuperadminDashboard() {
     }
     superadminApi.getMe().then((result) => {
       setEmail(result?.email ?? null);
+      if (result?.role === "finance") { setRole("finance"); setSection("withdrawals"); }
       setStatus("authenticated");
     }).catch((err) => {
       if (err instanceof SuperadminApiError && err.status === 401) {
@@ -1482,19 +1406,20 @@ export default function SuperadminDashboard() {
   };
 
   const current = SECTIONS.find((item) => item.id === section);
-  const badgeFor = (id: Section) => (id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
+  const badgeFor = (id: Section) => (id === "alerts" ? (alertSummary?.unread ?? 0) : id === "support" ? (alertSummary?.followUp.find((f) => f.key === "support")?.count ?? 0) : id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
 
   return (
     <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
       <NetProgressBar />
+      {role !== "finance" && <CommandPalette sections={SECTIONS} onSection={(id) => setSection(id as Section)} onTenant={selectTenantAndSwitch} onLead={() => setSection("applications")} />}
       <AdminKeyboard />
-      <aside className="hidden w-[250px] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
+      <aside className="hidden w-[15.5rem] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
         <div className="mb-5 px-2">
           <BrandLogo className="h-7" />
           <h1 className="mt-1.5 font-display text-xl font-bold leading-tight">Admin Pusat</h1>
         </div>
         <nav className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2">
-          {SECTION_GROUPS.map((group) => (
+          {SECTION_GROUPS.map((group) => ({ ...group, items: role === "finance" ? group.items.filter((item) => item.id === "withdrawals" || item.id === "finance") : group.items })).filter((group) => group.items.length > 0).map((group) => (
             <div key={group.title}>
               <div className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-fg/40">{group.title}</div>
               <ul className="flex flex-col gap-0.5">
@@ -1504,7 +1429,7 @@ export default function SuperadminDashboard() {
                       type="button"
                       onClick={() => setSection(item.id)}
                       aria-current={section === item.id ? "page" : undefined}
-                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
+                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
                     >
                       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
                       <span className="flex-1 truncate">{item.label}</span>
@@ -1526,6 +1451,12 @@ export default function SuperadminDashboard() {
             <h2 className="font-display text-2xl font-bold leading-tight">{current?.label}</h2>
           </div>
           <div className="flex items-center gap-2">
+            {role !== "finance" && (
+              <button type="button" onClick={() => window.dispatchEvent(new Event("studiodo-open-palette"))} className="hidden h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/50 transition hover:border-accent hover:text-fg sm:flex" aria-label="Cari">
+                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="9" cy="9" r="6" /><path d="M14 14l4 4" /></svg>
+                Cari…<kbd className="ml-2 rounded-md border border-fg/15 px-1.5 py-0.5 text-[10px]">Ctrl K</kbd>
+              </button>
+            )}
             <AdminKeyboardToggle />
             <AdminThemeToggle />
             <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
@@ -1546,7 +1477,7 @@ export default function SuperadminDashboard() {
 
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
         <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
-        <div className="mx-auto max-w-6xl space-y-6 pb-8">
+        <div key={section} className="sa-page mx-auto w-full max-w-[96rem] space-y-6 pb-8 2xl:max-w-[110rem]">
         {section === "overview" && (
           <div className="space-y-6">
             <SecurityAlertsPanel />
@@ -1566,6 +1497,7 @@ export default function SuperadminDashboard() {
                 onChanged={() => tenantsReloadRef.current?.()}
               />
             )}
+            <TenantWaAutoPanel onOpenTenant={selectTenantAndSwitch} />
             <TenantsTable plans={plans} onSelectTenant={selectTenantAndSwitch} reloadRef={tenantsReloadRef} />
           </div>
         )}
@@ -1573,7 +1505,7 @@ export default function SuperadminDashboard() {
         {section === "licenses" && <LicensesPanel tenants={tenants} onChanged={loadTenantsForFilter} />}
 
         {section === "applications" && (
-          <TenantApplicationsPanel onConverted={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />
+          <LeadsPanel onChanged={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />
         )}
 
         {section === "events" && <EventsLogPanel tenants={tenants} />}
@@ -1583,12 +1515,20 @@ export default function SuperadminDashboard() {
         {section === "website" && <SiteContentPanel />}
 
         {section === "blog" && <BlogPanel />}
+        {section === "instagram" && <ContentStudioPanel />}
 
         {section === "marketplace" && <MarketplacePanel />}
 
         {section === "creators" && <CreatorsPanel />}
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
+        {section === "finance" && <SuperadminFinancePanel isOwner={role === "owner"} />}
+
+        {section === "insights" && <InsightsPanel onOpenTenant={selectTenantAndSwitch} />}
+
+        {section === "alerts" && <AlertsPanel onNavigate={(id) => setSection(id as Section)} onChanged={refreshAlerts} />}
+
+        {section === "support" && <SupportInboxPanel onChanged={refreshAlerts} />}
 
         {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
 

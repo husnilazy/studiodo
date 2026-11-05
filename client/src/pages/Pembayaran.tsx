@@ -14,6 +14,8 @@ import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext"
 import Positionable from "@/components/Positionable";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
+import { CUSTOM_FRAME_LOCK } from "@/lib/templateStore";
 
 type Mode = "choose" | "voucher" | "qris";
 
@@ -29,7 +31,7 @@ const POLL_FAILURE_TOLERANCE = 5;
 
 export default function Pembayaran() {
   const [, navigate] = useLocation();
-  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession } = useKioskSession();
+  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession, setFrameId, setSelectedTemplateId, setSelectedTemplateData } = useKioskSession();
   const boothConfig = useBoothConfig((state) => state.config);
   const offlineModeEnabled = boothConfig.offlineModeEnabled;
   const eventFreeEntryActive = boothConfig.eventEnabled && boothConfig.eventFreeEntry && (() => {
@@ -59,6 +61,8 @@ export default function Pembayaran() {
   const [cashPaymentEnabled, setCashPaymentEnabled] = useState(false);
   const [cashRedeemed, setCashRedeemed] = useState(false);
   const [qrisExpirySeconds, setQrisExpirySeconds] = useState(QRIS_DISPLAY_SECONDS);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+  useKeyboardAvoid(showKeyboard && mode === "voucher", keyboardRef);
   const qrisCanvasRef = useRef<HTMLCanvasElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrisTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -181,7 +185,8 @@ export default function Pembayaran() {
       const result = await api.startQris(sessionId);
       if (!result) throw new Error("Gagal memulai QRIS");
       setQrisString(result.qrString);
-      setViaDoku(result.provider === "doku");
+      // Checkout returns a LINK (phone-camera scan); direct (SNAP) returns a real QRIS code any e-wallet scanner reads.
+      setViaDoku(result.provider === "doku" && !result.direct);
 
       // Visual ring only — reaching 0 just tells the customer the QR looks
       // stale and offers a fresh one. It must NOT stop the background poll:
@@ -297,6 +302,17 @@ export default function Pembayaran() {
     try {
       const result = await api.redeemVoucher(sessionId, code);
       if (!result) throw new Error("Voucher tidak valid");
+      // A custom-frame voucher brings the customer's own frame: lock it in now; the "Pilih Frame" step is skipped.
+      if (result.frame) {
+        setFrameId(result.frame.id);
+        setSelectedTemplateId(result.frame.id);
+        setSelectedTemplateData({
+          id: result.frame.id, name: result.frame.name, category: "custom", style: CUSTOM_FRAME_LOCK,
+          orientation: result.frame.orientation === "landscape" ? "landscape" : "portrait",
+          outputPreset: (result.frame.outputPreset as never) ?? "4r",
+          canvasWidth: result.frame.canvasWidth, canvasHeight: result.frame.canvasHeight, frameDataUrl: result.frame.imageUrl, slots: result.frame.slots,
+        });
+      }
       const isCash = Boolean(result.cash);
       setPayableAmount(result.amount);
       setCashRedeemed(isCash);
@@ -371,18 +387,18 @@ export default function Pembayaran() {
               <button type="button" onClick={startQris} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="qr" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Bayar dengan QRIS</span>
-                <span className="text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
+                <span className="k-desc text-sm text-muted">Scan pakai GoPay, OVO, DANA, m-banking, atau e-wallet lain.</span>
               </button>
               <button type="button" onClick={() => setMode("voucher")} disabled={!sessionReady} className={methodCard}>
                 <span className={methodIcon}><Icon name="ticket" className="h-8 w-8" /></span>
                 <span className="font-display text-2xl font-semibold">Pakai voucher</span>
-                <span className="text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
+                <span className="k-desc text-sm text-muted">Punya kode promo atau tiket dari petugas? Masukkan di sini.</span>
               </button>
               {cashPaymentEnabled && (
                 <button type="button" onClick={() => { setCashRedeemed(false); setMode("voucher"); }} disabled={!sessionReady} className={methodCard}>
                   <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 transition group-hover:scale-110"><Icon name="cash" className="h-8 w-8" /></span>
                   <span className="font-display text-2xl font-semibold">Bayar tunai</span>
-                  <span className="text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
+                  <span className="k-desc text-sm text-muted">Bayar ke petugas, lalu masukkan kode invoice yang diberikan.</span>
                 </button>
               )}
               {offlineModeEnabled && !isBrowserOnline() && (
@@ -408,6 +424,7 @@ export default function Pembayaran() {
             <div className="mt-6 flex items-center gap-2">
               <input
                 autoFocus
+                data-kb-target
                 value={voucherCode}
                 onChange={(event) => { setError(null); setVoucherCode(event.target.value.toUpperCase()); }}
                 onFocus={() => setShowKeyboard(true)}
@@ -441,8 +458,8 @@ export default function Pembayaran() {
           {showKeyboard && mode === "voucher" && (
             // pointer-events-none on this full-screen wrapper (with -auto only on the keyboard itself): a tap anywhere
             // that isn't the keyboard must reach whatever is really there, not just dismiss the overlay first.
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-fg/15 p-3 pb-4 backdrop-blur-[2px] sm:p-5 sm:pb-6">
-              <motion.div initial={{ opacity: 0, y: 32, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.24, ease: "easeOut" }} className="pointer-events-auto w-full max-w-5xl">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center p-3 pb-4 sm:p-5 sm:pb-6">
+              <motion.div initial={{ opacity: 0, y: 32, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.24, ease: "easeOut" }} ref={keyboardRef} className="pointer-events-auto w-full max-w-5xl">
                 <VirtualKeyboard value={voucherCode} onChange={(value) => setVoucherCode(value.toUpperCase())} onClose={() => setShowKeyboard(false)} />
               </motion.div>
             </motion.div>
@@ -457,8 +474,8 @@ export default function Pembayaran() {
 
                 <div>
                   <span className="eyebrow !mb-1">Scan untuk bayar</span>
-                  <h2 className="font-display text-3xl font-semibold tracking-tight">Bayar dengan QRIS</h2>
-                  <p className="mt-2 text-sm text-muted">Buka aplikasi pembayaranmu, scan QR di bawah, lalu tunggu. Halaman ini lanjut otomatis.</p>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight">{viaDoku ? "Bayar lewat HP" : "Bayar dengan QRIS"}</h2>
+                  <p className="mt-2 text-sm text-muted">{viaDoku ? "Buka kamera HP biasa (bukan scanner di aplikasi bank/e-wallet), arahkan ke QR di bawah, lalu pilih QRIS di halaman yang terbuka. Halaman ini lanjut otomatis." : "Buka aplikasi pembayaranmu, scan QR di bawah, lalu tunggu. Halaman ini lanjut otomatis."}</p>
                 </div>
 
                 {/* While the invoice is still being created the canvas is empty — show a spinner instead of a blank white square. */}
@@ -472,7 +489,7 @@ export default function Pembayaran() {
                     </div>
                   )}
                 </div>
-                {viaDoku && <p className="-mt-1 text-center text-sm text-muted">Scan dengan kamera HP, lalu bayar di halaman DOKU (QRIS, e-wallet, atau VA).</p>}
+                {viaDoku && <p className="-mt-1 text-center text-xs text-muted">Di halaman DOKU kamu bisa bayar dengan QRIS, e-wallet, atau Virtual Account.</p>}
                 <p className="font-display text-2xl font-semibold text-accent">{rupiah(payableAmount)}</p>
 
                 {checking && qrisExpirySeconds > 0 && (

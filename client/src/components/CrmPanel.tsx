@@ -6,6 +6,7 @@ import Spinner from "@/components/Spinner";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { pushToast } from "@/lib/toastStore";
 import { DEFAULT_WA_TEMPLATE, downloadText, fillTemplate, initialsOf, prettyPhone, relativeTime, rupiah, toCsv, waHref, rupiahShort } from "@/lib/crmFormat";
+import Select from "@/components/Select";
 
 // Customer database + CRM in ONE place (it used to be two menus: a bare table and a separate "CRM detail" page).
 // Big, touch-friendly rows (the booth PC is often a touchscreen with the on-screen keyboard): search, filters, a one-tap
@@ -146,9 +147,9 @@ function Drawer({ customerKey, brand, onClose, onSaved }: { customerKey: string;
                   <p className="mt-1.5 text-[11px] text-fg/45">Gunakan <code>{"{nama}"}</code>, <code>{"{brand}"}</code>, <code>{"{link}"}</code>. Pesan dibuka di WhatsApp — kamu tetap menekan kirim sendiri.</p>
                   {links.length > 1 && (
                     <label className="mt-2 block text-xs text-fg/55">Link galeri yang disertakan
-                      <select value={pickedLink ?? ""} onChange={(e) => setPickedLink(e.target.value)} className={field}>
+                      <Select value={pickedLink ?? ""} onChange={(e) => setPickedLink(e.target.value)} className={field}>
                         {links.map((s) => <option key={s.id} value={s.shareUrl ?? ""}>{new Date(s.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · {s.packageName ?? "Sesi"}</option>)}
-                      </select>
+                      </Select>
                     </label>
                   )}
                   <p className="mt-3 whitespace-pre-wrap rounded-xl bg-surface px-3.5 py-3 text-sm text-fg/80">{message}</p>
@@ -279,7 +280,7 @@ export default function CrmPanel() {
             <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fg/35" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari nama, nomor WhatsApp, email, atau catatan…" className="min-h-[52px] w-full rounded-2xl border border-fg/15 bg-surface pl-12 pr-4 text-base outline-none transition focus:border-accent" />
           </label>
-          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Urutkan" className="min-h-[52px] rounded-2xl border border-fg/15 bg-surface px-4 text-sm outline-none focus:border-accent">{SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
+          <Select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Urutkan" className="min-h-[52px] rounded-2xl border border-fg/15 bg-surface px-4 text-sm outline-none focus:border-accent">{SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</Select>
           <button type="button" onClick={exportCsv} disabled={exporting} className="inline-flex min-h-[52px] items-center gap-2 rounded-2xl border border-fg/15 px-5 text-sm font-medium text-fg/70 transition hover:border-accent hover:text-fg disabled:opacity-50"><Icon name="download" className="h-4 w-4" />{exporting ? "Menyiapkan…" : "Ekspor CSV"}</button>
         </div>
         <div className="flex flex-wrap items-center gap-2">

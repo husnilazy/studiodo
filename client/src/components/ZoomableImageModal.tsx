@@ -50,6 +50,12 @@ export default function ZoomableImageModal({ src, alt, onClose, mirror = false, 
     });
   };
 
+  // Slider / +- buttons: zoom around the middle of the picture (the finger gestures zoom around the touch point).
+  const setScaleCentered = (value: number) => {
+    const next = clampScale(value);
+    setTransform((prev) => (next <= 1.001 ? { scale: 1, x: 0, y: 0 } : { scale: next, x: (prev.x * next) / prev.scale, y: (prev.y * next) / prev.scale }));
+  };
+
   const resetOrZoomTo = (clientX: number, clientY: number) => {
     setTransform((prev) => {
       if (prev.scale > 1.05) return { scale: 1, x: 0, y: 0 };
@@ -130,7 +136,7 @@ export default function ZoomableImageModal({ src, alt, onClose, mirror = false, 
         ×
       </button>
       <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full bg-black/50 px-4 py-1.5 text-xs font-medium text-white/60">
-        {title ? `${title} · ` : ""}Cubit atau scroll untuk zoom · geser untuk lihat detail · tap 2x untuk reset
+        {title ? `${title} · ` : ""}Geser slider untuk zoom · cubit atau scroll juga bisa · seret untuk lihat detail
       </p>
       <div
         ref={containerRef}
@@ -159,6 +165,21 @@ export default function ZoomableImageModal({ src, alt, onClose, mirror = false, 
             height: "auto",
           }}
         />
+      </div>
+      <div className="relative z-10 mx-auto flex w-[min(92vw,560px)] items-center gap-3 px-2 pb-2 pt-1 text-white">
+        <button type="button" aria-label="Perkecil" onClick={() => setScaleCentered(transform.scale - 0.5)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 text-2xl leading-none">−</button>
+        <input
+          type="range"
+          aria-label="Tingkat zoom"
+          min={MIN_SCALE}
+          max={MAX_SCALE}
+          step={0.05}
+          value={transform.scale}
+          onChange={(event) => setScaleCentered(Number(event.target.value))}
+          className="h-2 min-w-0 flex-1 cursor-pointer accent-white"
+        />
+        <button type="button" aria-label="Perbesar" onClick={() => setScaleCentered(transform.scale + 0.5)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 text-2xl leading-none">+</button>
+        <button type="button" onClick={() => setTransform({ scale: 1, x: 0, y: 0 })} className="w-16 shrink-0 rounded-full border border-white/25 bg-white/10 py-2 text-center text-xs font-bold tabular-nums">{Math.round(transform.scale * 100)}%</button>
       </div>
       {footer && <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 p-4 pb-6">{footer}</div>}
     </div>

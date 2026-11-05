@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, FILTER_CSS, FILTER_LABELS, type CameraFilter } from "@/lib/sessionStore";
 import { isEventActive, useBoothConfig } from "@/lib/boothConfigStore";
-import { captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
-import { renderTemplate } from "@/lib/output";
+import { applyCameraPreset, captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
+import { loadImage, renderTemplate } from "@/lib/output";
 import { getNextRoute } from "@/lib/kioskFlow";
 import { useTemplateLibrary } from "@/lib/templateStore";
 import { addPendingPhoto, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
@@ -20,6 +20,9 @@ import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 import Spinner from "@/components/Spinner";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
+import { CountdownOverlay, FilterControl, ShutterButton, SlotFullPopup } from "@/components/kiosk/CaptureUI";
+import { resolveCaptureLayout, resolveKioskStyle } from "@/lib/kioskStyles";
+import { clampZoom, cropBlobCenter, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "@/lib/zoomCrop";
 
 // Sony Imaging Edge Webcam / virtual cam warm-up guard
 const CAMERA_WARMUP_MS = 2800;
@@ -47,12 +50,22 @@ const CLIP_MAX_PRE_MS = 2500;
 const CLIP_TAIL_MS = 600;
 const SLOT_CLIP_FALLBACK_MS = 2000;
 const SLOT_CLIP_GIF_FRAME_INTERVAL_MS = 120; // ~8fps — smooth enough for a loop, keeps file size/encode time small
-const GIF_MAX_WIDTH = 560;
+const GIF_MAX_WIDTH = 420; // smaller GIFs encode and upload much faster; slots are small anyway
 // MediaRecorder has no sane default bitrate — leaving it unset produced the
 // muddy, blocky "kualitas jelek" complaint regardless of resolution. This is
 // a near-free quality win (barely affects encode cost) unlike raising
 // resolution/fps, so it stays even after the rest got dialed back.
 const SLOT_VIDEO_BITRATE = 6_000_000;
+// The "video" output is the whole photo session recorded in one take (not 2 s clips): HD, and a bitrate that keeps a
+// few minutes of footage to a size that uploads in reasonable time (the server re-encodes it to a phone-friendly MP4).
+const SESSION_VIDEO_BITRATE = 4_500_000;
+const GIF_TIMELAPSE_DELAY_MS = 120; // GIF frame spacing (~8 fps)
+const RAW_RECORD_WIDTH = 640; // the continuous live-view take is recorded this wide (slots are ~300 px, so this is plenty and far cheaper to encode/decode)
+const RAW_RECORD_BITRATE = 2_000_000;
+const SEGMENT_MAX_MS = 4_000; // each slot plays at most this much footage, ending at its shot (keeps the compose pass short)
+const COMPOSE_PLAYBACK_RATE = 2; // the compose pass runs in real time, so playing the segments faster makes the wait shorter (a quick timelapse)
+const SEGMENT_TAIL_MS = 500; // a moment after the shot stays in the segment
+const COMPOSE_HARD_LIMIT_MS = 8_000;
 
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -160,10 +173,19 @@ export default function SesiFoto() {
   const slotGifFramesRef = useRef<(GifFrame[] | null)[]>([]);
   const slotVideoBlobsRef = useRef<(Blob | null)[]>([]);
   const captureLockRef = useRef(false);
+  // Customer-facing capture options for this session: digital zoom, and auto vs manual shutter (starts from the booth setting).
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
+  const [autoMode, setAutoMode] = useState(Boolean(config.autoCaptureEnabled));
   // Clips are recorded while the countdown runs, so the last one is still going when the session completes —
   // combine waits on these before it builds the GIF/video, and slotClipMsRef remembers each clip's length.
   const pendingClipsRef = useRef<Promise<void>[]>([]);
   const slotClipMsRef = useRef<number[]>([]);
+  // One continuous recording of the whole session (the package's "video"); null until the first countdown starts.
+  const sessionRecRef = useRef<{ recorder: MediaRecorder; chunks: Blob[]; mimeType: string; stopDrawing?: () => void; done: Promise<Blob | null>; startedAt: number } | null>(null);
+  // When each photo was taken, in ms from the start of the session recording (index = photo number).
+  const shotTimesRef = useRef<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -200,6 +222,9 @@ export default function SesiFoto() {
   };
   const [focusing, setFocusing] = useState(false);
   const [capturedSlot, setCapturedSlot] = useState<number | null>(null);
+  // The "slots are full — continue?" side popup; dismissed = the customer chose to keep shooting / swap photos.
+  const [slotPopupDismissed, setSlotPopupDismissed] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   // Tapping a finished shot opens it full-screen (pinch/scroll to zoom) so the customer can really look at it — and
   // decide whether to retake — instead of the tap instantly throwing the photo away to reshoot.
   const [zoomSlot, setZoomSlot] = useState<number | null>(null);
@@ -333,7 +358,7 @@ export default function SesiFoto() {
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false,
         });
         streamRef.current = stream;
@@ -390,6 +415,8 @@ export default function SesiFoto() {
       setLiveViewStarting(true);
       await startTetherLiveView(bridgeUrl);
       if (controller.signal.aborted) return;
+      // Cameras forget settings changed over USB after a power cycle — push the booth's saved preset again.
+      void applyCameraPreset(bridgeUrl, useBoothConfig.getState().config.cameraPreset);
       setLiveViewStarting(false);
       while (!controller.signal.aborted) {
         setLiveViewUrl(`${bridgeUrl}/liveview.jpg?ts=${Date.now()}`);
@@ -480,17 +507,22 @@ export default function SesiFoto() {
           console.warn("Capture tether pertama gagal, mencoba sekali lagi", firstError);
           blob = await captureFromTether({ bridgeUrl: config.tetherBridgeUrl, slotIndex: currentSlot, filter, orientation });
         }
+        // The camera shoots the whole frame; crop it to what the zoomed live view showed.
+        blob = await cropBlobCenter(blob, zoomRef.current);
       } finally {
         setCapturing(false);
       }
     } else {
       const video = videoRef.current;
       if (!video) return false;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const zoomNow = zoomRef.current;
+      const cropW = Math.max(1, Math.round(video.videoWidth / zoomNow));
+      const cropH = Math.max(1, Math.round(video.videoHeight / zoomNow));
+      canvas.width = cropW;
+      canvas.height = cropH;
       const ctx = canvas.getContext("2d")!;
       ctx.filter = FILTER_CSS[filter];
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, Math.round((video.videoWidth - cropW) / 2), Math.round((video.videoHeight - cropH) / 2), cropW, cropH, 0, 0, cropW, cropH);
       blob = await new Promise((resolve, reject) =>
         canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Gagal membuat foto"))), "image/jpeg", 0.92)
       );
@@ -505,6 +537,7 @@ export default function SesiFoto() {
     const slotJustCaptured = currentSlot;
     const localUrl = URL.createObjectURL(blob);
     setPhotoAtSlot(slotJustCaptured, localUrl);
+    if (sessionRecRef.current) shotTimesRef.current[slotJustCaptured] = Math.round(performance.now() - sessionRecRef.current.startedAt);
     setCapturedSlot(slotJustCaptured);
     setTimeout(() => setCapturedSlot(null), 1600);
     setSyncingSlots((slots) => new Set(slots).add(slotJustCaptured));
@@ -621,6 +654,7 @@ export default function SesiFoto() {
   // though the bridge already sends Access-Control-Allow-Origin).
   const recordSlotVideo = async (slotIndex: number, isTether: boolean, sourceWidth: number, sourceHeight: number, durationMs: number) => {
     if (typeof MediaRecorder === "undefined") return;
+    if (sessionRecRef.current) return; // the whole-session recording is the video; no need to run a second HD encoder per shot
     let recordingStream: MediaStream | undefined = streamRef.current ?? undefined;
     let stopDrawing: (() => void) | undefined;
     if (!recordingStream && isTether) {
@@ -669,6 +703,7 @@ export default function SesiFoto() {
   // per-shot time — capture stays exactly as smooth as a single format.
   const captureSlotClip = async (slotIndex: number, durationMs: number) => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
+    if (sessionRecRef.current) return; // the session recording already covers GIF and video
     const isTether = cameraMode === "tether";
     if (isTether && !liveViewUrl) return;
     if (!isTether && !videoRef.current) return;
@@ -687,6 +722,210 @@ export default function SesiFoto() {
     await Promise.all(tasks);
   };
 
+  // --- Session recording → video & GIF with every slot moving at once --------------------------------------------------
+  // While the session runs, the live view is recorded in one continuous take (downscaled, unframed) and the moment each
+  // photo is taken is noted. When the session ends, composeSimultaneous() cuts that take into one segment per photo
+  // (from just after the previous shot up to this shot, at most SEGMENT_MAX_MS) and plays ALL segments at the same time,
+  // each inside its own slot of the frame — the same frame the photos use. That one pass is recorded as the video and
+  // sampled as the GIF, so the kiosk result, the customer's page and the admin list all show the identical output.
+  const startSessionRecording = () => {
+    if (sessionRecRef.current || typeof MediaRecorder === "undefined" || (!selectedPackage?.hasVideo && !selectedPackage?.hasGif)) return;
+    if (skipCombineRef.current || retakeTargetRef.current !== null) return;
+    // No frame means nothing to compose into: those sessions keep the old per-shot clips.
+    if (!template?.slots?.length || typeof HTMLCanvasElement.prototype.captureStream !== "function") return;
+    const isTether = cameraMode === "tether";
+    if (isTether && !liveViewUrl) return;
+    const cleanups: (() => void)[] = [];
+    const stopDrawing = () => { while (cleanups.length) cleanups.pop()!(); };
+
+    let tetherFrame: HTMLImageElement | null = null; // latest live-view frame for tether cameras (crossOrigin keeps the canvas readable)
+    if (isTether && liveViewUrl) {
+      let busy = false;
+      const poll = () => {
+        if (busy) return;
+        busy = true;
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => { tetherFrame = image; busy = false; };
+        image.onerror = () => { busy = false; };
+        image.src = `${liveViewUrl}${liveViewUrl.includes("?") ? "&" : "?"}rec=${Date.now()}`;
+      };
+      poll();
+      const timer = window.setInterval(poll, 66);
+      cleanups.push(() => window.clearInterval(timer));
+    }
+    const source = (): CanvasImageSource | null => (isTether ? tetherFrame : videoRef.current && videoRef.current.videoWidth ? videoRef.current : null);
+
+    const aspect = liveAspect && liveAspect > 0.3 && liveAspect < 3.5 ? liveAspect : 16 / 9;
+    const rawW = RAW_RECORD_WIDTH;
+    const rawH = Math.max(2, Math.round(rawW / aspect) & ~1);
+    const canvas = document.createElement("canvas");
+    canvas.width = rawW;
+    canvas.height = rawH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { stopDrawing(); return; }
+    const timer = window.setInterval(() => {
+      const frame = source();
+      if (frame) ctx.drawImage(frame, 0, 0, rawW, rawH);
+    }, 33);
+    cleanups.push(() => window.clearInterval(timer));
+
+    try {
+      const mimeType = pickVideoMime();
+      const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType, videoBitsPerSecond: RAW_RECORD_BITRATE });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+      const done = new Promise<Blob | null>((resolve) => {
+        recorder.onstop = () => { stopDrawing(); resolve(chunks.length > 0 ? new Blob(chunks, { type: mimeType }) : null); };
+        recorder.onerror = () => { stopDrawing(); resolve(null); };
+      });
+      shotTimesRef.current = [];
+      recorder.start(500);
+      sessionRecRef.current = { recorder, chunks, mimeType, stopDrawing, done, startedAt: performance.now() };
+    } catch (error) {
+      stopDrawing();
+      console.error("Gagal memulai rekaman sesi", error);
+    }
+  };
+  const stopSessionRecording = async (): Promise<Blob | null> => {
+    const rec = sessionRecRef.current;
+    if (!rec) return null;
+    sessionRecRef.current = null;
+    await new Promise((resolve) => window.setTimeout(resolve, SEGMENT_TAIL_MS + 300)); // the last shot's tail is part of its segment
+    if (rec.recorder.state !== "inactive") rec.recorder.stop();
+    return rec.done;
+  };
+
+  /** Plays every photo's segment of the session recording at once inside the frame; returns the video and GIF frames of that pass. */
+  const composeSimultaneous = async (raw: Blob, wantGif: boolean): Promise<{ video: Blob | null; gifFrames: GifFrame[] }> => {
+    const tpl = template;
+    if (!tpl?.slots?.length) return { video: null, gifFrames: [] };
+    const state = useKioskSession.getState();
+    const shots = shotTimesRef.current;
+    const url = URL.createObjectURL(raw);
+    const videos: HTMLVideoElement[] = [];
+    try {
+      const frameImage = await loadImage(tpl.frameDataUrl).catch(() => null);
+      const photoImages = new Map<number, HTMLImageElement>();
+      await Promise.all(state.photoUrls.map(async (photoUrl, index) => { if (photoUrl) { const image = await loadImage(photoUrl).catch(() => null); if (image) photoImages.set(index, image); } }));
+
+      // Segment per template slot: [startMs, endMs] of the raw take that belongs to that slot's photo.
+      const times = shots.map((t, index) => ({ t, index })).filter((x) => typeof x.t === "number") as { t: number; index: number }[];
+      const segments = tpl.slots.map((_, slotIndex) => {
+        const shot = state.templatePhotoMap[slotIndex] ?? slotIndex;
+        const end = shots[shot];
+        if (typeof end !== "number") return null;
+        const previous = Math.max(-1, ...times.filter((x) => x.t < end).map((x) => x.t));
+        let start = Math.max(previous >= 0 ? previous + 400 : 0, end - SEGMENT_MAX_MS, 0);
+        if (end - start < 1500) start = Math.max(0, end - 2500);
+        return { shot, start, end: end + SEGMENT_TAIL_MS };
+      });
+      const longest = Math.max(0, ...segments.map((seg) => (seg ? seg.end - seg.start : 0)));
+      if (longest <= 0) return { video: null, gifFrames: [] };
+
+      // One <video> per segment, all on the same recording, each parked at its own start.
+      const players = await Promise.all(segments.map(async (seg) => {
+        if (!seg) return null;
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "auto";
+        video.src = url;
+        video.defaultPlaybackRate = COMPOSE_PLAYBACK_RATE;
+        video.playbackRate = COMPOSE_PLAYBACK_RATE;
+        await new Promise<void>((resolve) => { video.onloadedmetadata = () => resolve(); video.onerror = () => resolve(); });
+        video.currentTime = seg.start / 1000;
+        await new Promise<void>((resolve) => { video.onseeked = () => resolve(); window.setTimeout(resolve, 1500); });
+        videos.push(video);
+        return video;
+      }));
+
+      const outW = Math.max(2, Math.min(720, tpl.canvasWidth) & ~1);
+      const outH = Math.max(2, Math.round((outW * tpl.canvasHeight) / tpl.canvasWidth) & ~1);
+      const canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return { video: null, gifFrames: [] };
+      const cover = (src: CanvasImageSource, sw: number, sh: number, x: number, y: number, w: number, h: number) => {
+        if (!sw || !sh) return;
+        const scale = Math.max(w / sw, h / sh);
+        const cw = w / scale, ch = h / scale;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        if (state.mirrorLiveView) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, w, h); }
+        else ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, x, y, w, h);
+        ctx.restore();
+      };
+      const draw = (elapsedMs: number) => {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.filter = FILTER_CSS[state.filter] ?? "none";
+        tpl.slots.forEach((slot, i) => {
+          const x = slot.x * outW, y = slot.y * outH, w = slot.w * outW, h = slot.h * outH;
+          const seg = segments[i];
+          const video = players[i];
+          if (seg && video && video.videoWidth) {
+            if (!video.paused && video.currentTime * 1000 >= seg.end) video.pause(); // freeze on the shot moment
+            void elapsedMs;
+            cover(video, video.videoWidth, video.videoHeight, x, y, w, h);
+          } else {
+            const photo = photoImages.get(segments[i]?.shot ?? state.templatePhotoMap[i] ?? i);
+            if (photo) cover(photo, photo.naturalWidth, photo.naturalHeight, x, y, w, h);
+          }
+        });
+        ctx.filter = "none";
+        if (frameImage) ctx.drawImage(frameImage, 0, 0, outW, outH);
+      };
+
+      // GIF samples: smaller canvas, ~6 fps
+      const gifW = Math.min(GIF_MAX_WIDTH, outW);
+      const gifH = Math.max(2, Math.round((gifW * outH) / outW));
+      const small = wantGif ? document.createElement("canvas") : null;
+      if (small) { small.width = gifW; small.height = gifH; }
+      const smallCtx = small?.getContext("2d", { willReadFrequently: true }) ?? null;
+      const gifFrames: GifFrame[] = [];
+
+      const mimeType = pickVideoMime();
+      const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType, videoBitsPerSecond: SESSION_VIDEO_BITRATE });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+      const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); recorder.onerror = () => resolve(); });
+
+      draw(0);
+      recorder.start(500);
+      await Promise.all(players.map((video) => video?.play().catch(() => undefined)));
+      const startedAt = performance.now();
+      let lastGif = -1000;
+      await new Promise<void>((resolve) => {
+        const timer = window.setInterval(() => {
+          const elapsed = performance.now() - startedAt;
+          draw(elapsed);
+          if (smallCtx && small && elapsed - lastGif >= GIF_TIMELAPSE_DELAY_MS) {
+            lastGif = elapsed;
+            smallCtx.drawImage(canvas, 0, 0, gifW, gifH);
+            gifFrames.push({ data: smallCtx.getImageData(0, 0, gifW, gifH).data, width: gifW, height: gifH });
+          }
+          if (elapsed >= longest / COMPOSE_PLAYBACK_RATE + 400 || elapsed > COMPOSE_HARD_LIMIT_MS) { window.clearInterval(timer); resolve(); }
+        }, 33);
+      });
+      recorder.stop();
+      await stopped;
+      return { video: chunks.length > 0 ? new Blob(chunks, { type: mimeType }) : null, gifFrames };
+    } finally {
+      videos.forEach((video) => { video.pause(); video.removeAttribute("src"); video.load(); });
+      URL.revokeObjectURL(url);
+    }
+  };
+  useEffect(() => () => {
+    const rec = sessionRecRef.current;
+    sessionRecRef.current = null;
+    if (rec && rec.recorder.state !== "inactive") { try { rec.recorder.stop(); } catch { /* already stopped */ } }
+    rec?.stopDrawing?.();
+  }, []);
+
   // --- Combined "living template" output -----------------------------------
   // Once every slot has its clip, composite them all into the shared frame
   // at once (each clip looping in its own slot) for the one downloadable
@@ -695,15 +934,39 @@ export default function SesiFoto() {
   const combineSlotClips = async () => {
     if (!selectedPackage?.hasVideo && !selectedPackage?.hasGif) return;
     if (!sessionId || !template?.slots?.length) return;
+    // Runs in the background: the customer carries on to the edit/result screens while this finishes, so every write back to
+    // the session store checks the session is still the one that started the work (a new customer may have begun since).
+    const pipelineSession = sessionId;
+    const stillCurrent = () => useKioskSession.getState().sessionId === pipelineSession;
+    let producedMedia = false;
+    useKioskSession.getState().setMediaPipeline("working");
     setMediaUploading(true);
     try {
       setSavingStage("Menyelesaikan rekaman…");
       // The last clip is still recording (it runs through the shot + a short tail) — let every clip finish first.
       await Promise.all(pendingClipsRef.current);
+      const rawSession = await stopSessionRecording();
+      let sessionVideoBlob: Blob | null = null;
+      let sessionGifBlob: Blob | null = null;
+      if (rawSession && rawSession.size > 0) {
+        setSavingStage("Menyusun video ke dalam frame…");
+        await yieldToUi();
+        try {
+          const composed = await composeSimultaneous(rawSession, Boolean(selectedPackage.hasGif));
+          if (selectedPackage.hasVideo && composed.video && composed.video.size > 0) sessionVideoBlob = composed.video;
+          if (selectedPackage.hasGif && composed.gifFrames.length > 1) {
+            setSavingStage("Membuat GIF…");
+            await yieldToUi();
+            sessionGifBlob = await encodeGifAsync(composed.gifFrames, GIF_TIMELAPSE_DELAY_MS).catch((error) => { console.error("Gagal membuat GIF sesi", error); return null; });
+          }
+        } catch (error) {
+          console.error("Gagal menyusun video sesi", error);
+        }
+      }
       await yieldToUi();
       setSavingStage("Menyiapkan frame…");
       const style = await prepareClipFrameStyle({ template, accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate });
-      if (!style.frameImage) return;
+      if (!style.frameImage && !sessionGifBlob && !sessionVideoBlob) return;
       // templatePhotoMap already answers "which captured photo goes in
       // template slot i" for the still-photo render — the same mapping is
       // exactly what a slot's clip should follow too.
@@ -715,13 +978,14 @@ export default function SesiFoto() {
       // video branch was unreachable). Two independent blobs, each under its
       // own try/catch, so enabling both actually produces both, and one
       // failing doesn't take the other down with it.
-      let gifBlob: Blob | null = null;
-      if (selectedPackage.hasGif) {
+      let gifBlob: Blob | null = sessionGifBlob;
+      if (selectedPackage.hasGif && !gifBlob && style.frameImage) {
         try {
           const { width, height } = pickClipCanvasSize(1, 1, style, GIF_MAX_WIDTH);
           const slotFrames = template.slots.map((_, i) => slotGifFramesRef.current[sourceSlotFor(i)] ?? null);
           const maxLen = Math.max(0, ...slotFrames.map((frames) => frames?.length ?? 0));
-          if (maxLen > 0) {
+          // Only a COMPLETE collage is worth uploading: a partial one (some slots without footage) would replace a good GIF on the server.
+          if (maxLen > 0 && slotFrames.every((frames) => frames && frames.length > 0)) {
             setSavingStage("Membuat GIF…");
             const canvas = document.createElement("canvas");
             canvas.width = width;
@@ -756,8 +1020,9 @@ export default function SesiFoto() {
         }
       }
 
-      let videoBlob: Blob | null = null;
-      if (selectedPackage.hasVideo && typeof MediaRecorder !== "undefined") {
+      let videoBlob: Blob | null = sessionVideoBlob && sessionVideoBlob.size > 0 ? sessionVideoBlob : null;
+      // No whole-session recording (e.g. recorder unsupported): fall back to the framed collage of the per-shot clips.
+      if (!videoBlob && selectedPackage.hasVideo && typeof MediaRecorder !== "undefined" && style.frameImage) {
         try {
           const { width, height } = pickClipCanvasSize(1, 1, style, 720);
           setSavingStage("Membuat video…");
@@ -782,7 +1047,7 @@ export default function SesiFoto() {
               return video;
             }));
 
-            if (videos.some(Boolean)) {
+            if (videos.every(Boolean)) {
               const drawTick = () => {
                 ctx.fillStyle = "#ffffff";
                 ctx.fillRect(0, 0, width, height);
@@ -831,32 +1096,18 @@ export default function SesiFoto() {
       // blank. The "#clip.gif" / "#clip.video" fragment tells Hasil.tsx which kind it is (blob: URLs have no extension).
       const localGifUrl = gifBlob ? `${URL.createObjectURL(gifBlob)}#clip.gif` : null;
       const localVideoUrl = videoBlob ? `${URL.createObjectURL(videoBlob)}#clip.video` : null;
-      const online = isBrowserOnline() && !isOfflineSessionId(sessionId);
-      if (!online) {
-        if (localGifUrl) setMediaUrl(localGifUrl);
-        if (localVideoUrl) setMediaUrl(localVideoUrl);
+      // The result screen plays the local files straight away; it never waits for the upload (which only matters for the
+      // share link and the admin list and runs in parallel below).
+      producedMedia = true;
+      if (stillCurrent()) {
+        if (localGifUrl) setMediaUrl(localGifUrl, "gif");
+        if (localVideoUrl) setMediaUrl(localVideoUrl, "video");
       }
       if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
-        if (gifBlob) {
-          try {
-            const result = await api.uploadMedia(sessionId, "gif", gifBlob);
-            const finalGif = result?.gifUrl ?? localGifUrl;
-            if (finalGif) setMediaUrl(finalGif);
-          } catch (error) {
-            console.error("Gagal upload GIF gabungan", error);
-            if (localGifUrl) setMediaUrl(localGifUrl);
-          }
-        }
-        if (videoBlob) {
-          try {
-            const result = await api.uploadMedia(sessionId, "video", videoBlob);
-            const finalVideo = result?.videoUrl ?? localVideoUrl;
-            if (finalVideo) setMediaUrl(finalVideo);
-          } catch (error) {
-            console.error("Gagal upload video gabungan", error);
-            if (localVideoUrl) setMediaUrl(localVideoUrl);
-          }
-        }
+        await Promise.all([
+          gifBlob ? api.uploadMedia(sessionId, "gif", gifBlob).catch((error) => console.error("Gagal upload GIF gabungan", error)) : null,
+          videoBlob ? api.uploadMedia(sessionId, "video", videoBlob).catch((error) => console.error("Gagal upload video gabungan", error)) : null,
+        ]);
       }
     } catch (error) {
       console.error("Gagal menggabungkan klip semua slot", error);
@@ -864,6 +1115,7 @@ export default function SesiFoto() {
     } finally {
       setMediaUploading(false);
       setSavingStage(null);
+      if (stillCurrent()) useKioskSession.getState().setMediaPipeline(producedMedia ? "done" : "failed");
     }
   };
 
@@ -880,6 +1132,7 @@ export default function SesiFoto() {
     if (!previewReady || countdown !== null || (eventTimerEnabled && remainingSeconds <= 0) || (sessionComplete && retakeTargetRef.current === null) || captureLockRef.current) return;
     captureLockRef.current = true;
     setCaptureNotice(null);
+    startSessionRecording();
     if (cameraMode === "tether") {
       setFocusing(true);
       focusTetherCamera(config.tetherBridgeUrl)
@@ -891,7 +1144,7 @@ export default function SesiFoto() {
     const countdownMs = config.countdownSeconds * 1000;
     const clipSlot = currentSlot;
     const startDelay = Math.max(
-      config.autoCaptureEnabled ? 0 : Math.min(CLIP_MANUAL_START_DELAY_MS, Math.max(0, countdownMs - CLIP_MIN_PRE_MS)),
+      autoMode ? 0 : Math.min(CLIP_MANUAL_START_DELAY_MS, Math.max(0, countdownMs - CLIP_MIN_PRE_MS)),
       countdownMs - CLIP_MAX_PRE_MS,
     );
     const clipDuration = countdownMs - startDelay + CLIP_TAIL_MS;
@@ -926,12 +1179,12 @@ export default function SesiFoto() {
   // right after a countdown ends where countdown is already null but the
   // previous capture() hasn't resolved yet, so this never double-fires.
   useEffect(() => {
-    if (!config.autoCaptureEnabled || isEditMode) return;
+    if (!autoMode || isEditMode) return;
     if (!previewReady || (sessionComplete && retakeTarget === null) || countdown !== null || finishingEarly) return;
     const timer = window.setTimeout(() => startCountdown(), 2500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.autoCaptureEnabled, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
+  }, [autoMode, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
 
   const retake = (slot: number) => {
     if (countdown !== null || capturing || captureLockRef.current) return;
@@ -941,6 +1194,7 @@ export default function SesiFoto() {
     }
     if (eventTimerEnabled && remainingSeconds <= 0) return;
     retakeTargetRef.current = slot;
+    setSlotPopupDismissed(false);
     setRetakeTarget(slot);
     setCurrentSlot(slot);
   };
@@ -962,310 +1216,220 @@ export default function SesiFoto() {
     // twice if sessionComplete somehow flips true around the same time.
     if (!combineTriggeredRef.current) {
       combineTriggeredRef.current = true;
-      await combineSlotClips();
+      void combineSlotClips(); // builds in the background; the customer does not wait for it
     }
     navigate(getNextRoute("capture", config.kioskFlow));
   };
 
-  return (
-    <ScreenLayoutBoundary screenKey="capture">
-    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8">
-      <StepProgress current="capture" />
-      <header className="relative z-10 mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-3">
-        <Positionable id="heading" type="text" label="Judul">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{config.captureHeadline || "Siap untuk momenmu?"}</h1>
-            <p className="mt-0.5 text-sm text-muted">
-              {countdown !== null ? "Tahan pose… sebentar lagi!" : retakeTarget !== null ? `Ambil ulang foto ke-${retakeTarget + 1}. Foto lama diganti setelah kamu menjepret.` : sessionComplete ? "Semua foto sudah diambil. Lanjut untuk mempercantik hasilnya." : config.autoCaptureEnabled ? "Mode otomatis: foto berikutnya diambil sendiri." : "Ketuk tombol bulat di layar kamera untuk mulai hitung mundur."}
-            </p>
-          </div>
-        </Positionable>
-        <div className="flex items-center gap-2">
-          {config.autoCaptureEnabled && <span className="k-chip k-chip-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Mode otomatis</span>}
-          <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />Foto {Math.min(currentSlot + 1, totalPhotos)} dari {totalPhotos}</span>
-          {eventTimerEnabled && (
-            <span className={`k-chip !text-sm ${remainingSeconds < 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`}>
-              <Icon name="clock" className="h-4 w-4" />
-              {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
-            </span>
+  // --- Style-aware pieces (see components/kiosk/CaptureUI.tsx) ---------------------------------------------------
+  const styleId = resolveKioskStyle(config);
+  const fullscreen = resolveCaptureLayout(config) === "fullscreen";
+  const slotsRemaining = Math.max(0, totalPhotos - capturedCount);
+  const slotPopupKind: "frame" | "complete" | null = retakeTarget !== null ? null : sessionComplete ? "complete" : canFinishEarly ? "frame" : null;
+  const showSlotPopup = slotPopupKind !== null && !slotPopupDismissed && countdown === null && !capturing && !(eventTimerEnabled && remainingSeconds <= 0);
+  const goToResult = () => navigate(getNextRoute("capture", config.kioskFlow));
+  const savingLabel = selectedPackage?.hasGif && selectedPackage?.hasVideo ? "Menyimpan GIF & video…" : selectedPackage?.hasGif ? "Menyimpan GIF…" : "Menyimpan video…";
+  const shutterDisabled = !previewReady || countdown !== null || (sessionComplete && retakeTarget === null);
+
+  // The live picture and everything that lives ON it (loading, errors, flash). `fit` = how the picture fills the box.
+  const liveTransform = zoom === 1 && !mirrorLiveView ? undefined : `scale(${mirrorLiveView ? -zoom : zoom}, ${zoom})`;
+  const liveSurface = (fit: "cover" | "contain") => (
+    <>
+      {!previewReady && !cameraError && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
+          <div className="h-10 w-10 rounded-full border-2 border-white/20 border-t-accent animate-spin" />
+          <span className="mt-4 text-sm text-white/70">{liveViewStarting ? "Menyalakan live view kamera..." : "Menyiapkan kamera..."}</span>
+        </div>
+      )}
+      {cameraError && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center px-6 text-center" style={{ backgroundColor: "var(--kiosk-background)" }}>
+          <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-red-400/10 text-3xl">!</span>
+          <p className="mt-4 font-display text-xl font-semibold">Kamera belum tersedia</p>
+          <p className="mt-2 max-w-sm text-sm leading-6 text-fg/50">{cameraError}</p>
+          <p className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-2 text-xs text-fg/40">
+            {cameraMode === "tether"
+              ? "Pastikan digiCamControl berjalan dan kamera Canon terhubung lewat USB — layar ini akan tertutup otomatis begitu terdeteksi lagi."
+              : "Izinkan akses kamera pada browser, lalu muat ulang halaman."}
+          </p>
+        </div>
+      )}
+      {cameraMode === "tether" ? (
+        <div className="relative h-full w-full overflow-hidden bg-black">
+          <img
+            src={liveViewUrl ?? undefined}
+            alt="Live view kamera Canon"
+            className={`h-full w-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
+            style={{ transform: liveTransform, transition: "transform 0.2s ease-out" }}
+            onLoad={(event) => {
+              liveViewFailStreakRef.current = 0;
+              if (liveViewLost) setLiveViewLost(false);
+              reportLiveAspect(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight);
+            }}
+            onError={() => {
+              liveViewFailStreakRef.current += 1;
+              // A handful of consecutive failed frames (not just one — a single dropped frame during a poll is normal)
+              // means the feed is actually down, not just briefly busy.
+              if (liveViewFailStreakRef.current >= 8 && !liveViewLost) setLiveViewLost(true);
+            }}
+          />
+          {liveViewLost && !cameraError && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 text-center">
+              <div className="h-6 w-6 rounded-full border-2 border-white/20 border-t-amber-400 animate-spin" />
+              <p className="text-sm text-amber-200">Live view terputus, menyambung ulang...</p>
+            </div>
           )}
         </div>
-      </header>
-
-      <div className="relative z-10 mx-auto mt-3 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] landscape:lg:grid-cols-[minmax(230px,300px)_minmax(0,1fr)_minmax(280px,340px)] landscape:lg:grid-rows-1 xl:gap-4">
-        {/* Full redesign of the captured-photos rail — thumbnails were
-            cramped (a 108px ceiling on a wide-but-short kiosk screen made
-            them look tiny) and "retake" had zero visual affordance beyond a
-            slightly different border color. Bigger cells, an explicit
-            refresh icon + "Ambil ulang" label baked into every filled
-            thumbnail (not just on hover — this is a touchscreen), and a
-            plainer instruction line up top. */}
-        <section className="glass-panel order-2 flex min-h-0 flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:order-1 landscape:lg:h-full landscape:lg:p-4">
-          <div className="flex items-center justify-between">
-            <div><h2 className="font-display text-xl font-semibold">Jepretan</h2></div>
-            <span className="k-chip k-chip-accent">{photoUrls.filter(Boolean).length}/{totalPhotos}</span>
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onLoadedMetadata={(event) => reportLiveAspect(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
+          className="h-full w-full object-cover"
+          style={{ filter: FILTER_CSS[filter], transform: liveTransform, transition: "transform 0.2s ease-out" }}
+        />
+      )}
+      {flash && <div className="pointer-events-none absolute inset-0 z-40 animate-flash bg-white" />}
+      <CountdownOverlay value={countdown} total={config.countdownSeconds} styleId={styleId} />
+      {capturing && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center">
+          <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-4 py-2 text-xs text-white/85 backdrop-blur-sm">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+            Mengambil foto dari kamera...
           </div>
-          <p className="mt-2 hidden items-center gap-1.5 text-xs leading-5 text-fg/50 landscape:flex">
-            <IconZoomSmall className="h-3.5 w-3.5 shrink-0 text-fg/40" /> Ketuk foto untuk memperbesar{config.features.retake ? " atau ambil ulang" : ""}.
-          </p>
-          {/* `auto-rows-fr` (not `content-start`) is what actually stretches
-              every row to share out whatever height this column has — with
-              `content-start` (or a fixed per-cell height like the old
-              `h-[clamp(...)]`) the rows just pack at their own natural size
-              and leave the rest of a tall/roomy screen empty below, which is
-              exactly the "kurang terisi" (under-filled) complaint. */}
-          <div className="mt-2 flex gap-2.5 overflow-x-auto portrait:pb-1 landscape:mt-3 landscape:grid landscape:min-h-0 landscape:flex-1 landscape:auto-rows-fr landscape:grid-cols-2 landscape:overflow-visible">{Array.from({ length: totalPhotos }).map((_, index) => {
-            const photoUrl = photoUrls[index];
-            const isCurrent = index === currentSlot;
-            return (
-            <button
-              key={index}
-              onClick={() => photoUrl && setZoomSlot(index)}
-              disabled={!photoUrl}
-              className={`group relative flex h-24 w-20 shrink-0 min-h-0 flex-col overflow-hidden rounded-2xl border-2 landscape:h-full landscape:w-auto bg-fg/[0.04] transition ${isCurrent ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? "border-fg/15 hover:border-fg/35" : "border-dashed border-fg/15"}`}
-            >
-              {photoUrl ? (
-                <>
-                  <img src={photoUrl} alt={`Hasil foto ${index + 1}`} className="block h-full w-full flex-1 object-cover transition group-hover:scale-105" style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }} />
-                  {/* Always-visible retake bar — a hover-only affordance is
-                      invisible on a touchscreen, so this can't be hover-only. */}
-                  <span className="flex shrink-0 items-center justify-center gap-1 bg-black/70 py-1.5 text-[0.625rem] font-semibold text-white/85 backdrop-blur-sm">
-                    <IconZoomSmall className="h-3 w-3" /> Perbesar
-                  </span>
-                </>
-              ) : (
-                <span className="flex h-full flex-1 flex-col items-center justify-center gap-1.5 text-fg/30">
-                  <IconCameraSmall className="h-6 w-6" />
-                  <span className="text-[0.6875rem]">Menunggu</span>
-                </span>
-              )}
-              <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold ${isCurrent ? "bg-accent text-white" : "bg-black/70 text-white/85"}`}>{index + 1}</span>
-              {syncingSlots.has(index) && (
-                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-black/70" title="Menyimpan ke server...">
-                  <span className="h-2.5 w-2.5 animate-spin rounded-full border border-fg/40 border-t-accent" />
-                </span>
-              )}
-            </button>
-            );
-          })}</div>
-        </section>
+        </div>
+      )}
+    </>
+  );
 
-        <main className="order-1 flex min-h-0 min-w-0 flex-col landscape:lg:order-2">
-          {/* flex-1 + items-center here (instead of the old fixed vh height)
-              is what makes this fill whatever vertical space this column
-              actually has. The box's pixel size is computed in JS (see the
-              ResizeObserver effect above) to match whatever the camera feed
-              is actually streaming (measured live via reportLiveAspect) —
-              a Canon's live view is commonly 3:2 or 16:9, not 4:3, and
-              forcing 4:3 on a feed that isn't produced visible letterbox
-              bars. Fills the whole available box until the first real
-              frame/metadata arrives — matching the session's print
-              orientation instead (portrait output, say) used to waste the
-              screen either side of a landscape kiosk display for no reason,
-              since that orientation is only a later cropping step, not
-              something the live viewfinder itself needs to pre-match. Plain CSS aspect-ratio was
-              tried first but doesn't reliably fill a flex item — see the
-              comment on previewContainerRef above. */}
-          <div ref={previewContainerRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[2rem] bg-[#0b0d16] p-1.5 shadow-2xl ring-1 ring-fg/10">
-            <motion.div
-              animate={{ scale: flash ? 1.08 : 1 }}
-              transition={{ duration: flash ? 0.18 : 0.4, ease: flash ? "easeOut" : "easeInOut" }}
-              style={{
-                zIndex: flash ? 30 : "auto",
-                width: previewSize?.width,
-                height: previewSize?.height,
-              }}
-              className="relative max-h-full max-w-full overflow-hidden rounded-[1.7rem]"
-            >
-              {!previewReady && !cameraError && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
-                  <div className="h-10 w-10 rounded-full border-2 border-fg/20 border-t-accent animate-spin" />
-                  <span className="mt-4 text-sm text-fg/60">{liveViewStarting ? "Menyalakan live view kamera..." : "Menyiapkan kamera..."}</span>
-                </div>
-              )}
-              {cameraError && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center px-6 text-center" style={{ backgroundColor: "var(--kiosk-background)" }}>
-                  <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-red-400/10 text-3xl">!</span>
-                  <p className="mt-4 font-display text-xl font-semibold">Kamera belum tersedia</p>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-fg/50">{cameraError}</p>
-                  <p className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-2 text-xs text-fg/40">
-                    {cameraMode === "tether"
-                      ? "Pastikan digiCamControl berjalan dan kamera Canon terhubung lewat USB — layar ini akan tertutup otomatis begitu terdeteksi lagi."
-                      : "Izinkan akses kamera pada browser, lalu muat ulang halaman."}
-                  </p>
-                </div>
-              )}
-              {cameraMode === "tether" ? (
-                <div className="relative h-full w-full bg-black">
-                  <img
-                    src={liveViewUrl ?? undefined}
-                    alt="Live view kamera Canon"
-                    className="h-full w-full object-contain"
-                    style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
-                    onLoad={(event) => {
-                      liveViewFailStreakRef.current = 0;
-                      if (liveViewLost) setLiveViewLost(false);
-                      reportLiveAspect(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight);
-                    }}
-                    onError={() => {
-                      liveViewFailStreakRef.current += 1;
-                      // A handful of consecutive failed frames (not just one —
-                      // a single dropped frame during a poll is normal) means
-                      // the feed is actually down, not just briefly busy.
-                      if (liveViewFailStreakRef.current >= 8 && !liveViewLost) setLiveViewLost(true);
-                    }}
-                  />
-                  {liveViewLost && !cameraError && (
-                    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/70 text-center">
-                      <div className="h-6 w-6 rounded-full border-2 border-fg/20 border-t-amber-400 animate-spin" />
-                      <p className="text-sm text-amber-200">Live view terputus, menyambung ulang...</p>
-                    </div>
-                  )}
-                  <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-emerald-300/40 bg-black/60 px-3 py-1 text-xs text-emerald-200 backdrop-blur-sm">
-                    LIVE VIEW
-                  </div>
-                </div>
-              ) : (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  onLoadedMetadata={(event) => reportLiveAspect(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
-                  className="h-full w-full object-cover"
-                  style={{ filter: FILTER_CSS[filter], transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => useKioskSession.getState().setMirrorLiveView(!useKioskSession.getState().mirrorLiveView)}
-                aria-pressed={mirrorLiveView}
-                className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-full border border-white/25 bg-black/55 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/70"
-              >
-                <Icon name="mirror" className="h-4 w-4" />
-                Cermin {mirrorLiveView ? "aktif" : "mati"}
-              </button>
-              {flash && <div className="pointer-events-none absolute inset-0 animate-flash bg-white" />}
-              {capturing && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center">
-                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/70 px-4 py-2 text-xs text-white/80 backdrop-blur-sm">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                    Mengambil foto dari kamera...
-                  </div>
-                </div>
-              )}
-              <motion.button
-                onClick={startCountdown}
-                disabled={!previewReady || countdown !== null || (sessionComplete && retakeTarget === null)}
-                whileTap={{ scale: 0.92 }}
-                aria-label="Ambil foto"
-                className="absolute left-1/2 top-[78%] z-30 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-fg shadow-[0_0_0_4px_rgba(0,0,0,0.35)] transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-28 sm:w-28"
-              >
-                {countdown !== null ? (
-                  <>
-                    <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
-                      <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="4" />
-                      <circle cx="50" cy="50" r="44" fill="none" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" strokeDasharray="276" strokeDashoffset={276 * (1 - countdown / Math.max(1, config.countdownSeconds))} transform="rotate(-90 50 50)" />
-                    </svg>
-                    <span className="relative text-3xl font-bold text-fg drop-shadow">{countdown}</span>
-                  </>
-                ) : (
-                  <span className={`flex h-[85%] w-[85%] items-center justify-center rounded-full bg-white shadow-inner transition ${focusing ? "animate-pulse" : ""}`}>
-                    <svg viewBox="0 0 24 24" className="h-8 w-8 text-accent" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
-                      <circle cx="12" cy="13" r="3.4" />
-                    </svg>
-                  </span>
-                )}
-              </motion.button>
-            </motion.div>
-          </div>
-          {captureNotice && <p className="relative z-10 mt-3 text-center text-sm text-amber-300">{captureNotice}</p>}
-          {/* Above the filter bar, not below it — customers scanning this
-              screen top-to-bottom hit "continue" before they'd even reach a
-              filter row buried at the very bottom, which read as if there
-              was no way forward at all. */}
-          {retakeTarget !== null && (
-            <button onClick={cancelRetake} disabled={countdown !== null || capturing} className="k-btn relative z-10 mt-3 w-full disabled:opacity-50">
-              Batal ambil ulang — pakai foto ke-{retakeTarget + 1} yang lama
-            </button>
-          )}
-          {sessionComplete && retakeTarget === null && (
-            <button onClick={() => navigate(getNextRoute("capture", config.kioskFlow))} disabled={mediaUploading} className="k-btn k-btn-accent k-btn-lg relative z-10 mt-3 w-full disabled:cursor-wait disabled:opacity-60">
-              {mediaUploading
-                ? <><Spinner size="md" />{selectedPackage?.hasGif && selectedPackage?.hasVideo
-                    ? "Menyimpan GIF & video sesi..."
-                    : selectedPackage?.hasGif ? "Menyimpan GIF sesi..." : "Menyimpan video sesi..."}</>
-                : <>Lanjut: percantik hasil foto <Icon name="arrow-right" className="h-5 w-5" /></>}
-            </button>
-          )}
-          {canFinishEarly && (
-            <button onClick={finishEarly} disabled={finishingEarly} className="k-btn relative z-10 mt-3 w-full !border-accent/40 !bg-accent/10 !text-accent disabled:cursor-wait disabled:opacity-60">
-              {finishingEarly ? "Menyimpan..." : <>Frame sudah penuh ({templateSlotCount} foto) — Lanjutkan sekarang <span className="ml-2">→</span></>}
-            </button>
-          )}
-          {config.features.filters && (
-          <div className="glass-panel mt-3 rounded-2xl p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Filter warna</span><span className="font-semibold text-accent">{FILTER_LABELS[filter]}</span></div><div className="mt-2 flex justify-center gap-2 overflow-x-auto pb-1">{FILTER_ORDER.map((key) => <button key={key} onClick={() => setFilter(key)} className={`min-w-[4.25rem] rounded-xl border p-1 text-center transition ${filter === key ? "border-accent bg-accent/15 shadow-lg shadow-accent/20" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}><div className="h-7 rounded-lg bg-fg/10" style={{ filter: FILTER_CSS[key] }} /><span className="mt-1 block text-[0.5625rem]">{FILTER_LABELS[key]}</span></button>)}</div></div>
-          )}
-        </main>
+  const zoomLocked = countdown !== null || capturing;
+  const zoomControl = (
+    <div className="flex items-center gap-0.5 rounded-full border border-white/25 bg-black/40 p-1 text-white backdrop-blur-md" role="group" aria-label="Zoom kamera">
+      <button type="button" onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))} disabled={zoomLocked || zoom <= ZOOM_MIN} aria-label="Zoom out" className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition hover:bg-white/15 disabled:opacity-35">−</button>
+      <button type="button" onClick={() => setZoom(1)} disabled={zoomLocked || zoom === 1} aria-label="Reset zoom" title="Reset zoom" className="min-w-[3rem] px-1 text-center text-xs font-semibold tabular-nums disabled:opacity-100">{zoom.toFixed(2).replace(/\.?0+$/, "")}×</button>
+      <button type="button" onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))} disabled={zoomLocked || zoom >= ZOOM_MAX} aria-label="Zoom in" className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition hover:bg-white/15 disabled:opacity-35">+</button>
+    </div>
+  );
 
-        <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-[2rem] p-3 landscape:lg:flex"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-semibold">Dalam frame</h2></div><span className="max-w-[45%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div><p className="mt-2 text-xs leading-5 text-[var(--kiosk-muted)]">Foto otomatis masuk ke frame pilihan.</p>{template ? (
-          // `h-full w-full` (not just `max-h-full max-w-full`) is load-bearing:
-          // a <canvas> with no explicit size renders at its own drawing-buffer
-          // resolution and just sits there small on a roomy screen — max-*
-          // alone only ever shrinks it back down, never grows it to fill
-          // available space. `object-contain` then keeps the drawn frame's
-          // real aspect ratio inside that stretched box instead of distorting it.
-          <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-fg/10 bg-fg/[0.04] p-3">
-            <canvas ref={templateCanvasRef} className="h-full w-full rounded-xl object-contain" />
-          </div>
-        ) : <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Frame belum dipilih</div>}</section>
+  const mirrorButton = (
+    <button
+      type="button"
+      onClick={() => useKioskSession.getState().setMirrorLiveView(!useKioskSession.getState().mirrorLiveView)}
+      aria-pressed={mirrorLiveView}
+      className="flex items-center gap-2 rounded-full border border-white/25 bg-black/40 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
+    >
+      <Icon name="mirror" className="h-4 w-4" />
+      {mirrorLiveView ? "Mirror" : "Mirror off"}
+    </button>
+  );
+
+  // Replace-a-photo banner: sits ON the live view so it is obvious which photo the next shutter press replaces.
+  const retakeBanner = retakeTarget !== null && countdown === null && !capturing && (
+    <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+      <div className="flex max-w-full items-center gap-3 rounded-full border border-amber-300/60 bg-black/70 py-1.5 pl-4 pr-1.5 text-sm text-white shadow-xl backdrop-blur-md">
+        <IconRefreshSmall className="h-4 w-4 shrink-0 text-amber-300" />
+        <span className="min-w-0"><b>Mengganti foto ke-{retakeTarget + 1}</b> — tekan tombol kamera</span>
+        <button type="button" onClick={cancelRetake} className="shrink-0 rounded-full bg-white/15 px-3.5 py-1.5 text-xs font-bold transition hover:bg-white/25">Batal</button>
       </div>
+    </motion.div>
+  );
+
+  // One photo slot. The "just captured" confirmation lives HERE (a check pops on the slot), not in a toast.
+  const renderSlot = (index: number, variant: "rail" | "float") => {
+    const photoUrl = photoUrls[index];
+    const isCurrent = index === currentSlot;
+    const isRetaking = retakeTarget === index;
+    const justCaptured = capturedSlot === index;
+    const size = variant === "float" ? "h-[4.25rem] w-[3.25rem] sm:h-24 sm:w-[4.5rem]" : "h-[5.5rem] w-[4.25rem] landscape:h-auto landscape:w-full landscape:aspect-[3/4]";
+    return (
+      <motion.div
+        key={index}
+        animate={justCaptured ? { scale: [1, 1.14, 1] } : { scale: 1 }}
+        transition={{ duration: 0.45 }}
+        className={`relative flex shrink-0 min-h-0 flex-col overflow-hidden rounded-2xl border-2 transition ${size} ${
+          variant === "float" ? "bg-black/35 backdrop-blur-md" : "bg-fg/[0.04]"
+        } ${isRetaking ? "border-amber-400 shadow-lg shadow-amber-400/30" : justCaptured ? "border-emerald-400 shadow-lg shadow-emerald-400/40" : isCurrent && !photoUrl ? "border-accent shadow-lg shadow-accent/25" : photoUrl ? (variant === "float" ? "border-white/40" : "border-fg/15") : variant === "float" ? "border-dashed border-white/35" : "border-dashed border-fg/15"}`}
+      >
+        {photoUrl ? (
+          <>
+            <button type="button" onClick={() => setZoomSlot(index)} aria-label={`Perbesar foto ${index + 1}`} className="relative block min-h-0 w-full flex-1 overflow-hidden">
+              <img src={photoUrl} alt={`Hasil foto ${index + 1}`} className="block h-full w-full object-cover" style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }} />
+            </button>
+            {config.features.retake && (
+              <button type="button" onClick={() => retake(index)} disabled={countdown !== null || capturing} className={`flex shrink-0 items-center justify-center gap-1 py-1.5 text-[0.625rem] font-bold transition disabled:opacity-50 ${isRetaking ? "bg-amber-400 text-black" : "bg-black/75 text-white hover:bg-accent"}`}>
+                <IconRefreshSmall className="h-3 w-3" /> {isRetaking ? "Diganti…" : "Ganti"}
+              </button>
+            )}
+            {isRetaking && (
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 px-1 text-center text-[0.625rem] font-bold leading-tight text-amber-200">Menunggu foto baru</span>
+            )}
+          </>
+        ) : (
+          <span className={`flex h-full flex-1 flex-col items-center justify-center gap-1.5 ${variant === "float" ? "text-white/60" : "text-fg/30"}`}>
+            <IconCameraSmall className={variant === "float" ? "h-5 w-5" : "h-6 w-6"} />
+          </span>
+        )}
+        <AnimatePresence>
+          {justCaptured && (
+            <motion.span initial={{ opacity: 0, scale: 0.4 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 18 }} className="pointer-events-none absolute inset-0 flex items-center justify-center bg-emerald-500/35">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400 text-black shadow-lg"><Icon name="check" className="h-5 w-5" strokeWidth={3.5} /></span>
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[0.6875rem] font-bold ${isCurrent || isRetaking ? "bg-accent text-on-accent" : "bg-black/70 text-white/85"}`}>{index + 1}</span>
+        {syncingSlots.has(index) && (
+          <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70" title="Menyimpan ke server...">
+            <span className="h-2.5 w-2.5 animate-spin rounded-full border border-white/40 border-t-accent" />
+          </span>
+        )}
+      </motion.div>
+    );
+  };
+
+  const popup = (
+    <SlotFullPopup
+      show={showSlotPopup}
+      kind={slotPopupKind ?? "complete"}
+      slots={templateSlotCount}
+      remaining={slotsRemaining}
+      busy={finishingEarly}
+      busyLabel={slotPopupKind === "complete" ? savingLabel : "Menyimpan…"}
+      onContinue={() => (slotPopupKind === "complete" ? goToResult() : void finishEarly())}
+      onStay={() => setSlotPopupDismissed(true)}
+    />
+  );
+
+  // After the popup was dismissed there must still be an obvious way forward.
+  const continueButtons = slotPopupDismissed && retakeTarget === null && (sessionComplete || canFinishEarly) && (
+    <div className="relative z-10 mt-3 flex w-full flex-col gap-2">
+      {sessionComplete ? (
+        <button onClick={goToResult} className="k-btn k-btn-accent k-btn-lg w-full">
+          Lanjut ke hasil <Icon name="arrow-right" className="h-5 w-5" />
+        </button>
+      ) : (
+        <button onClick={finishEarly} disabled={finishingEarly} className="k-btn w-full !border-accent/40 !bg-accent/10 !text-accent disabled:cursor-wait disabled:opacity-60">
+          {finishingEarly ? "Menyimpan..." : <>Lanjut ke hasil sekarang ({templateSlotCount} slot terisi) <Icon name="arrow-right" className="h-5 w-5" /></>}
+        </button>
+      )}
+    </div>
+  );
+
+  const overlays = (
+    <>
       {/* Building the GIF/video is heavy and used to leave a frozen-looking screen — say what is happening instead */}
       <AnimatePresence>
         {savingStage && !(eventTimerEnabled && remainingSeconds <= 0) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-canvas/85 backdrop-blur-md" role="status" aria-live="polite">
-            <div className="h-16 w-16 animate-spin rounded-full border-4 border-fg/15 border-t-accent" />
-            <div className="text-center">
-              <p className="font-display text-2xl font-semibold">Menyimpan hasil sesimu…</p>
-              <p className="mt-1 text-fg/55">{savingStage} Mohon tunggu sebentar, jangan tutup layar.</p>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="status" aria-live="polite">
+            <div className="flex items-center gap-3 rounded-full border border-fg/15 bg-black/70 px-4 py-2.5 text-sm text-white shadow-xl backdrop-blur-md">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              <span>{savingStage} <span className="text-white/60">Kamu bisa lanjut, ini jalan di latar belakang.</span></span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-      {eventTimerEnabled && remainingSeconds <= 0 && (
-        <TimerExpiredOverlay onSkip={() => navigate(getNextRoute("capture", config.kioskFlow))} waitingForMedia={mediaUploading} />
-      )}
-
-      {/* Capture success toast */}
-      <AnimatePresence>
-        {capturedSlot !== null && (
-          <motion.div
-            key={capturedSlot}
-            initial={{ opacity: 0, scale: 0.85, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-none fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-3"
-          >
-            <motion.div
-              initial={{ scale: 0.7, opacity: 0 }}
-              animate={{ scale: [0.7, 1.15, 1], opacity: [0, 1, 1] }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/20 ring-4 ring-emerald-400/40 shadow-2xl shadow-emerald-400/20"
-            >
-              <Icon name="check" className="h-10 w-10 text-emerald-300" strokeWidth={3} />
-            </motion.div>
-            <div className="rounded-2xl border border-emerald-400/30 bg-black/80 px-5 py-3 text-center backdrop-blur-md shadow-2xl">
-              <p className="font-display text-lg font-semibold text-emerald-300">Foto ke-{capturedSlot + 1} berhasil!</p>
-              <p className="text-xs text-fg/50 mt-0.5">{capturedSlot + 1} dari {totalPhotos} foto diambil</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {eventTimerEnabled && remainingSeconds <= 0 && <TimerExpiredOverlay onSkip={goToResult} waitingForMedia={false} />}
       <canvas ref={canvasRef} className="hidden" />
-
       {zoomSlot !== null && photoUrls[zoomSlot] && (
         <ZoomableImageModal
           src={photoUrls[zoomSlot]}
@@ -1277,20 +1441,138 @@ export default function SesiFoto() {
             <>
               <button type="button" onClick={() => setZoomSlot(null)} className="k-btn !border-white/25 !bg-white/10 !text-white">Tutup</button>
               {config.features.retake ? (
-                <button
-                  type="button"
-                  onClick={() => { retake(zoomSlot); setZoomSlot(null); }}
-                  disabled={countdown !== null || capturing}
-                  className="k-btn k-btn-accent disabled:opacity-50"
-                >
-                  <IconRefreshSmall className="h-5 w-5" /> Ambil ulang foto ini
+                <button type="button" onClick={() => { retake(zoomSlot); setZoomSlot(null); }} disabled={countdown !== null || capturing} className="k-btn k-btn-accent disabled:opacity-50">
+                  <IconRefreshSmall className="h-5 w-5" /> Ganti foto ini
                 </button>
               ) : null}
             </>
           }
         />
       )}
+    </>
+  );
 
+  const filterControl = (className: string) =>
+    config.features.filters ? (
+      <FilterControl filter={filter} onPick={(key) => setFilter(key as CameraFilter)} order={FILTER_ORDER} labels={FILTER_LABELS} css={FILTER_CSS} open={showFilters} setOpen={setShowFilters} className={className} />
+    ) : null;
+
+  const statusChips = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center rounded-full border border-fg/15 bg-black/30 p-0.5 text-xs font-semibold backdrop-blur-md" role="group" aria-label="Mode jepret">
+        {([[true, "Otomatis"], [false, "Manual"]] as const).map(([value, label]) => (
+          <button key={label} type="button" onClick={() => setAutoMode(value)} disabled={countdown !== null || capturing} aria-pressed={autoMode === value} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition disabled:opacity-60 ${autoMode === value ? "bg-accent text-on-accent shadow" : "text-fg/70 hover:text-fg"}`}>
+            {value && autoMode && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+            {label}
+          </button>
+        ))}
+      </div>
+      <span className="k-chip k-chip-accent !text-sm"><Icon name="camera" className="h-4 w-4" />{Math.min(currentSlot + 1, totalPhotos)} / {totalPhotos}</span>
+      {eventTimerEnabled && (
+        <span className={`k-chip !text-sm ${remainingSeconds < 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`}>
+          <Icon name="clock" className="h-4 w-4" />
+          {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
+        </span>
+      )}
+    </div>
+  );
+
+  // =================================================================================================================
+  // Layar penuh: the live view fills the screen; every control floats on top, transparent.
+  // Photo slots stand in a column on the LEFT edge (never over the picture's middle).
+  // =================================================================================================================
+  if (fullscreen) {
+    return (
+      <ScreenLayoutBoundary screenKey="capture">
+        <div className="kinetic-page kinetic-page-session force-dark relative h-full min-h-0 w-full overflow-hidden bg-black">
+          <div ref={previewContainerRef} className="absolute inset-0">
+            <motion.div animate={{ scale: flash ? 1.03 : 1 }} transition={{ duration: flash ? 0.18 : 0.4 }} className="relative h-full w-full overflow-hidden">
+              {liveSurface("cover")}
+            </motion.div>
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-gradient-to-b from-black/50 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-36 bg-gradient-to-t from-black/50 to-transparent" />
+          <StepProgress current="capture" />
+
+          <header className="absolute inset-x-3 top-[4.25rem] z-30 flex items-start justify-between gap-2 sm:inset-x-5">
+            <div className="min-w-0">{statusChips}</div>
+            <div className="flex items-center gap-2">{zoomControl}{mirrorButton}</div>
+          </header>
+          {retakeBanner && <div className="absolute inset-x-0 top-[7.25rem] z-30">{retakeBanner}</div>}
+
+          {/* Photo slots: left edge, vertical, scrolls if there are many */}
+          <div className="absolute bottom-24 left-3 top-[7.5rem] z-30 flex flex-col items-center gap-2 overflow-y-auto overscroll-contain [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto sm:left-5">
+            {Array.from({ length: totalPhotos }).map((_, index) => renderSlot(index, "float"))}
+          </div>
+
+          <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} focusing={focusing} styleId={styleId} />
+          {filterControl("bottom-4 left-3 sm:left-5")}
+
+          {captureNotice && <p className="absolute inset-x-0 top-[9.5rem] z-30 text-center text-sm text-amber-300">{captureNotice}</p>}
+          {slotPopupDismissed && retakeTarget === null && (sessionComplete || canFinishEarly) && (
+            <div className="absolute bottom-4 right-3 z-30 w-[min(44vw,18rem)] sm:right-5">{continueButtons}</div>
+          )}
+          {popup}
+          {overlays}
+        </div>
+      </ScreenLayoutBoundary>
+    );
+  }
+
+  // =================================================================================================================
+  // Dengan panel. Portrait: camera on top, shots in a row below. Landscape: shots in a column on the left, camera
+  // fills the rest, and the frame preview joins on wide screens (xl).
+  // =================================================================================================================
+  return (
+    <ScreenLayoutBoundary screenKey="capture">
+    <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8 landscape:pt-14">
+      <StepProgress current="capture" />
+      <header className="relative z-10 mx-auto flex w-full max-w-[1800px] shrink-0 flex-wrap items-center justify-between gap-2">
+        <Positionable id="heading" type="text" label="Judul">
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl landscape:text-xl">{config.captureHeadline || "Sesi Foto"}</h1>
+        </Positionable>
+        {statusChips}
+      </header>
+
+      <div className="relative z-10 mx-auto mt-2 grid min-h-0 w-full max-w-[1800px] flex-1 items-stretch gap-3 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] landscape:grid-cols-[minmax(92px,128px)_minmax(0,1fr)] landscape:grid-rows-1 landscape:xl:grid-cols-[minmax(110px,150px)_minmax(0,1fr)_minmax(230px,320px)] xl:gap-4">
+        <section className="glass-panel order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl p-2.5 landscape:order-1">
+          <div className="flex gap-2 overflow-x-auto portrait:pb-0.5 landscape:min-h-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-y-auto landscape:overflow-x-hidden">
+            {Array.from({ length: totalPhotos }).map((_, index) => renderSlot(index, "rail"))}
+          </div>
+        </section>
+
+        <main className="order-1 flex min-h-0 min-w-0 flex-col landscape:order-2">
+          {/* The box's pixel size is computed in JS (ResizeObserver effect above) to match the camera feed's real aspect
+              ratio — see previewContainerRef. */}
+          <div ref={previewContainerRef} className="relative flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-3xl bg-[#0b0d16] p-1 shadow-2xl ring-1 ring-fg/10">
+            <motion.div
+              animate={{ scale: flash ? 1.08 : 1 }}
+              transition={{ duration: flash ? 0.18 : 0.4, ease: flash ? "easeOut" : "easeInOut" }}
+              style={{ zIndex: flash ? 30 : "auto", width: previewSize?.width, height: previewSize?.height }}
+              className="relative max-h-full max-w-full overflow-hidden rounded-[1.3rem]"
+            >
+              {liveSurface("contain")}
+              <div className="absolute right-3 top-3 z-30 flex items-center gap-2">{zoomControl}{mirrorButton}</div>
+              {retakeBanner}
+              <ShutterButton onClick={startCountdown} disabled={shutterDisabled} countdown={countdown} focusing={focusing} styleId={styleId} />
+              {filterControl("bottom-4 left-3")}
+              {popup}
+            </motion.div>
+          </div>
+          {captureNotice && <p className="relative z-10 mt-2 text-center text-sm text-amber-300">{captureNotice}</p>}
+          {continueButtons}
+        </main>
+
+        <section className="glass-panel order-3 hidden min-h-0 h-full flex-col overflow-hidden rounded-3xl p-3 landscape:xl:flex">
+          <div className="flex items-center justify-between gap-2"><h2 className="font-display text-lg font-semibold">Frame</h2><span className="max-w-[60%] truncate rounded-full border border-accent/30 bg-accent/10 px-2 py-1 text-[0.625rem] text-accent">{template?.name ?? "Belum dipilih"}</span></div>
+          {template ? (
+            <div className="mt-2 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-fg/10 bg-fg/[0.04] p-2">
+              <canvas ref={templateCanvasRef} className="h-full w-full rounded-xl object-contain" />
+            </div>
+          ) : <div className="mt-2 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-fg/15 text-xs text-[var(--kiosk-muted)]">Tanpa frame</div>}
+        </section>
+      </div>
+      {overlays}
     </div>
     </ScreenLayoutBoundary>
   );

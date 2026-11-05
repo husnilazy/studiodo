@@ -20,10 +20,12 @@ import PaymentSettings from "./PaymentSettings";
 import VoucherManagement from "./VoucherManagement";
 import CameraSettings from "./CameraSettings";
 import PrinterSettings from "./PrinterSettings";
+import OperatorAccessSettings from "./OperatorAccessSettings";
 import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
+import HelpChatButton from "@/components/HelpChatButton";
 import NetProgressBar from "@/components/NetProgressBar";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
@@ -52,6 +54,47 @@ function Metric({ label, value, detail, icon = "chart" }: { label: string; value
       <p className="mt-3 font-display text-3xl font-semibold tracking-tight">{value}</p>
       {detail && <p className="mt-1.5 text-xs font-medium text-accent">{detail}</p>}
     </div>
+  );
+}
+
+function CompactStat({ label, value, detail, icon = "chart" }: { label: string; value: string; detail?: string; icon?: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-fg/10 bg-surface px-4 py-3 shadow-glass">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent"><Icon name={icon} className="h-[18px] w-[18px]" /></span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-fg/45">{label}</p>
+        <p className="truncate font-display text-xl font-semibold leading-tight tracking-tight">{value}</p>
+        {detail && <p className="truncate text-[11px] font-medium text-accent">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Finance > Transaksi: compact table inside its own scrolling panel; latest rows first with a "Tampilkan semua" toggle.
+function TransactionsPanel({ sessions }: { sessions: any[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = sessions.filter((item) => item.paymentStatus !== "expired").slice().reverse();
+  const hidden = sessions.length - rows.length;
+  const visible = showAll ? rows.slice(0, 200) : rows.slice(0, 12);
+  return (
+    <section className={panel}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-display text-xl font-semibold">Transaksi terbaru</h3>
+        <span className="text-xs text-fg/40">{hidden > 0 ? `${hidden} sesi yang tidak jadi dibayar disembunyikan · ` : ""}{visible.length} dari {rows.length}</span>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wider text-fg/45"><tr><th className="px-3 py-2">Waktu</th><th className="px-3 py-2">Metode</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
+          <tbody>
+            {visible.map((item: any) => { const status = paymentStatusBadge(item.paymentStatus, item.createdAt); return (
+              <tr key={item.id} className="border-t border-fg/10"><td className="px-3 py-2 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="px-3 py-2">{paymentMethodLabel(item.paymentMethod)}</td><td className="px-3 py-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${status.className}`}>{status.label}</span></td><td className="px-3 py-2 text-right">{money(Number(item.totalAmount ?? 0))}</td></tr>
+            ); })}
+            {rows.length === 0 && <tr><td colSpan={4} className="px-3 py-8 text-center text-fg/40">Belum ada transaksi.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 12 && <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-3 text-sm font-semibold text-accent hover:underline">{showAll ? "Tampilkan lebih sedikit" : `Tampilkan semua (${Math.min(rows.length, 200)})`}</button>}
+    </section>
   );
 }
 
@@ -162,7 +205,9 @@ function SubscriptionBanner({ me }: { me: MeInfo }) {
 
 // "expired" = a session row that was opened but never paid (customer walked away, screen re-opened…). It used to be
 // lumped in with "pending", so the log kept showing PENDING next to the session that actually succeeded.
-function paymentStatusBadge(status: string) {
+function paymentStatusBadge(status: string, createdAt?: string | null) {
+  // A "pending" row older than a day can never be paid any more (QR expired) - show it as unpaid instead of "Menunggu bayar" forever.
+  if (status === "pending" && createdAt && Date.now() - new Date(createdAt).getTime() > 24 * 3600 * 1000) status = "expired";
   switch (status) {
     case "success": return { label: "Berhasil", className: "bg-emerald-400/15 text-emerald-600" };
     case "failed": return { label: "Gagal", className: "bg-red-400/15 text-red-500" };
@@ -170,7 +215,7 @@ function paymentStatusBadge(status: string) {
     default: return { label: "Menunggu bayar", className: "bg-amber-300/20 text-amber-600" };
   }
 }
-const paymentMethodLabel = (method?: string | null) => ({ qris: "QRIS", voucher: "Voucher", cash: "Cash", event: "Event gratis" } as Record<string, string>)[method ?? ""] ?? "belum dipilih";
+const paymentMethodLabel = (method?: string | null) => ({ qris: "QRIS", doku: "DOKU QRIS", xendit: "QRIS", voucher: "Voucher", cash: "Cash", event: "Event gratis" } as Record<string, string>)[method ?? ""] ?? "belum dipilih";
 
 function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traffic: any[]; metrics: any }) {
   const sortedTraffic = [...traffic].sort((left, right) => left.date.localeCompare(right.date));
@@ -185,14 +230,15 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
   const formatDate = (date: string) => date === "-" ? "-" : new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon="activity" label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
-        <Metric icon="check" label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
-        <Metric icon="clock" label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
-        <Metric icon="chart" label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="grid shrink-0 grid-cols-2 gap-3 xl:grid-cols-4">
+        <CompactStat icon="activity" label="Total sesi" value={String(metrics.totalSessions ?? 0)} detail="Semua kunjungan tercatat" />
+        <CompactStat icon="check" label="Sesi berhasil" value={String(metrics.paidSessions ?? 0)} detail={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}% conversion`} />
+        <CompactStat icon="clock" label="Hari tersibuk" value={formatDate(peak.date)} detail={`${peak.visits} sesi pada hari tersebut`} />
+        <CompactStat icon="chart" label="Tren terbaru" value={`${trend >= 0 ? "+" : ""}${trend}%`} detail={latest ? `${latest.visits} sesi di ${formatDate(latest.date)}` : "Belum ada data"} />
       </div>
 
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain pb-3">
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <section className={`${panel} overflow-hidden`}>
           {sortedTraffic.length > 0 ? <TrendChart data={sortedTraffic} /> : <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-fg/10 text-sm text-fg/35">Belum ada aktivitas traffic.</div>}
@@ -212,7 +258,7 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[.16em] text-accent">LIVE LOG</p><h3 className="mt-2 font-display text-2xl font-semibold">Aktivitas sesi terbaru</h3></div><span className="text-xs text-fg/40">{sessions.length} sesi total</span></div>
         <div className="mt-5 divide-y divide-fg/10">
           {sessions.filter((item) => item.paymentStatus !== "expired").slice(-6).reverse().map((item) => {
-            const status = paymentStatusBadge(item.paymentStatus);
+            const status = paymentStatusBadge(item.paymentStatus, item.createdAt);
             return (
               <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
@@ -229,6 +275,7 @@ function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traff
           {sessions.length === 0 && <p className="py-8 text-sm text-fg/40">Belum ada sesi tercatat.</p>}
         </div>
       </section>
+      </div>
     </div>
   );
 }
@@ -499,12 +546,16 @@ const KIOSK_SUBTABS = [
   { id: "keys", label: "API Key" },
   { id: "camera", label: "Kamera" },
   { id: "printer", label: "Printer" },
+  { id: "access", label: "Akses operator" },
 ] as const;
 type KioskSubtab = (typeof KIOSK_SUBTABS)[number]["id"];
 
 const FINANCE_SUBTABS = [
-  { id: "packages", label: "Paket & QRIS" },
-  { id: "promo", label: "Promosi" },
+  { id: "transactions", label: "Transaksi" },
+  { id: "packages", label: "Paket Foto" },
+  { id: "gateway", label: "Pembayaran" },
+  { id: "event", label: "Event Gratis" },
+  { id: "promo", label: "Voucher & Promosi" },
   { id: "withdraw", label: "Saldo & Penarikan" },
 ] as const;
 type FinanceSubtab = (typeof FINANCE_SUBTABS)[number]["id"];
@@ -602,7 +653,7 @@ function AppVersionFooter() {
 export default function AdminDashboard() {
   const [section, setSection] = useState<Section>("monitor");
   const [kioskSubtab, setKioskSubtab] = useState<KioskSubtab>("keys");
-  const [financeSubtab, setFinanceSubtab] = useState<FinanceSubtab>("packages");
+  const [financeSubtab, setFinanceSubtab] = useState<FinanceSubtab>("transactions");
   const [overview, setOverview] = useState<any>({ sessions: [], metrics: {}, traffic: [] });
   const [me, setMe] = useState<MeInfo>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -752,7 +803,7 @@ export default function AdminDashboard() {
 
   const currentSection = sections.find((item) => item.id === section)!;
   // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
-  const fitSection = section === "media" || section === "crm";
+  const fitSection = section === "media" || section === "crm" || section === "finance" || section === "kiosk" || section === "control" || section === "traffic";
   const navButton = (item: (typeof sections)[number]) => (
     <button
       key={item.id}
@@ -852,8 +903,8 @@ export default function AdminDashboard() {
           {section === "control" && <AdminPlaceholder />}
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (
-            <div className="space-y-6">
-              <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori pengaturan kiosk">
+            <div className="flex h-full min-h-0 flex-col gap-3">
+              <nav className="flex shrink-0 gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori pengaturan kiosk">
                 {KIOSK_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
@@ -865,31 +916,43 @@ export default function AdminDashboard() {
                   </button>
                 ))}
               </nav>
-              {kioskSubtab === "keys" && <KioskKeys />}
-              {kioskSubtab === "camera" && <CameraSettings />}
-              {kioskSubtab === "printer" && <PrinterSettings />}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3">
+                {kioskSubtab === "keys" && <KioskKeys />}
+                {kioskSubtab === "camera" && <CameraSettings />}
+                {kioskSubtab === "printer" && <PrinterSettings />}
+                {kioskSubtab === "access" && <OperatorAccessSettings />}
+              </div>
             </div>
           )}
           {section === "flow" && <KioskFlowSettings />}
           {section === "finance" && (
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric icon="wallet" label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} /><Metric icon="chart" label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} /><Metric icon="qr" label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris").length)} /><Metric icon="ticket" label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} /></div>
-              <section className={panel}><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-display text-2xl font-semibold">Transaksi terbaru</h3>{sessions.some((item: any) => item.paymentStatus === "expired") && <span className="text-xs text-fg/40">{sessions.filter((item: any) => item.paymentStatus === "expired").length} sesi yang tidak jadi dibayar disembunyikan</span>}</div><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-fg/45"><tr><th className="p-3">Waktu</th><th className="p-3">Metode</th><th className="p-3">Status</th><th className="p-3">Total</th></tr></thead><tbody>{sessions.filter((item: any) => item.paymentStatus !== "expired").slice(-12).reverse().map((item: any) => { const status = paymentStatusBadge(item.paymentStatus); return <tr key={item.id} className="border-t border-fg/10"><td className="p-3 text-fg/60">{new Date(item.createdAt).toLocaleString("id-ID")}</td><td className="p-3">{paymentMethodLabel(item.paymentMethod)}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${status.className}`}>{status.label}</span></td><td className="p-3">{money(Number(item.totalAmount ?? 0))}</td></tr>; })}</tbody></table></div></section>
-              <nav className="flex gap-1 rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori finance">
+            <div className="flex h-full min-h-0 flex-col gap-3">
+              <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
+                <CompactStat icon="wallet" label="Revenue" value={money(metrics.revenue ?? 0)} detail={`${metrics.paidSessions ?? 0} transaksi sukses`} />
+                <CompactStat icon="chart" label="Paid conversion" value={`${metrics.totalSessions ? Math.round((metrics.paidSessions / metrics.totalSessions) * 100) : 0}%`} detail={`${metrics.totalSessions ?? 0} total sesi`} />
+                <CompactStat icon="qr" label="QRIS" value={String(paid.filter((item: any) => item.paymentMethod === "qris" || item.paymentMethod === "doku").length)} />
+                <CompactStat icon="ticket" label="Voucher" value={String(paid.filter((item: any) => item.paymentMethod === "voucher").length)} />
+              </div>
+              <nav className="flex shrink-0 gap-1 overflow-x-auto rounded-full border border-fg/10 bg-fg/[0.05] p-1" aria-label="Kategori finance">
                 {FINANCE_SUBTABS.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setFinanceSubtab(tab.id)}
-                    className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/55 hover:text-fg"}`}
+                    className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${financeSubtab === tab.id ? "bg-accent text-white shadow-md shadow-accent/25" : "text-fg/55 hover:text-fg"}`}
                   >
                     {tab.label}
                   </button>
                 ))}
               </nav>
-              {financeSubtab === "packages" && <PaymentSettings />}
-              {financeSubtab === "promo" && <VoucherManagement />}
-              {financeSubtab === "withdraw" && <WithdrawalPanel />}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3">
+                {financeSubtab === "transactions" && <TransactionsPanel sessions={sessions} />}
+                {financeSubtab === "packages" && <PaymentSettings view="packages" />}
+                {financeSubtab === "gateway" && <PaymentSettings view="gateway" />}
+                {financeSubtab === "event" && <PaymentSettings view="event" />}
+                {financeSubtab === "promo" && <VoucherManagement />}
+                {financeSubtab === "withdraw" && <WithdrawalPanel />}
+              </div>
             </div>
           )}
           {section === "crm" && <CrmPanel />}
@@ -900,6 +963,7 @@ export default function AdminDashboard() {
           )}
         </div>
       </main>
+      <HelpChatButton />
     </div>
   );
 }

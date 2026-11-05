@@ -111,6 +111,14 @@ export function passwordResetMail(p: { name: string | null; url: string }): Mail
   };
 }
 
+export function magicLinkMail(p: { url: string; minutes: number; device: string; ip: string }): Mail {
+  return {
+    subject: "Tautan masuk STUDIODO Anda",
+    html: layout("Masuk tanpa kata sandi", `<p>Klik tombol di bawah untuk masuk ke STUDIODO, lalu tekan <strong>“Ya, ini saya”</strong>.</p>${button(p.url, "Masuk ke STUDIODO")}<p>Tautan berlaku ${p.minutes} menit dan hanya bisa dipakai sekali. Permintaan datang dari IP ${esc(p.ip)}. Jika bukan Anda yang meminta, abaikan email ini — tidak ada yang berubah di akun Anda.</p>`),
+    text: `Masuk ke STUDIODO (berlaku ${p.minutes} menit, sekali pakai): ${p.url}\nJika bukan Anda yang meminta, abaikan email ini.`,
+  };
+}
+
 export function passwordChangedMail(p: { name: string | null; when: string }): Mail {
   return {
     subject: "Kata sandi akun STUDIODO Anda diubah",

@@ -100,7 +100,33 @@ export class SuperadminApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+// Short-lived GET cache: opening a section a second time (or one the dashboard already warmed up) shows data instantly instead of
+// waiting on a fresh round trip, and identical requests made at the same moment share one network call. Any write clears it so
+// nothing stale survives an edit. Polling endpoints and CSV/other custom fetches do not go through here.
+const GET_TTL_MS = 20_000;
+const getCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    getCache.clear();
+    return rawRequest<T>(path, options);
+  }
+  const key = `${superadminToken ?? ""}|${path}`;
+  const hit = getCache.get(key);
+  if (hit && Date.now() - hit.at < GET_TTL_MS) return hit.promise as Promise<T | undefined>;
+  const promise = rawRequest<T>(path, options);
+  getCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => { if (getCache.get(key)?.promise === promise) getCache.delete(key); });
+  return promise;
+}
+
+/** Warm the cache for the screens people open most, right after login, so the first click is already answered. */
+export function prefetchSuperadmin(paths: string[]) {
+  for (const path of paths) void request(path).catch(() => undefined);
+}
+
+async function rawRequest<T>(path: string, options?: RequestInit): Promise<T | undefined> {
   const res = await tracked(() => fetch(`${getApiBaseUrl()}/superadmin${path}`, {
     ...options,
     // See client/src/lib/api.ts's request() for why — same Express ETag-without-
@@ -261,6 +287,10 @@ export interface WithdrawalAdminRow {
   processedBy: string | null;
   requestedAt: string;
   processedAt: string | null;
+  requiresApproval: boolean;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  holdUntil: string | null;
 }
 export interface WithdrawalAdminList {
   items: WithdrawalAdminRow[];
@@ -277,6 +307,41 @@ export interface TenantQrisBalance {
   available: number;
   paymentCount: number;
 }
+
+export interface PlatformDokuInfo {
+  configured: boolean; clientId: string; hasSecret: boolean; environment: "sandbox" | "production"; qrisMode: "checkout" | "snap";
+  merchantId: string; terminalId: string; postalCode: string; hasPrivateKey: boolean; snapReady: boolean; notificationUrl: string;
+}
+
+export interface WithdrawalPolicy {
+  enabled: boolean;
+  mode: "anytime" | "window";
+  days: number[];
+  fromTime: string;
+  toTime: string;
+  minAmount: number;
+  maxAmount: number;
+  dailyMaxAmount: number;
+  dailyMaxCount: number;
+  holdDays: number;
+  cooldownHours: number;
+  approvalThreshold: number;
+  newAccountHoldHours: number;
+  feePercent: number | null;
+  flatFee: number | null;
+}
+export interface FinanceTenantRow {
+  tenantId: string; name: string; frozen: boolean; hasOverride: boolean;
+  gross: number; fee: number; onHold: number; adjustments: number; withdrawn: number; pending: number; openRequests: number; available: number; owed: number; lastPaymentAt: string | null;
+}
+export interface FinanceOverview {
+  rules: { feePercent: number; minAmount: number; flatFee: number };
+  totals: { tenants: number; gross: number; feesEarned: number; owed: number; available: number; onHold: number; awaitingPayout: number; paidOut: number; frozenTenants: number };
+  items: FinanceTenantRow[];
+  uncredited: { count: number; amount: number };
+}
+export interface LedgerRow { at: string; type: string; description: string; amount: number; fee: number; status: string; note: string | null; actor: string | null }
+export interface FinanceUser { id: string; email: string; role: "owner" | "finance"; twoFactor: string | null; createdAt: string }
 
 export interface PlatformOverview {
   tenants: { total: number; byStatus: Record<string, number>; expiringSoon: number; expired: number; locked: number };
@@ -432,6 +497,44 @@ export interface TenantDetail extends SuperadminTenant {
 
 export interface TwoFactorStatus { enabled: boolean; enabledAt: string | null; recoveryCodesLeft: number; setupPending: boolean }
 
+// ---- Bantuan tenant & Pusat Notifikasi ----
+export interface SupportThread { id: string; tenantId: string; status: "open" | "resolved"; lastSender: "tenant" | "admin" | null; lastBody: string | null; lastMessageAt: string; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; unread: number; needsReply: boolean }
+export interface SupportMessage { id: string; sender: "tenant" | "admin"; author: string | null; body: string; createdAt: string }
+export interface AdminAlert { id: string; kind: string; severity: "info" | "success" | "warning" | "critical"; title: string; body: string | null; link: string | null; tenantId: string | null; tenantName: string | null; readAt: string | null; waSentAt: string | null; waError: string | null; createdAt: string }
+export interface AlertSummary { unread: number; critical: number; followUp: { key: string; label: string; count: number; link: string; tone: "warn" | "bad" | "info" }[]; followUpTotal: number }
+export interface AlertSettings { number: string; gateway: boolean; kinds: { kind: string; label: string; severity: string; inApp: boolean; whatsapp: boolean }[] }
+
+// ---- Calon tenant (CRM follow-up) ----
+export type LeadStage = "new" | "contacted" | "trial_given" | "negotiation" | "contract_sent" | "active" | "lost";
+export interface Lead {
+  id: string; businessName: string; ownerName: string; ownerEmail: string; ownerWhatsapp: string | null; businessType: string | null; city: string | null;
+  message: string | null; status: "pending" | "converted" | "rejected"; convertedTenantId: string | null; createdAt: string;
+  pipelineStage: LeadStage; leadSource: string | null; lostReason: string | null; boothCount: number | null; boothLocation: string | null; plannedStart: string | null;
+  paymentSetup: "own" | "platform" | null; planSlug: string | null; contractMonths: number | null; assignedTo: string | null; lastContactedAt: string | null;
+  contractStatus: "none" | "draft" | "sent" | "signed"; contractSentAt: string | null; contractSignedAt: string | null; contractSignedName: string | null; hasContract: boolean;
+  reviewNote: string | null; emailVerifiedAt?: string | null;
+}
+export type LeadTaskState = "done" | "overdue" | "today" | "upcoming";
+export interface LeadTask { id: string; leadId: string; title: string; dueAt: string; doneAt: string | null; state: LeadTaskState }
+export interface LeadListItem extends Lead { nextTask: { id: string; title: string; dueAt: string; state: LeadTaskState } | null; openTasks: number }
+export interface LeadActivity { id: string; leadId: string; kind: "note" | "call" | "stage" | "whatsapp_out" | "whatsapp_in" | "contract" | "task" | "system"; body: string; meta: Record<string, unknown> | null; actor: string | null; createdAt: string }
+export interface LeadContract { status: "draft" | "sent" | "signed"; number: string; url: string | null; sentAt: string | null; signedAt: string | null; signedName: string | null; warnings: string[]; total: number; html: string }
+export interface LeadDetail { lead: Lead; activities: LeadActivity[]; tasks: LeadTask[]; contract: LeadContract | null }
+export interface LeadSummary { funnel: { stage: LeadStage; label: string; count: number }[]; overdue: number; today: number; openLeads: number; withoutTask: number; contractsAwaiting: number }
+export interface LeadTemplateRendered { key: string; label: string; stage: string; text: string; missing: string[]; waLink: string | null }
+export interface LeadTemplateDef { key: string; label: string; stage: string; text: string }
+export interface LeadSettings {
+  whatsapp: { provider: "none" | "fonnte"; hasToken: boolean; hasWebhookKey: boolean; ready: boolean };
+  templates: LeadTemplateDef[]; variables?: { key: string; label: string }[];
+  issuer: { name: string; address: string; contact: string };
+  publicBase?: string;
+}
+export type LeadInput = Partial<Pick<Lead, "businessName" | "ownerName" | "ownerEmail" | "ownerWhatsapp" | "businessType" | "city" | "leadSource" | "boothCount" | "boothLocation" | "plannedStart" | "paymentSetup" | "planSlug" | "contractMonths" | "assignedTo">>;
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = { new: "Baru", contacted: "Dihubungi", trial_given: "Trial diberikan", negotiation: "Negosiasi", contract_sent: "Kontrak terkirim", active: "Aktif", lost: "Batal" };
+export const LEAD_STAGES: LeadStage[] = ["new", "contacted", "trial_given", "negotiation", "contract_sent", "active", "lost"];
+export const LEAD_SOURCES = [["website", "Website"], ["whatsapp", "WhatsApp"], ["instagram", "Instagram"], ["referral", "Rekomendasi"], ["event", "Event"], ["other", "Lainnya"]] as const;
+
 export const superadminApi = {
   login: (email: string, password: string) => request<{ token?: string; twoFactorRequired?: boolean; challenge?: string }>("/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   /** Second sign-in step when 2FA is on: the challenge from login() plus a 6-digit authenticator code or a recovery code. */
@@ -442,7 +545,7 @@ export const superadminApi = {
   disableTwoFactor: (password: string, code: string) => request<{ ok: boolean }>("/2fa/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
   regenerateRecoveryCodes: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>("/2fa/recovery-codes", { method: "POST", body: JSON.stringify({ code }) }),
   logout: () => request<{ ok: boolean }>("/logout", { method: "POST" }),
-  getMe: () => request<{ email: string }>("/me"),
+  getMe: () => request<{ email: string; role?: "owner" | "finance"; twoFactorEnabled?: boolean }>("/me"),
   getTenants: () => request<SuperadminTenant[]>("/tenants"),
   getTenant: (id: string) => request<TenantDetail>(`/tenants/${id}`),
   recheckBillingOrder: (orderId: string) => request<{ ok: boolean; status: string; result: string }>(`/billing/orders/${encodeURIComponent(orderId)}/check`, { method: "POST" }),
@@ -474,9 +577,33 @@ export const superadminApi = {
   updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number; volumeDiscounts?: VolumeTier[] }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   getWithdrawals: (status = "open") => request<WithdrawalAdminList>(`/withdrawals?status=${status}`),
+  approveWithdrawal: (id: string) => request<WithdrawalAdminRow>(`/withdrawals/${id}/approve`, { method: "POST" }),
   updateWithdrawal: (id: string, body: { status: "processing" | "paid" | "rejected"; adminNote?: string; transferReference?: string }) =>
     request<WithdrawalAdminRow>(`/withdrawals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   getTenantQrisBalance: (id: string) => request<TenantQrisBalance>(`/tenants/${id}/qris-balance`),
+  getFinanceOverview: () => request<FinanceOverview>("/finance/overview"),
+  getFinancePolicy: () => request<{ policy: WithdrawalPolicy; defaults: WithdrawalPolicy; rules: { feePercent: number; minAmount: number; flatFee: number }; summary: string }>("/finance/policy"),
+  saveFinancePolicy: (policy: Partial<WithdrawalPolicy>) => request<{ policy: WithdrawalPolicy; summary: string }>("/finance/policy", { method: "PUT", body: JSON.stringify({ policy }) }),
+  getTenantPolicy: (id: string) => request<{ name: string; settlement: string; override: Partial<WithdrawalPolicy>; effective: WithdrawalPolicy; summary: string }>(`/finance/tenants/${id}/policy`),
+  saveTenantPolicy: (id: string, override: Partial<WithdrawalPolicy> | null) => request<{ override: Partial<WithdrawalPolicy>; effective: WithdrawalPolicy; summary: string }>(`/finance/tenants/${id}/policy`, { method: "PUT", body: JSON.stringify({ override }) }),
+  getTenantLedger: (id: string) => request<{ name: string; balance: { available: number; onHold: number; pending: number; withdrawn: number; adjustments: number; grossIncome: number; platformFee: number }; rows: LedgerRow[] }>(`/finance/tenants/${id}/ledger`),
+  adjustTenantBalance: (id: string, amount: number, note: string) => request<{ balance: { available: number } }>(`/finance/tenants/${id}/adjustments`, { method: "POST", body: JSON.stringify({ amount, note }) }),
+  getReconcile: () => request<{ count: number; amount: number; items: { id: string; tenantId: string; amount: string; createdAt: string }[] }>("/finance/reconcile"),
+  runReconcile: (tenantId?: string) => request<{ found: number; credited: number; amount: number }>("/finance/reconcile", { method: "POST", body: JSON.stringify({ tenantId }) }),
+  getFinanceUsers: () => request<FinanceUser[]>("/finance/users"),
+  createFinanceUser: (email: string, password: string) => request<FinanceUser>("/finance/users", { method: "POST", body: JSON.stringify({ email, password }) }),
+  deleteFinanceUser: (id: string) => request<{ ok: boolean }>(`/finance/users/${id}`, { method: "DELETE" }),
+  /** CSV files need the auth header, so they are fetched and saved from a blob instead of opened as a link. */
+  downloadFinanceCsv: async (path: string, filename: string) => {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin${path}`, { cache: "no-store", headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {} });
+    if (!res.ok) throw new SuperadminApiError(res.status, `Gagal mengunduh (${res.status})`);
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   getPlans: () => request<Plan[]>("/plans"),
   createPlan: (body: Partial<PlanInput> & Pick<PlanInput, "name" | "slug" | "price" | "billingInterval" | "kioskLimit">) =>
     request<Plan>("/plans", { method: "POST", body: JSON.stringify(body) }),
@@ -499,6 +626,9 @@ export const superadminApi = {
   getSecurityAlerts: () => request<SecurityAlert[]>("/security-alerts"),
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
 
+  getPlatformDoku: () => request<PlatformDokuInfo>("/payment-gateways/doku"),
+  savePlatformDoku: (body: Record<string, unknown>) => request<PlatformDokuInfo>("/payment-gateways/doku", { method: "PUT", body: JSON.stringify(body) }),
+  testPlatformDoku: () => request<{ ok: boolean; message: string }>("/payment-gateways/doku/test", { method: "POST" }),
   getPaymentGateways: () => request<GatewaysOverview>("/payment-gateways"),
   savePaymentGateway: (provider: string, body: GatewayPatch) =>
     request<GatewayInfo>(`/payment-gateways/${provider}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -555,5 +685,133 @@ export const superadminApi = {
   getTenantApplications: (status: "pending" | "all" = "pending") => request<TenantApplication[]>(`/tenant-applications?status=${status}`),
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   convertApplication: (id: string, body: { slug: string; password: string; trialDays?: number }) =>
-    request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
+    request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number; whatsappMessage?: string; whatsappLink?: string | null }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
+
+  // Calon tenant (CRM)
+  getLeads: (q = "") => request<{ leads: LeadListItem[] }>(`/leads${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getLeadSummary: () => request<LeadSummary>("/leads/summary"),
+  createLead: (body: LeadInput & { message?: string }) => request<Lead>("/leads", { method: "POST", body: JSON.stringify(body) }),
+  getLead: (id: string) => request<LeadDetail>(`/leads/${id}`),
+  updateLead: (id: string, body: LeadInput & { reviewNote?: string | null }) => request<Lead>(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLead: (id: string) => request<{ ok: boolean }>(`/leads/${id}`, { method: "DELETE" }),
+  moveLead: (id: string, stage: LeadStage, reason?: string) => request<Lead>(`/leads/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, reason }) }),
+  addLeadNote: (id: string, body: string, kind: "note" | "call" = "note") => request<LeadActivity>(`/leads/${id}/notes`, { method: "POST", body: JSON.stringify({ body, kind }) }),
+  addLeadTask: (id: string, body: { title: string; preset?: string; dueAt?: string }) => request<LeadTask>(`/leads/${id}/tasks`, { method: "POST", body: JSON.stringify(body) }),
+  updateLeadTask: (id: string, taskId: string, body: { done?: boolean; preset?: string; dueAt?: string }) => request<LeadTask>(`/leads/${id}/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLeadTask: (id: string, taskId: string) => request<{ ok: boolean }>(`/leads/${id}/tasks/${taskId}`, { method: "DELETE" }),
+  getLeadTemplates: (id: string) => request<{ templates: LeadTemplateRendered[]; gateway: boolean; phone: string | null }>(`/leads/${id}/templates`),
+  sendLeadWhatsapp: (id: string, text: string, mode: "gateway" | "manual") => request<{ ok: boolean }>(`/leads/${id}/whatsapp`, { method: "POST", body: JSON.stringify({ text, mode }) }),
+  buildLeadContract: (id: string) => request<{ ok: boolean; warnings: string[]; html: string; lead: Lead }>(`/leads/${id}/contract`, { method: "POST" }),
+  sendLeadContract: (id: string) => request<{ ok: boolean; url: string; message: string; waLink: string | null }>(`/leads/${id}/contract/send`, { method: "POST", body: JSON.stringify({ reviewed: true }) }),
+  markLeadContractSigned: (id: string, name?: string) => request<Lead>(`/leads/${id}/contract/mark-signed`, { method: "POST", body: JSON.stringify({ name }) }),
+  getLeadSettings: () => request<LeadSettings>("/leads/settings/all"),
+  saveLeadSettings: (body: { whatsapp?: { provider?: string; token?: string; clearToken?: boolean }; templates?: Record<string, string>; issuer?: LeadSettings["issuer"] }) => request<LeadSettings>("/leads/settings/all", { method: "PUT", body: JSON.stringify(body) }),
+  rotateLeadWebhookKey: () => request<{ key: string; url: string }>("/leads/settings/webhook-key", { method: "POST" }),
+  testLeadWhatsapp: (phone: string) => request<{ ok: boolean }>("/leads/settings/whatsapp-test", { method: "POST", body: JSON.stringify({ phone }) }),
+  getLeadDoc: (which: "onboarding" | "team") => request<{ title: string; markdown: string; html: string; page: string; publicUrl: string | null }>(`/leads/docs/${which}`),
+  // Bantuan tenant
+  getSupportThreads: () => request<{ threads: SupportThread[]; needsReply: number; unread: number }>("/support/threads"),
+  getSupportThread: (id: string) => request<{ thread: { id: string; tenantId: string; status: "open" | "resolved"; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; plan: string }; messages: SupportMessage[] }>(`/support/threads/${id}`),
+  replySupport: (id: string, body: string) => request<SupportMessage>(`/support/threads/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) }),
+  setSupportStatus: (id: string, status: "open" | "resolved") => request<{ id: string; status: string }>(`/support/threads/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  // Pusat Notifikasi
+  getAlerts: (opts: { unread?: boolean; kind?: string; limit?: number } = {}) => request<{ items: AdminAlert[]; unread: number; critical: number }>(`/alerts?limit=${opts.limit ?? 60}${opts.unread ? "&unread=1" : ""}${opts.kind ? `&kind=${encodeURIComponent(opts.kind)}` : ""}`),
+  getAlertSummary: () => request<AlertSummary>("/alerts/summary"),
+  impersonateTenant: (tenantId: string) => request<{ token: string; tenantName: string; adminEmail: string; expiresInMinutes: number }>(`/tenants/${tenantId}/impersonate`, { method: "POST", body: "{}" }),
+  // Owner insights, search, morning summary
+  getInsightsHealth: () => request<{ rows: TenantHealthRow[]; summary: { healthy: number; watch: number; risk: number } }>("/insights/health"),
+  getInsightsRevenue: () => request<RevenueInsights>("/insights/revenue"),
+  getInsightsFleet: () => request<{ latest: string | null; rows: FleetRow[] }>("/insights/fleet"),
+  getInsightsAnomalies: () => request<{ items: AnomalyItem[] }>("/insights/anomalies"),
+  getDigest: () => request<{ settings: DigestSettings; preview: string; gateway: boolean; hasNumber: boolean }>("/insights/digest"),
+  saveDigest: (settings: DigestSettings) => request<{ settings: DigestSettings }>("/insights/digest", { method: "PUT", body: JSON.stringify(settings) }),
+  sendDigestNow: () => request<{ text: string; whatsapp: "sent" | "no_gateway" | "no_number" | "failed"; error?: string }>("/insights/digest/send", { method: "POST", body: "{}" }),
+  search: (q: string) => request<{ hits: SearchHit[] }>(`/search?q=${encodeURIComponent(q)}`),
+  // WhatsApp to existing tenants (manual composer + automatic renewal reminders)
+  getTenantWa: (tenantId: string) => request<TenantWaData>(`/tenant-wa/${tenantId}`),
+  sendTenantWa: (tenantId: string, text: string, mode: "gateway" | "manual") => request<{ ok: true }>(`/tenant-wa/${tenantId}/send`, { method: "POST", body: JSON.stringify({ text, mode }) }),
+  getTenantWaOverview: () => request<TenantWaOverview>("/tenant-wa/overview"),
+  saveTenantWaAuto: (auto: TenantWaAuto) => request<{ auto: TenantWaAuto; warning?: string }>("/tenant-wa/auto", { method: "PUT", body: JSON.stringify(auto) }),
+  markAlertsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number; critical: number }>("/alerts/read", { method: "POST", body: JSON.stringify(body) }),
+  getAlertSettings: () => request<AlertSettings>("/alerts/settings"),
+  saveAlertSettings: (body: { number?: string; prefs?: Record<string, { inApp?: boolean; whatsapp?: boolean }> }) => request<{ ok: boolean }>("/alerts/settings", { method: "PUT", body: JSON.stringify(body) }),
+  testAlertWhatsapp: () => request<{ ok: boolean }>("/alerts/test", { method: "POST" }),
+};
+
+// ---- Konten Instagram (Content Studio) ----
+export type CsMockup = "none" | "dashboard" | "macbook" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
+export type CsSlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
+export type CsTone = "light" | "dark" | "indigo" | "mint" | "peach";
+export type CsSlide = {
+  kind: CsSlideKind; tone?: CsTone; eyebrow?: string; title: string; body?: string; mockup?: CsMockup; note?: string;
+  items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
+  images?: string[]; bgImage?: string; icon?: string; emoji?: string; chat?: { from: "them" | "us"; text: string }[]; seconds?: number;
+};
+export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
+export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
+export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
+
+export type HealthLevel = "healthy" | "watch" | "risk";
+export interface TenantHealthRow { tenantId: string; name: string; status: string; ownerWhatsapp: string | null; score: number; level: HealthLevel; reasons: string[]; sessions30: number; keys: number; online: number; licence: "ok" | "ending" | "expired" | "none" }
+export interface RevenueInsights {
+  mrr: number; revenue30: number; revenuePrev30: number; payingTenants: number; newPaying30: number; churned30: number;
+  monthly: { month: string; revenue: number }[];
+  funnel: { trialsIssued: number; activated: number; used: number; converted: number; expiredUnconverted: number };
+}
+export interface FleetRow { keyId: string; label: string | null; tenantId: string; tenantName: string; version: string | null; outdated: boolean; online: boolean; lastUsedAt: string | null; issues: string[]; autoUpdate: boolean; licenceType: string; licenceEndsAt: string | null }
+export interface AnomalyItem { kind: string; severity: "warning" | "critical"; tenantId: string | null; tenantName: string | null; message: string }
+export interface DigestSettings { enabled: boolean; hour: number }
+export interface SearchHit { type: "tenant" | "lead" | "admin" | "booth"; id: string; title: string; subtitle: string; tenantId?: string }
+
+export type TenantWaStage ="d7" | "d3" | "d1" | "expired";
+export interface TenantWaAuto { enabled: boolean; stages: TenantWaStage[] }
+export interface TenantWaData {
+  tenant: { id: string; name: string; ownerName: string | null }; phone: string | null; gateway: boolean; licenceStage: TenantWaStage | null;
+  templates: { key: string; label: string; text: string; missing: string[]; waLink: string | null }[];
+  history: { id: string; action: string; message: string; actor: string | null; at: string; metadata: Record<string, unknown> | null }[];
+}
+export interface TenantWaOverview {
+  gateway: boolean; auto: TenantWaAuto; sendingNow: boolean;
+  upcoming: { tenantId: string; name: string; stage: TenantWaStage; kind: "trial" | "paid"; booths: number; endsAt: string; phone: string | null; sent: boolean }[];
+}
+
+export type CsPlanStatus ="ide" | "draf" | "siap" | "terjadwal" | "terposting";
+export type CsPlanItem = { id: string; title: string; phase: string; pillar: string; format: "carousel" | "reel" | "story"; deckId?: string; date?: string; time?: string; status: CsPlanStatus; checks: string[]; notes?: string };
+export type CsPlan = { startDate: string; days: number[]; time: string; items: CsPlanItem[]; profileChecks: string[]; updatedAt?: string };
+
+export type CsTriptych = { seam: "panorama" | "grid"; logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; comingSub: string; headline: string; features: string; cta: string };
+
+export type CsTeaser = { logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; beats: string; headline: string; features: string; cta: string };
+
+export const contentStudioApi = {
+  teaserPreview: (options: CsTeaser) => request<{ html: string }>("/content-studio/teaser/preview", { method: "POST", body: JSON.stringify({ options }) }),
+  teaserRender: (options: CsTeaser) => request<CsJob>("/content-studio/teaser/render", { method: "POST", body: JSON.stringify({ options }) }),
+  iconPreview: () => request<{ html: string }>("/content-studio/icon/preview"),
+  iconRender: () => request<CsJob>("/content-studio/icon/render", { method: "POST" }),
+  triptychDefaults: () => request<CsTriptych>("/content-studio/triptych/defaults"),
+  triptychPreview: (options: CsTriptych) => request<{ html: string }>("/content-studio/triptych/preview", { method: "POST", body: JSON.stringify({ options }) }),
+  triptychRender: (options: CsTriptych, mode: "png" | "mp4") => request<CsJob>("/content-studio/triptych/render", { method: "POST", body: JSON.stringify({ options, mode }) }),
+  plan: () => request<CsPlan>("/content-studio/plan"),
+  savePlan: (plan: CsPlan) => request<CsPlan>("/content-studio/plan", { method: "PUT", body: JSON.stringify(plan) }),
+  reschedule: (plan: CsPlan, opts: { startDate: string; days: number[]; time: string }) => request<CsPlan>("/content-studio/plan/reschedule", { method: "POST", body: JSON.stringify({ plan, ...opts }) }),
+  status: () => request<{ chrome: string | null; ffmpeg: boolean }>("/content-studio/status"),
+  decks: () => request<CsDeck[]>("/content-studio/decks"),
+  ideas: () => request<CsIdea[]>("/content-studio/ideas"),
+  saveDeck: (deck: CsDeck) => request<CsDeck>(`/content-studio/decks/${encodeURIComponent(deck.id)}`, { method: "PUT", body: JSON.stringify(deck) }),
+  deleteDeck: (id: string) => request<{ ok: boolean }>(`/content-studio/decks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  preview: (deck: CsDeck, index: number) => request<{ html: string }>("/content-studio/preview", { method: "POST", body: JSON.stringify({ deck, index }) }),
+  render: (deck: CsDeck, mode: "png" | "mp4" | "mp4-slides") => request<CsJob>("/content-studio/render", { method: "POST", body: JSON.stringify({ deck, mode }) }),
+  job: (id: string) => request<CsJob>(`/content-studio/jobs/${id}`),
+  uploadAsset: (name: string, dataUrl: string) => request<{ name: string }>("/content-studio/assets", { method: "POST", body: JSON.stringify({ name, dataUrl }) }),
+  /** Downloads need the Bearer header, so fetch as a blob and click a temporary link. */
+  async download(jobId: string, name: string) {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin/content-studio/jobs/${jobId}/files/${encodeURIComponent(name)}`, {
+      headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {},
+    });
+    if (!res.ok) throw new Error("Gagal mengunduh file");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
 };
