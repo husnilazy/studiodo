@@ -57,6 +57,7 @@ export interface WithdrawalRow {
   transferReference: string | null;
   requestedAt: string;
   processedAt: string | null;
+  holdUntil?: string | null;
 }
 export interface WithdrawalOverview {
   balance: QrisBalance;

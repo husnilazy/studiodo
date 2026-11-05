@@ -173,6 +173,7 @@ export default function WithdrawalPanel() {
                   <div className="min-w-0">
                     <p className="font-semibold">{money(Number(item.amount))} <span className="text-sm font-normal text-fg/45">→ {item.bankName} {item.accountNumber} a.n. {item.accountName}</span></p>
                     <p className="mt-0.5 text-xs text-fg/45">Diajukan {new Date(item.requestedAt).toLocaleString("id-ID")}{item.processedAt ? ` · diproses ${new Date(item.processedAt).toLocaleString("id-ID")}` : ""}</p>
+                    {item.status === "pending" && item.holdUntil && new Date(item.holdUntil).getTime() > Date.now() && <p className="mt-1 text-xs text-amber-600">Rekening baru: demi keamanan, transfer baru diproses setelah {new Date(item.holdUntil).toLocaleString("id-ID")}.</p>}
                     {item.adminNote && <p className="mt-1 text-xs text-fg/60">Catatan admin: {item.adminNote}</p>}
                     {item.transferReference && <p className="mt-0.5 text-xs text-fg/60">Ref. transfer: {item.transferReference}</p>}
                   </div>

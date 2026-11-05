@@ -261,6 +261,10 @@ export interface WithdrawalAdminRow {
   processedBy: string | null;
   requestedAt: string;
   processedAt: string | null;
+  requiresApproval: boolean;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  holdUntil: string | null;
 }
 export interface WithdrawalAdminList {
   items: WithdrawalAdminRow[];
@@ -290,6 +294,8 @@ export interface WithdrawalPolicy {
   dailyMaxCount: number;
   holdDays: number;
   cooldownHours: number;
+  approvalThreshold: number;
+  newAccountHoldHours: number;
   feePercent: number | null;
   flatFee: number | null;
 }
@@ -502,6 +508,7 @@ export const superadminApi = {
   updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number; volumeDiscounts?: VolumeTier[] }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   getWithdrawals: (status = "open") => request<WithdrawalAdminList>(`/withdrawals?status=${status}`),
+  approveWithdrawal: (id: string) => request<WithdrawalAdminRow>(`/withdrawals/${id}/approve`, { method: "POST" }),
   updateWithdrawal: (id: string, body: { status: "processing" | "paid" | "rejected"; adminNote?: string; transferReference?: string }) =>
     request<WithdrawalAdminRow>(`/withdrawals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   getTenantQrisBalance: (id: string) => request<TenantQrisBalance>(`/tenants/${id}/qris-balance`),

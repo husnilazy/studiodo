@@ -42,6 +42,23 @@ function WithdrawalCard({ item, onChanged }: { item: WithdrawalAdminRow; onChang
     }
   };
 
+  const approve = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await superadminApi.approveWithdrawal(item.id);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyetujui");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const holding = item.holdUntil ? new Date(item.holdUntil).getTime() > Date.now() : false;
+  const needsApproval = item.requiresApproval && !item.approvedBy;
+  const blocked = holding || needsApproval;
+
   const copy = (text: string) => { void navigator.clipboard?.writeText(text); };
 
   return (
@@ -62,6 +79,12 @@ function WithdrawalCard({ item, onChanged }: { item: WithdrawalAdminRow; onChang
         </div>
         <div><p className="text-[11px] uppercase tracking-wide text-fg/40">Atas nama</p><p className="font-semibold">{item.accountName}</p></div>
       </div>
+      {holding && item.holdUntil && <p className="mt-2 rounded-xl bg-amber-300/15 p-3 text-sm text-amber-700">Rekening baru, ditahan sampai {new Date(item.holdUntil).toLocaleString("id-ID")}. Konfirmasi ke tenant lewat kontak yang sudah terdaftar sebelum memproses.</p>}
+      {item.requiresApproval && (
+        <p className="mt-2 rounded-xl bg-sky-400/10 p-3 text-sm text-sky-700">
+          {item.approvedBy ? `Disetujui oleh ${item.approvedBy}${item.approvedAt ? ` · ${new Date(item.approvedAt).toLocaleString("id-ID")}` : ""}. Pembayaran harus dikonfirmasi orang lain.` : "Nominal besar: butuh persetujuan orang kedua sebelum diproses."}
+        </p>
+      )}
       {item.requestNote && <p className="mt-2 text-sm text-fg/60">Catatan tenant: {item.requestNote}</p>}
       {item.adminNote && <p className="mt-1 text-sm text-fg/60">Catatan admin: {item.adminNote}</p>}
       {item.transferReference && <p className="mt-1 text-sm text-fg/60">Ref. transfer: {item.transferReference}</p>}
@@ -69,8 +92,9 @@ function WithdrawalCard({ item, onChanged }: { item: WithdrawalAdminRow; onChang
 
       {!final && mode === "idle" && (
         <div className="mt-4 flex flex-wrap gap-2">
-          {item.status === "pending" && <button type="button" disabled={busy} onClick={() => act({ status: "processing" })} className="rounded-xl border border-sky-400/40 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-600 disabled:opacity-50">Mulai proses transfer</button>}
-          <button type="button" onClick={() => setMode("pay")} className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white">Tandai sudah dibayar</button>
+          {needsApproval && <button type="button" disabled={busy} onClick={approve} className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Setujui nominal ini</button>}
+          {item.status === "pending" && <button type="button" disabled={busy || blocked} onClick={() => act({ status: "processing" })} className="rounded-xl border border-sky-400/40 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-600 disabled:opacity-50">Mulai proses transfer</button>}
+          <button type="button" disabled={blocked} onClick={() => setMode("pay")} className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Tandai sudah dibayar</button>
           <button type="button" onClick={() => setMode("reject")} className="rounded-xl border border-red-400/40 px-4 py-2 text-sm font-semibold text-red-500 hover:bg-red-400/10">Tolak</button>
         </div>
       )}

@@ -245,6 +245,12 @@ export const withdrawals = pgTable("withdrawals", {
   processedBy: text("processed_by"),
   requestedAt: timestamp("requested_at").notNull().defaultNow(),
   processedAt: timestamp("processed_at"),
+  // Four-eyes: large requests need a second person to approve before they can be processed/paid; the payer must differ from the approver.
+  requiresApproval: boolean("requires_approval").notNull().default(false),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  // A payout to a never-paid bank account cannot be processed until this moment (account-takeover protection).
+  holdUntil: timestamp("hold_until"),
 }, (table) => [index("withdrawals_tenant_id_idx").on(table.tenantId), index("withdrawals_status_idx").on(table.status)]);
 
 // Append-only platform activity/error log — didn't exist before. tenantId

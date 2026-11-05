@@ -1009,6 +1009,10 @@ superadminRouter.get("/withdrawals", async (req, res) => {
       processedBy: withdrawals.processedBy,
       requestedAt: withdrawals.requestedAt,
       processedAt: withdrawals.processedAt,
+      requiresApproval: withdrawals.requiresApproval,
+      approvedBy: withdrawals.approvedBy,
+      approvedAt: withdrawals.approvedAt,
+      holdUntil: withdrawals.holdUntil,
     })
     .from(withdrawals)
     .innerJoin(tenants, eq(tenants.id, withdrawals.tenantId))
@@ -1039,6 +1043,13 @@ superadminRouter.patch("/withdrawals/:id", async (req, res) => {
   if (next === "processing" && current.status !== "pending") return res.status(409).json({ error: "Permintaan ini sudah diproses." });
 
   const email = await currentSuperadminEmail(req);
+  if (next !== "rejected") {
+    if (current.holdUntil && current.holdUntil.getTime() > Date.now()) {
+      return res.status(409).json({ error: `Rekening tujuan ini baru pertama kali dipakai, ditahan sampai ${current.holdUntil.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WIB. Hubungi tenant lewat kontak yang sudah terdaftar untuk memastikan rekening ini benar.`, code: "account_hold" });
+    }
+    if (current.requiresApproval && !current.approvedBy) return res.status(409).json({ error: "Nominal ini butuh persetujuan orang kedua sebelum diproses.", code: "needs_approval" });
+    if (current.requiresApproval && next === "paid" && current.approvedBy === email) return res.status(403).json({ error: "Yang menyetujui dan yang membayar harus dua orang berbeda.", code: "same_person" });
+  }
   const patch: Partial<typeof withdrawals.$inferInsert> = { status: next, processedBy: email, processedAt: next === "processing" ? null : new Date() };
   if (adminNote !== undefined) patch.adminNote = adminNote;
   if (transferReference !== undefined) patch.transferReference = transferReference;
@@ -1053,6 +1064,28 @@ superadminRouter.patch("/withdrawals/:id", async (req, res) => {
     actorType: "superadmin",
     actorLabel: email,
     metadata: { withdrawalId: current.id, status: next },
+  });
+  res.json(row);
+});
+
+// POST /api/superadmin/withdrawals/:id/approve — the second pair of eyes for a large request
+superadminRouter.post("/withdrawals/:id/approve", async (req, res) => {
+  const [current] = await db.select().from(withdrawals).where(eq(withdrawals.id, String(req.params.id)));
+  if (!current) return res.status(404).json({ error: "Permintaan tidak ditemukan" });
+  if (!current.requiresApproval) return res.status(409).json({ error: "Permintaan ini tidak butuh persetujuan." });
+  if (current.status === "paid" || current.status === "rejected") return res.status(409).json({ error: "Permintaan ini sudah final." });
+  if (current.approvedBy) return res.status(409).json({ error: `Sudah disetujui oleh ${current.approvedBy}.` });
+  const email = await currentSuperadminEmail(req);
+  if (current.processedBy && current.processedBy === email) return res.status(403).json({ error: "Orang yang memproses tidak boleh menyetujui permintaannya sendiri.", code: "same_person" });
+  const [row] = await db.update(withdrawals).set({ approvedBy: email, approvedAt: new Date() }).where(eq(withdrawals.id, current.id)).returning();
+  logEvent({
+    tenantId: current.tenantId,
+    category: "billing",
+    action: "withdrawal.approved",
+    message: `Penarikan QRIS Rp ${Number(current.amount).toLocaleString("id-ID")} disetujui.`,
+    actorType: "superadmin",
+    actorLabel: email,
+    metadata: { withdrawalId: current.id },
   });
   res.json(row);
 });

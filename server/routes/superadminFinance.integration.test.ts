@@ -159,6 +159,29 @@ describe.skipIf(!PGlite)("superadmin finance + tenant withdrawals (real SQL, rea
     expect((await call("GET", "/superadmin/finance/reconcile", financeToken)).json.count).toBe(0);
   });
 
+  it("large requests need a second person; a never-paid bank account is held", async () => {
+    await call("PUT", "/superadmin/finance/policy", ownerToken, { policy: { minAmount: 0, dailyMaxCount: 0, approvalThreshold: 150000, newAccountHoldHours: 0 } });
+    const big = await call("POST", "/withdrawals", tenantToken, { amount: 160000, ...bank });
+    expect(big.status).toBe(201);
+    expect(big.json.requiresApproval).toBe(true);
+    const id = big.json.id;
+    expect((await call("PATCH", `/superadmin/withdrawals/${id}`, ownerToken, { status: "processing" })).json.code).toBe("needs_approval");
+    expect((await call("POST", `/superadmin/withdrawals/${id}/approve`, financeToken)).status).toBe(200);
+    expect((await call("POST", `/superadmin/withdrawals/${id}/approve`, ownerToken)).status).toBe(409); // already approved
+    expect((await call("PATCH", `/superadmin/withdrawals/${id}`, financeToken, { status: "paid" })).json.code).toBe("same_person");
+    expect((await call("PATCH", `/superadmin/withdrawals/${id}`, ownerToken, { status: "paid", transferReference: "TRF-1" })).status).toBe(200);
+
+    await call("PUT", "/superadmin/finance/policy", ownerToken, { policy: { minAmount: 0, dailyMaxCount: 0, approvalThreshold: 0, newAccountHoldHours: 24 } });
+    const other = await call("POST", "/withdrawals", tenantToken, { amount: 60000, bankName: "BNI", accountNumber: "9988776655", accountName: "Orang Lain" });
+    expect(other.status).toBe(201);
+    expect(other.json.holdUntil).toBeTruthy();
+    expect((await call("PATCH", `/superadmin/withdrawals/${other.json.id}`, ownerToken, { status: "paid" })).json.code).toBe("account_hold");
+    expect((await call("PATCH", `/superadmin/withdrawals/${other.json.id}`, ownerToken, { status: "rejected", adminNote: "Rekening tidak dikenal" })).status).toBe(200); // rejecting is never blocked
+    const same = await call("POST", "/withdrawals", tenantToken, { amount: 60000, ...bank });
+    expect(same.status).toBe(201);
+    expect(same.json.holdUntil).toBeNull();
+  });
+
   it("only the owner manages finance accounts", async () => {
     expect((await call("GET", "/superadmin/finance/users", financeToken)).status).toBe(403);
     expect((await call("POST", "/superadmin/finance/users", ownerToken, { email: "baru@studiodo.id", password: "short" })).status).toBe(400);

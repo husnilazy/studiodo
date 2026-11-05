@@ -23,6 +23,10 @@ export interface WithdrawalPolicy {
   holdDays: number;
   /** Minimum hours between two requests of the same tenant. 0 = none. */
   cooldownHours: number;
+  /** Requests of at least this amount need a second superadmin/finance user to approve before they can be paid. 0 = off. */
+  approvalThreshold: number;
+  /** A payout to a bank account the tenant has never been paid at is held this many hours before it can be processed. 0 = off. */
+  newAccountHoldHours: number;
   /** Override the platform fee for this tenant. null = use the platform value. */
   feePercent: number | null;
   flatFee: number | null;
@@ -40,6 +44,8 @@ export const DEFAULT_WITHDRAWAL_POLICY: WithdrawalPolicy = {
   dailyMaxCount: 0,
   holdDays: 0,
   cooldownHours: 0,
+  approvalThreshold: 0,
+  newAccountHoldHours: 0,
   feePercent: null,
   flatFee: null,
 };
@@ -66,7 +72,7 @@ export function sanitizePolicy(input: unknown): Partial<WithdrawalPolicy> {
   }
   if (typeof src.fromTime === "string" && TIME_RE.test(src.fromTime)) out.fromTime = src.fromTime;
   if (typeof src.toTime === "string" && TIME_RE.test(src.toTime)) out.toTime = src.toTime;
-  for (const [key, max] of [["minAmount", 1_000_000_000], ["maxAmount", 1_000_000_000], ["dailyMaxAmount", 1_000_000_000], ["dailyMaxCount", 1000], ["holdDays", 60], ["cooldownHours", 720]] as const) {
+  for (const [key, max] of [["minAmount", 1_000_000_000], ["maxAmount", 1_000_000_000], ["dailyMaxAmount", 1_000_000_000], ["dailyMaxCount", 1000], ["holdDays", 60], ["cooldownHours", 720], ["approvalThreshold", 1_000_000_000], ["newAccountHoldHours", 720]] as const) {
     const n = num(src[key], 0, max);
     if (n !== undefined) out[key] = n;
   }

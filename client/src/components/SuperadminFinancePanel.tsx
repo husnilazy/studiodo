@@ -27,7 +27,7 @@ function PolicyForm({ value, onChange, partial }: { value: Partial<WithdrawalPol
     if (v === undefined) delete next[key]; else next[key] = v;
     onChange(next);
   };
-  const numberField = (key: "minAmount" | "maxAmount" | "dailyMaxAmount" | "dailyMaxCount" | "holdDays" | "cooldownHours", label: string, hint: string) => (
+  const numberField = (key: "minAmount" | "maxAmount" | "dailyMaxAmount" | "dailyMaxCount" | "holdDays" | "cooldownHours" | "approvalThreshold" | "newAccountHoldHours", label: string, hint: string) => (
     <label className="block text-sm text-fg/60">
       {label}
       <input className={inputClass} type="number" min={0} inputMode="numeric" value={value[key] ?? ""} placeholder={partial ? "ikut default" : "0"}
@@ -76,6 +76,8 @@ function PolicyForm({ value, onChange, partial }: { value: Partial<WithdrawalPol
         {numberField("dailyMaxCount", "Batas permintaan per hari", "0 = tanpa batas")}
         {numberField("holdDays", "Dana ditahan (hari)", "Pembayaran baru bisa ditarik setelah N hari (antisipasi refund)")}
         {numberField("cooldownHours", "Jeda antar permintaan (jam)", "0 = tanpa jeda")}
+        {numberField("approvalThreshold", "Butuh persetujuan 2 orang mulai (Rp)", "Satu orang menyetujui, orang lain yang membayar. 0 = nonaktif")}
+        {numberField("newAccountHoldHours", "Tahan rekening baru (jam)", "Rekening tujuan yang belum pernah dibayar ditahan N jam sebelum bisa diproses. 0 = nonaktif")}
         <label className="block text-sm text-fg/60">
           Fee platform (%)
           <input className={inputClass} type="number" min={0} max={30} step="0.01" value={value.feePercent ?? ""} placeholder="ikut default"

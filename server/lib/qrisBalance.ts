@@ -205,7 +205,23 @@ export async function createWithdrawal(tenantId: string, input: WithdrawalInput)
     });
     if (!check.ok) return { ok: false as const, status: check.code === "frozen" || check.code === "closed" ? 403 : 400, error: check.error, code: check.code };
 
+    // Account-takeover protection: a tenant that has been paid before but never to THIS account gets a waiting period.
+    let holdUntil: Date | null = null;
+    if (balance.policy.newAccountHoldHours > 0) {
+      const [paidBefore] = await dbx
+        .select({
+          any: sql<number>`count(*)::int`,
+          sameAccount: sql<number>`count(*) filter (where ${withdrawals.accountNumber} = ${input.accountNumber} and lower(${withdrawals.bankName}) = lower(${input.bankName}))::int`,
+        })
+        .from(withdrawals)
+        .where(and(eq(withdrawals.tenantId, tenantId), eq(withdrawals.status, "paid")));
+      if ((paidBefore?.any ?? 0) > 0 && (paidBefore?.sameAccount ?? 0) === 0) holdUntil = new Date(now.getTime() + balance.policy.newAccountHoldHours * 3_600_000);
+    }
+    const requiresApproval = balance.policy.approvalThreshold > 0 && input.amount >= balance.policy.approvalThreshold;
+
     const [row] = await dbx.insert(withdrawals).values({
+      requiresApproval,
+      holdUntil,
       tenantId,
       amount: input.amount.toFixed(2),
       feeAmount: flatFee.toFixed(2),
