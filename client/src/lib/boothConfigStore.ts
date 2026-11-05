@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api, getAdminToken } from "./api";
+import { api, getAdminToken, isViewOnlyAdmin } from "./api";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
 import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
@@ -421,6 +421,7 @@ let pushTimer: ReturnType<typeof setTimeout> | null = null;
 export async function pushConfigNow(): Promise<boolean> {
   if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
   if (!getAdminToken()) return false;
+  if (isViewOnlyAdmin()) { useConfigSync.setState({ status: "idle", message: undefined }); return false; } // looking at a tenant from Admin Pusat: never write
   const config = useBoothConfig.getState().config as unknown as Record<string, unknown>;
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
@@ -445,7 +446,7 @@ export async function pushConfigNow(): Promise<boolean> {
 
 /** Debounced version used while the admin is editing: waits for a pause so every keystroke isn't a request. */
 export function schedulePush() {
-  if (!getAdminToken()) return;
+  if (!getAdminToken() || isViewOnlyAdmin()) return;
   useConfigSync.setState({ status: "saving", message: undefined });
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => { void pushConfigNow(); }, 1500);
