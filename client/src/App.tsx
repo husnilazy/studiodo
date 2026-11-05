@@ -110,14 +110,18 @@ function GlobalIdleTimer() {
 }
 function AnimatedRoutes() {
   const [location] = useLocation();
+  // A leftover `filter: blur(0px)` makes this wrapper the containing block of every position:fixed element inside it, so dashboard
+  // modals, drawers and the Ctrl+K palette would centre and clip inside the page area instead of the window. The dashboards
+  // therefore animate opacity/position only; the customer-facing kiosk screens keep the soft blur.
+  const dashboard = location.startsWith("/admin") || location.startsWith("/superadmin");
   return (
     <AnimatePresence mode="wait">
       <motion.div
         key={location}
         className="h-full w-full"
-        initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
-        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-        exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
+        initial={dashboard ? { opacity: 0, y: 10 } : { opacity: 0, y: 10, filter: "blur(3px)" }}
+        animate={dashboard ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, filter: "blur(0px)" }}
+        exit={dashboard ? { opacity: 0, y: -8 } : { opacity: 0, y: -8, filter: "blur(3px)" }}
         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       >
         <Switch>
