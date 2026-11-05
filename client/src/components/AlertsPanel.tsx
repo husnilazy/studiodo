@@ -17,8 +17,17 @@ function SettingsBox({ onClose }: { onClose: () => void }) {
   const [s, setS] = useState<AlertSettings | null>(null);
   const [number, setNumber] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { superadminApi.getAlertSettings().then((r) => { if (r) { setS(r); setNumber(r.number); } }).catch((e) => pushToast({ type: "error", title: errMessage(e) })); }, []);
-  if (!s) return <div className="flex justify-center py-6"><Spinner /></div>;
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    setLoadError("");
+    superadminApi.getAlertSettings().then((r) => { if (r) { setS(r); setNumber(r.number); } else setLoadError("Server tidak mengirim data pengaturan."); }).catch((e) => setLoadError(errMessage(e)));
+  }, [attempt]);
+  if (!s) {
+    return loadError
+      ? <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600">{loadError}<button type="button" onClick={() => setAttempt((n) => n + 1)} className="ml-3 font-semibold underline">Coba lagi</button></div>
+      : <div className="flex justify-center py-6"><Spinner /></div>;
+  }
   const toggle = (kind: string, ch: "inApp" | "whatsapp") => setS({ ...s, kinds: s.kinds.map((k) => (k.kind === kind ? { ...k, [ch]: !k[ch] } : k)) });
   const save = async () => {
     setBusy(true);

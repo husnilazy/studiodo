@@ -161,7 +161,12 @@ async function rawRequest<T>(path: string, options?: RequestInit): Promise<T | u
     // nothing were wrong.
     window.dispatchEvent(new Event("studiodo-superadmin-unauthorized"));
   }
-  if (!res.ok) throw new SuperadminApiError(res.status, body?.error ?? `API error ${res.status}: ${text}`);
+  if (!res.ok) {
+    const missing = res.status === 404 && body?.error === undefined; // an unknown route, not a "not found" answered by our own handler
+    throw new SuperadminApiError(res.status, missing ? "Fitur ini belum tersedia di server (server belum diperbarui)." : (body?.error ?? `API error ${res.status}: ${text.slice(0, 120)}`));
+  }
+  // A 200 that is not JSON (e.g. an HTML page served for an unknown path) is never a valid answer: fail loudly instead of leaving a spinner forever.
+  if (text && body === undefined) throw new SuperadminApiError(res.status, "Server mengirim jawaban yang tidak dikenali — kemungkinan server belum diperbarui ke versi terbaru.");
   return body as T;
 }
 
