@@ -1,6 +1,7 @@
 import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import { Icon } from "@/components/kiosk/Icons";
+import LeadsPanel from "@/components/LeadsPanel";
 import { BrandLogo } from "@/components/BrandLogo";
 import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
 import NetProgressBar from "@/components/NetProgressBar";
@@ -681,126 +682,6 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
 // signup form — POST /api/tenant-applications. Converting reuses all the
 // data the applicant already typed, so the only thing a superadmin still has
 // to decide is the tenant's slug and initial admin password.
-function TenantApplicationsPanel({ onConverted }: { onConverted: () => void }) {
-  const [applications, setApplications] = useState<TenantApplication[]>([]);
-  const [showAll, setShowAll] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [convertingId, setConvertingId] = useState<string | null>(null);
-  const [convertDraft, setConvertDraft] = useState({ slug: "", password: "" });
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<{ kioskKey: string; adminEmail: string } | null>(null);
-
-  const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-  const load = () => {
-    setLoading(true);
-    superadminApi.getTenantApplications(showAll ? "all" : "pending").then((rows) => setApplications(rows ?? [])).finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showAll]);
-
-  const startConvert = (application: TenantApplication) => {
-    setConvertingId(application.id);
-    setConvertDraft({ slug: slugify(application.businessName), password: "" });
-    setError("");
-    setResult(null);
-  };
-
-  const submitConvert = async (application: TenantApplication) => {
-    setError("");
-    try {
-      const created = await superadminApi.convertApplication(application.id, convertDraft);
-      if (!created) throw new Error("Gagal mengonversi aplikasi");
-      setResult({ kioskKey: created.kioskKey, adminEmail: created.adminEmail });
-      setConvertingId(null);
-      load();
-      onConverted();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengonversi aplikasi");
-    }
-  };
-
-  const reject = async (application: TenantApplication) => {
-    if (!window.confirm(`Tolak aplikasi "${application.businessName}"?`)) return;
-    await superadminApi.rejectApplication(application.id).catch(() => undefined);
-    load();
-  };
-
-  return (
-    <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[.16em] text-accent">APLIKASI TENANT</p>
-          <h2 className="mt-2 font-display text-xl font-semibold">{applications.length} {showAll ? "aplikasi" : "menunggu review"}</h2>
-          <p className="mt-1 text-sm text-fg/45">Masuk dari form pendaftaran publik STUDIODO (landing page).</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setShowAll((v) => !v)} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{showAll ? "Hanya pending" : "Lihat semua"}</button>
-          <button type="button" onClick={load} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60">{loading ? "Memuat…" : "Muat ulang"}</button>
-        </div>
-      </div>
-
-      {result && (
-        <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-          <p className="text-sm font-semibold text-emerald-200">Tenant berhasil dibuat dari aplikasi ini.</p>
-          <p className="mt-1 text-xs text-emerald-100/70">Admin: {result.adminEmail}</p>
-          <code className="mt-2 block overflow-x-auto rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/80">{result.kioskKey}</code>
-          <p className="mt-1 text-xs text-emerald-100/50">Kiosk API key — hanya tampil sekali, tempel ke layar "Setup / Pair kiosk ini".</p>
-        </div>
-      )}
-
-      <div className="mt-4 space-y-3">
-        {applications.map((application) => (
-          <div key={application.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-display text-lg font-semibold">{application.businessName}</p>
-                <p className="text-xs text-fg/45">{application.ownerName} · {application.ownerEmail}{application.ownerWhatsapp ? ` · ${application.ownerWhatsapp}` : ""} <span title={application.emailVerifiedAt ? `Terverifikasi ${formatDate(application.emailVerifiedAt)}` : "Pengaju belum mengklik tautan verifikasi di email"} className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${application.emailVerifiedAt ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{application.emailVerifiedAt ? "Email terverifikasi ✓" : "Email belum diverifikasi"}</span></p>
-                <p className="mt-1 text-xs text-fg/35">
-                  {[application.businessType, application.city, application.referralSource ? `via ${application.referralSource}` : null].filter(Boolean).join(" · ")}
-                </p>
-                {application.message && <p className="mt-2 text-sm text-fg/60">"{application.message}"</p>}
-                <p className="mt-1 text-xs text-fg/30">Diajukan {formatDate(application.createdAt)}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <WhatsAppFollowUp phone={application.ownerWhatsapp} context="application" vars={{ owner: application.ownerName, business: application.businessName }} />
-                {application.status !== "pending" ? (
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${application.status === "converted" ? "bg-emerald-400/15 text-emerald-200" : "bg-fg/10 text-fg/50"}`}>
-                    {application.status === "converted" ? "Diterima" : "Ditolak"}
-                  </span>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => startConvert(application)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold">Terima & buat tenant</button>
-                    <button type="button" onClick={() => reject(application)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-red-300 hover:border-red-400">Tolak</button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {convertingId === application.id && (
-              <div className="mt-4 rounded-xl border border-accent/20 bg-accent/[0.04] p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm text-fg/60">Slug tenant
-                    <input className={inputClass} value={convertDraft.slug} onChange={(e) => setConvertDraft({ ...convertDraft, slug: slugify(e.target.value) })} />
-                  </label>
-                  <label className="text-sm text-fg/60">Password admin awal
-                    <input className={inputClass} type="password" placeholder="Minimal 6 karakter" value={convertDraft.password} onChange={(e) => setConvertDraft({ ...convertDraft, password: e.target.value })} autoComplete="new-password" />
-                  </label>
-                </div>
-                {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => submitConvert(application)} disabled={!convertDraft.slug || convertDraft.password.length < 6} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">Buat tenant</button>
-                  <button type="button" onClick={() => setConvertingId(null)} className="rounded-lg border border-fg/15 px-4 py-2 text-xs">Batal</button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        {!loading && applications.length === 0 && <p className="py-6 text-center text-sm text-fg/40">{showAll ? "Belum ada aplikasi masuk." : "Tidak ada aplikasi yang menunggu review."}</p>}
-      </div>
-    </section>
-  );
-}
-
 function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onSelectTenant: (id: string) => void; reloadRef?: React.MutableRefObject<(() => void) | null> }) {
   const [tenants, setTenants] = useState<SuperadminTenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1375,7 +1256,7 @@ const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon
   { title: "Tenant", items: [
     { id: "tenants", label: "Tenant", icon: "users" },
     { id: "licenses", label: "Lisensi & Trial", icon: "lock" },
-    { id: "applications", label: "Aplikasi Tenant", icon: "user-plus" },
+    { id: "applications", label: "Calon Tenant (CRM)", icon: "user-plus" },
   ] },
   { title: "Keuangan", items: [
     { id: "billing", label: "Pembayaran", icon: "card" },
@@ -1416,7 +1297,8 @@ export default function SuperadminDashboard() {
   // the full table mounted to know which tenants exist.
   const loadTenantsForFilter = () => { superadminApi.getTenants().then((rows) => setTenants(rows ?? [])).catch(() => undefined); };
   const loadPendingApplicationCount = () => {
-    superadminApi.getTenantApplications("pending").then((rows) => setPendingApplicationCount((rows ?? []).length)).catch(() => undefined);
+    // Badge = follow-ups that need a person today: overdue tasks plus brand-new leads nobody has answered yet.
+    superadminApi.getLeadSummary().then((sum) => setPendingApplicationCount((sum?.overdue ?? 0) + (sum?.funnel.find((f) => f.stage === "new")?.count ?? 0))).catch(() => undefined);
   };
 
   useEffect(() => {
@@ -1580,7 +1462,7 @@ export default function SuperadminDashboard() {
         {section === "licenses" && <LicensesPanel tenants={tenants} onChanged={loadTenantsForFilter} />}
 
         {section === "applications" && (
-          <TenantApplicationsPanel onConverted={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />
+          <LeadsPanel onChanged={() => { tenantsReloadRef.current?.(); loadTenantsForFilter(); loadPendingApplicationCount(); }} />
         )}
 
         {section === "events" && <EventsLogPanel tenants={tenants} />}

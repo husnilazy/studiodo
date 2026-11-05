@@ -15,6 +15,8 @@ import { googleRouter } from "./routes/google.js";
 import { authRouter } from "./routes/auth.js";
 import { kioskKeysRouter } from "./routes/kioskKeys.js";
 import { superadminRouter } from "./routes/superadmin.js";
+import { publicLeadsRouter } from "./routes/publicLeads.js";
+import { runLeadReminders } from "./lib/leadReminders.js";
 import { withdrawalsRouter } from "./routes/withdrawals.js";
 import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
@@ -104,6 +106,7 @@ app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
 app.use("/api/public", publicDirectoryRouter);
 app.use("/api/public", publicInvoiceRouter);
+app.use("/api/public", publicLeadsRouter);
 app.use("/api/public", publicAssetsRouter);
 app.use("/api/creator", creatorPortalRouter);
 app.use("/api/portal/notifications", notificationsTenantRouter);
@@ -198,6 +201,13 @@ function startNotificationRules() {
   setInterval(run, 30 * 60 * 1000);
 }
 
+// Follow-up reminders: tasks that came due since the last run raise one entry in the activity feed. Idempotent.
+function startLeadReminders() {
+  const run = () => runLeadReminders().catch((error: any) => console.error("[STUDIODO] pengingat follow-up gagal:", error?.message ?? error));
+  setTimeout(run, 90_000);
+  setInterval(run, 15 * 60 * 1000);
+}
+
 // On Vercel the platform calls the exported app per request (api/index.js): there is no long-lived process to listen on a
 // port or to run the keep-alive / notification timers. The PC-hosted kiosk API keeps running those.
 if (!process.env.VERCEL) {
@@ -206,6 +216,7 @@ if (!process.env.VERCEL) {
     checkDatabase();
     startKeepDbWarm();
     startNotificationRules();
+    startLeadReminders();
   });
 }
 

@@ -92,8 +92,56 @@ export const tenantApplications = pgTable("tenant_applications", {
   reviewedBy: text("reviewed_by"), // superadmin email
   reviewedAt: timestamp("reviewed_at"),
   reviewNote: text("review_note"),
+  // --- Follow-up CRM (lib/leads.ts). `status` above is the review outcome; `pipelineStage` is where the lead is in the sales funnel.
+  pipelineStage: text("pipeline_stage").notNull().default("new"), // 'new' | 'contacted' | 'trial_given' | 'negotiation' | 'contract_sent' | 'active' | 'lost'
+  leadSource: text("lead_source"), // 'website' | 'whatsapp' | 'instagram' | 'referral' | 'event' | 'other'
+  lostReason: text("lost_reason"),
+  boothCount: integer("booth_count"), // what we ask on the first follow-up: how many booths, where, when, which payment setup
+  boothLocation: text("booth_location"),
+  plannedStart: text("planned_start"),
+  paymentSetup: text("payment_setup"), // 'own' (their own Midtrans/Xendit/DOKU) | 'platform' (STUDIODO default) | null = not asked yet
+  planSlug: text("plan_slug"), // plan the contract is drawn up for
+  contractMonths: integer("contract_months"), // contract term in months
+  assignedTo: text("assigned_to"),
+  lastContactedAt: timestamp("last_contacted_at"),
+  // Contract (lib/contract.ts). The token is the only credential of the public contract page; the snapshot freezes the terms
+  // that were sent, so later price changes never rewrite a contract someone already received.
+  contractToken: text("contract_token"),
+  contractStatus: text("contract_status").notNull().default("none"), // 'none' | 'draft' | 'sent' | 'signed'
+  contractSnapshot: jsonb("contract_snapshot").$type<Record<string, unknown>>(),
+  contractSentAt: timestamp("contract_sent_at"),
+  contractSignedAt: timestamp("contract_signed_at"),
+  contractSignedName: text("contract_signed_name"),
+  contractSignedIp: text("contract_signed_ip"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => [index("tenant_applications_status_idx").on(table.status)]);
+}, (table) => [
+  index("tenant_applications_status_idx").on(table.status),
+  index("tenant_applications_stage_idx").on(table.pipelineStage),
+  uniqueIndex("tenant_applications_contract_token_idx").on(table.contractToken),
+]);
+
+// Timeline of everything that happened with a lead: notes, stage moves, WhatsApp messages in/out, contract events.
+export const leadActivities = pgTable("lead_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => tenantApplications.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'note' | 'call' | 'stage' | 'whatsapp_out' | 'whatsapp_in' | 'contract' | 'task' | 'system'
+  body: text("body").notNull().default(""),
+  meta: jsonb("meta").$type<Record<string, unknown>>(), // e.g. { via: 'gateway' | 'manual', status: 'sent' | 'failed', providerId }
+  actor: text("actor"), // superadmin email, 'lead' for inbound, 'system'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("lead_activities_lead_idx").on(table.leadId, table.createdAt)]);
+
+// Follow-up tasks with a due date. A due task raises one reminder (remindedAt) in the Superadmin's activity feed.
+export const leadTasks = pgTable("lead_tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => tenantApplications.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  dueAt: timestamp("due_at").notNull(),
+  doneAt: timestamp("done_at"),
+  remindedAt: timestamp("reminded_at"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("lead_tasks_lead_idx").on(table.leadId), index("lead_tasks_due_idx").on(table.doneAt, table.dueAt)]);
 
 // Subscription tiers a superadmin defines platform-wide (not per-tenant) — the
 // "menu" tenants.plan is chosen from. Kept as a separate table (rather than a
@@ -188,6 +236,13 @@ export const platformSettings = pgTable("platform_settings", {
   dokuTerminalId: text("doku_terminal_id"),
   dokuPostalCode: text("doku_postal_code"),
   dokuSnapPrivateKeyEnc: text("doku_snap_private_key_enc"),
+  // WhatsApp gateway for lead follow-up (lib/whatsapp.ts). Token encrypted and write-only; the webhook key guards the inbound URL.
+  waProvider: text("wa_provider").notNull().default("none"), // 'none' | 'fonnte'
+  waTokenEnc: text("wa_token_enc"),
+  waWebhookKeyEnc: text("wa_webhook_key_enc"),
+  leadTemplates: jsonb("lead_templates").$type<Record<string, string>>().notNull().default({}), // editable overrides of the default WhatsApp templates
+  // Who "Pihak Pertama" is on contracts (company name, address, contact). Plain text, edited in Superadmin; see lib/contract.ts.
+  contractIssuer: jsonb("contract_issuer").$type<{ name?: string; address?: string; contact?: string }>().notNull().default({}),
   defaultTrialDays: integer("default_trial_days").notNull().default(7),
   // How long a NEW tenant's trial runs before subscriptionEndsAt is even reached —
   // distinct from gracePeriodDays below, which is what happens AFTER it's reached.

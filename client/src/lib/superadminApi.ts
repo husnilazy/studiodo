@@ -471,6 +471,37 @@ export interface TenantDetail extends SuperadminTenant {
 
 export interface TwoFactorStatus { enabled: boolean; enabledAt: string | null; recoveryCodesLeft: number; setupPending: boolean }
 
+// ---- Calon tenant (CRM follow-up) ----
+export type LeadStage = "new" | "contacted" | "trial_given" | "negotiation" | "contract_sent" | "active" | "lost";
+export interface Lead {
+  id: string; businessName: string; ownerName: string; ownerEmail: string; ownerWhatsapp: string | null; businessType: string | null; city: string | null;
+  message: string | null; status: "pending" | "converted" | "rejected"; convertedTenantId: string | null; createdAt: string;
+  pipelineStage: LeadStage; leadSource: string | null; lostReason: string | null; boothCount: number | null; boothLocation: string | null; plannedStart: string | null;
+  paymentSetup: "own" | "platform" | null; planSlug: string | null; contractMonths: number | null; assignedTo: string | null; lastContactedAt: string | null;
+  contractStatus: "none" | "draft" | "sent" | "signed"; contractSentAt: string | null; contractSignedAt: string | null; contractSignedName: string | null; hasContract: boolean;
+  reviewNote: string | null; emailVerifiedAt?: string | null;
+}
+export type LeadTaskState = "done" | "overdue" | "today" | "upcoming";
+export interface LeadTask { id: string; leadId: string; title: string; dueAt: string; doneAt: string | null; state: LeadTaskState }
+export interface LeadListItem extends Lead { nextTask: { id: string; title: string; dueAt: string; state: LeadTaskState } | null; openTasks: number }
+export interface LeadActivity { id: string; leadId: string; kind: "note" | "call" | "stage" | "whatsapp_out" | "whatsapp_in" | "contract" | "task" | "system"; body: string; meta: Record<string, unknown> | null; actor: string | null; createdAt: string }
+export interface LeadContract { status: "draft" | "sent" | "signed"; number: string; url: string | null; sentAt: string | null; signedAt: string | null; signedName: string | null; warnings: string[]; total: number; html: string }
+export interface LeadDetail { lead: Lead; activities: LeadActivity[]; tasks: LeadTask[]; contract: LeadContract | null }
+export interface LeadSummary { funnel: { stage: LeadStage; label: string; count: number }[]; overdue: number; today: number; openLeads: number; withoutTask: number; contractsAwaiting: number }
+export interface LeadTemplateRendered { key: string; label: string; stage: string; text: string; missing: string[]; waLink: string | null }
+export interface LeadTemplateDef { key: string; label: string; stage: string; text: string }
+export interface LeadSettings {
+  whatsapp: { provider: "none" | "fonnte"; hasToken: boolean; hasWebhookKey: boolean; ready: boolean };
+  templates: LeadTemplateDef[]; variables?: { key: string; label: string }[];
+  issuer: { name: string; address: string; contact: string };
+  publicBase?: string;
+}
+export type LeadInput = Partial<Pick<Lead, "businessName" | "ownerName" | "ownerEmail" | "ownerWhatsapp" | "businessType" | "city" | "leadSource" | "boothCount" | "boothLocation" | "plannedStart" | "paymentSetup" | "planSlug" | "contractMonths" | "assignedTo">>;
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = { new: "Baru", contacted: "Dihubungi", trial_given: "Trial diberikan", negotiation: "Negosiasi", contract_sent: "Kontrak terkirim", active: "Aktif", lost: "Batal" };
+export const LEAD_STAGES: LeadStage[] = ["new", "contacted", "trial_given", "negotiation", "contract_sent", "active", "lost"];
+export const LEAD_SOURCES = [["website", "Website"], ["whatsapp", "WhatsApp"], ["instagram", "Instagram"], ["referral", "Rekomendasi"], ["event", "Event"], ["other", "Lainnya"]] as const;
+
 export const superadminApi = {
   login: (email: string, password: string) => request<{ token?: string; twoFactorRequired?: boolean; challenge?: string }>("/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   /** Second sign-in step when 2FA is on: the challenge from login() plus a 6-digit authenticator code or a recovery code. */
@@ -622,6 +653,29 @@ export const superadminApi = {
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   convertApplication: (id: string, body: { slug: string; password: string; trialDays?: number }) =>
     request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
+
+  // Calon tenant (CRM)
+  getLeads: (q = "") => request<{ leads: LeadListItem[] }>(`/leads${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getLeadSummary: () => request<LeadSummary>("/leads/summary"),
+  createLead: (body: LeadInput & { message?: string }) => request<Lead>("/leads", { method: "POST", body: JSON.stringify(body) }),
+  getLead: (id: string) => request<LeadDetail>(`/leads/${id}`),
+  updateLead: (id: string, body: LeadInput & { reviewNote?: string | null }) => request<Lead>(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLead: (id: string) => request<{ ok: boolean }>(`/leads/${id}`, { method: "DELETE" }),
+  moveLead: (id: string, stage: LeadStage, reason?: string) => request<Lead>(`/leads/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, reason }) }),
+  addLeadNote: (id: string, body: string, kind: "note" | "call" = "note") => request<LeadActivity>(`/leads/${id}/notes`, { method: "POST", body: JSON.stringify({ body, kind }) }),
+  addLeadTask: (id: string, body: { title: string; preset?: string; dueAt?: string }) => request<LeadTask>(`/leads/${id}/tasks`, { method: "POST", body: JSON.stringify(body) }),
+  updateLeadTask: (id: string, taskId: string, body: { done?: boolean; preset?: string; dueAt?: string }) => request<LeadTask>(`/leads/${id}/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLeadTask: (id: string, taskId: string) => request<{ ok: boolean }>(`/leads/${id}/tasks/${taskId}`, { method: "DELETE" }),
+  getLeadTemplates: (id: string) => request<{ templates: LeadTemplateRendered[]; gateway: boolean; phone: string | null }>(`/leads/${id}/templates`),
+  sendLeadWhatsapp: (id: string, text: string, mode: "gateway" | "manual") => request<{ ok: boolean }>(`/leads/${id}/whatsapp`, { method: "POST", body: JSON.stringify({ text, mode }) }),
+  buildLeadContract: (id: string) => request<{ ok: boolean; warnings: string[]; html: string; lead: Lead }>(`/leads/${id}/contract`, { method: "POST" }),
+  sendLeadContract: (id: string) => request<{ ok: boolean; url: string; message: string; waLink: string | null }>(`/leads/${id}/contract/send`, { method: "POST", body: JSON.stringify({ reviewed: true }) }),
+  markLeadContractSigned: (id: string, name?: string) => request<Lead>(`/leads/${id}/contract/mark-signed`, { method: "POST", body: JSON.stringify({ name }) }),
+  getLeadSettings: () => request<LeadSettings>("/leads/settings/all"),
+  saveLeadSettings: (body: { whatsapp?: { provider?: string; token?: string; clearToken?: boolean }; templates?: Record<string, string>; issuer?: LeadSettings["issuer"] }) => request<LeadSettings>("/leads/settings/all", { method: "PUT", body: JSON.stringify(body) }),
+  rotateLeadWebhookKey: () => request<{ key: string; url: string }>("/leads/settings/webhook-key", { method: "POST" }),
+  testLeadWhatsapp: (phone: string) => request<{ ok: boolean }>("/leads/settings/whatsapp-test", { method: "POST", body: JSON.stringify({ phone }) }),
+  getLeadDoc: (which: "onboarding" | "team") => request<{ title: string; markdown: string; html: string; page: string; publicUrl: string | null }>(`/leads/docs/${which}`),
 };
 
 // ---- Konten Instagram (Content Studio) ----

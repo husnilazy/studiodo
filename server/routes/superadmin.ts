@@ -20,6 +20,7 @@ import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
 import { contentStudioAdminRouter } from "./contentStudio.js";
 import { superadminFinanceRouter } from "./superadminFinance.js";
+import { superadminLeadsRouter, addActivity as addLeadActivity } from "./superadminLeads.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -92,6 +93,7 @@ superadminRouter.use(async (req, res, next) => {
   next();
 });
 superadminRouter.use("/finance", superadminFinanceRouter);
+superadminRouter.use("/leads", superadminLeadsRouter);
 superadminRouter.use("/2fa", twoFactorAdminRouter);
 superadminRouter.use("/site-content", siteContentAdminRouter);
 superadminRouter.use("/blog", blogAdminRouter);
@@ -548,10 +550,11 @@ superadminRouter.post("/tenant-applications/:id/reject", async (req, res) => {
   const note = req.body?.note ? String(req.body.note).trim() : null;
   const actorLabel = await currentSuperadminEmail(req);
   const [row] = await db.update(tenantApplications)
-    .set({ status: "rejected", reviewedBy: actorLabel, reviewedAt: new Date(), reviewNote: note })
+    .set({ status: "rejected", pipelineStage: "lost", lostReason: note, reviewedBy: actorLabel, reviewedAt: new Date(), reviewNote: note })
     .where(and(eq(tenantApplications.id, req.params.id), eq(tenantApplications.status, "pending")))
     .returning();
   if (!row) return res.status(404).json({ error: "Aplikasi tidak ditemukan atau sudah diproses" });
+  await addLeadActivity(row.id, "stage", `Batal${note ? ` (${note})` : ""}`, actorLabel, { to: "lost" });
   logEvent({ category: "tenant", action: "application.rejected", message: `Aplikasi tenant "${row.businessName}" ditolak`, actorType: "superadmin", actorLabel });
   res.json(row);
 });
@@ -564,6 +567,7 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
   const [application] = await db.select().from(tenantApplications).where(eq(tenantApplications.id, req.params.id));
   if (!application) return res.status(404).json({ error: "Aplikasi tidak ditemukan" });
   if (application.status !== "pending") return res.status(409).json({ error: "Aplikasi sudah diproses" });
+  if (!application.ownerEmail) return res.status(400).json({ error: "Lead ini belum punya email — isi email pemilik dulu (dipakai untuk login admin tenant)" });
 
   const slug = String(req.body?.slug ?? "").trim().toLowerCase();
   const password = String(req.body?.password ?? "");
@@ -605,9 +609,10 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
 
   const actorLabel = await currentSuperadminEmail(req);
   await db.update(tenantApplications)
-    .set({ status: "converted", convertedTenantId: tenant.id, reviewedBy: actorLabel, reviewedAt: new Date() })
+    .set({ status: "converted", pipelineStage: "active", convertedTenantId: tenant.id, reviewedBy: actorLabel, reviewedAt: new Date() })
     .where(eq(tenantApplications.id, application.id));
 
+  await addLeadActivity(application.id, "stage", "Dijadikan tenant — tahap Aktif", actorLabel, { to: "active", tenantId: tenant.id });
   logEvent({
     tenantId: tenant.id,
     category: "tenant",
@@ -917,6 +922,11 @@ superadminRouter.delete("/plans/:id", async (req, res) => {
   res.json({ ok: true, deleted: true });
 });
 
+/** Encrypted secrets (gateway keys, WhatsApp token…) are write-only: even their ciphertext must not reach the browser. */
+function withoutSecrets<T extends Record<string, unknown>>(row: T): Partial<T> {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !/Enc$/.test(key))) as Partial<T>;
+}
+
 async function getOrCreatePlatformSettings() {
   const [existing] = await db.select().from(platformSettings).limit(1);
   if (existing) return existing;
@@ -926,7 +936,7 @@ async function getOrCreatePlatformSettings() {
 
 // GET /api/superadmin/settings — platform-wide defaults (trial length, renewal links)
 superadminRouter.get("/settings", async (_req, res) => {
-  res.json(await getOrCreatePlatformSettings());
+  res.json(withoutSecrets(await getOrCreatePlatformSettings()));
 });
 
 // PATCH /api/superadmin/settings
