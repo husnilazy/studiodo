@@ -9,7 +9,7 @@ import { mergePolicy } from "../lib/withdrawalPolicy.js";
 import { portalBaseUrl } from "../lib/urls.js";
 import { normalizeWhatsapp } from "../lib/crm.js";
 import {
-  canMoveTo, dueFromPreset, isStage, LEAD_STAGES, OPEN_STAGES, renderTemplate, resolveTemplates, sanitizeLeadPatch, sanitizeTemplateOverrides,
+  canMoveTo, dueFromPreset, isStage, maskSecrets, LEAD_STAGES, OPEN_STAGES, renderTemplate, resolveTemplates, sanitizeLeadPatch, sanitizeTemplateOverrides,
   STAGE_LABELS, summarizeFunnel, taskState, TEMPLATE_VARIABLES, whatsappFallbackLink, type LeadStage, type TemplateVars,
 } from "../lib/leads.js";
 import { buildContractSnapshot, issuerIncomplete, newContractToken, rupiah, renderContractHtml, resolveIssuer, type ContractSnapshot } from "../lib/contract.js";
@@ -285,7 +285,7 @@ superadminLeadsRouter.post("/:id/whatsapp", async (req, res) => {
   };
 
   if (req.body?.mode !== "gateway") {
-    const row = await addActivity(lead.id, "whatsapp_out", text, actor, { via: "wa.me", status: "opened" });
+    const row = await addActivity(lead.id, "whatsapp_out", maskSecrets(text), actor, { via: "wa.me", status: "opened" });
     await markContacted();
     return res.status(201).json({ ok: true, activity: row });
   }
@@ -293,10 +293,10 @@ superadminLeadsRouter.post("/:id/whatsapp", async (req, res) => {
   if (!config) return res.status(409).json({ error: "Gateway WhatsApp belum diatur. Pakai tombol Buka WhatsApp, atau atur di Pengaturan." });
   const result = await sendWhatsapp(config, lead.ownerWhatsapp, text);
   if (!result.ok) {
-    await addActivity(lead.id, "whatsapp_out", text, actor, { via: "gateway", status: "failed", error: result.error });
+    await addActivity(lead.id, "whatsapp_out", maskSecrets(text), actor, { via: "gateway", status: "failed", error: result.error });
     return res.status(502).json({ error: `Pesan gagal dikirim: ${result.error}` });
   }
-  const row = await addActivity(lead.id, "whatsapp_out", text, actor, { via: "gateway", status: "sent", providerId: result.providerId });
+  const row = await addActivity(lead.id, "whatsapp_out", maskSecrets(text), actor, { via: "gateway", status: "sent", providerId: result.providerId });
   await markContacted();
   res.status(201).json({ ok: true, activity: row });
 });

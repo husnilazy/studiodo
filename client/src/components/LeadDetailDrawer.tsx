@@ -207,17 +207,17 @@ function ConvertCard({ detail, onChanged }: { detail: LeadDetail; onChanged: () 
   const [slug, setSlug] = useState(l.businessName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""));
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ kioskKey: string; adminEmail: string } | null>(null);
-  if (l.status === "converted") return <div className={card}><p className="text-sm font-semibold text-emerald-700">✓ Sudah jadi tenant aktif</p>{result && <KeyBox r={result} />}</div>;
+  const [result, setResult] = useState<{ kioskKey: string; adminEmail: string; message?: string } | null>(null);
+  if (l.status === "converted") return <div className={card}><p className="text-sm font-semibold text-emerald-700">✓ Sudah jadi tenant aktif</p>{result && <KeyBox r={result} />}{result?.message && <LoginMessage leadId={l.id} initial={result.message} onChanged={onChanged} />}</div>;
   if (l.status === "rejected") return null;
   const submit = async () => {
     setBusy(true);
-    try { const r = await superadminApi.convertApplication(l.id, { slug, password }); if (r) { setResult({ kioskKey: r.kioskKey, adminEmail: r.adminEmail }); pushToast({ type: "success", title: "Tenant dibuat" }); onChanged(); } } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
+    try { const r = await superadminApi.convertApplication(l.id, { slug, password }); if (r) { setResult({ kioskKey: r.kioskKey, adminEmail: r.adminEmail, message: r.whatsappMessage }); pushToast({ type: "success", title: "Tenant dibuat" }); onChanged(); } } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
   };
   return (
     <div className={card}>
       <p className={label}>Jadikan tenant</p>
-      {result ? <KeyBox r={result} /> : !open ? (
+      {result ? <><KeyBox r={result} />{result.message && <LoginMessage leadId={l.id} initial={result.message} onChanged={onChanged} />}</> : !open ? (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <p className="text-sm text-fg/55">Membuat akun admin, paket awal, dan key trial.</p>
           <button type="button" onClick={() => setOpen(true)} className="rounded-lg bg-fg px-4 py-2 text-xs font-semibold text-canvas">Buat tenant</button>
@@ -232,6 +232,37 @@ function ConvertCard({ detail, onChanged }: { detail: LeadDetail; onChanged: () 
           <div className="flex gap-2"><button type="button" disabled={busy || !slug || password.length < 6 || !l.ownerEmail} onClick={submit} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-35">{busy ? "Membuat…" : "Buat tenant"}</button><button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-fg/20 px-4 py-2 text-xs">Batal</button></div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The "pengajuan disetujui" WhatsApp message with login + trial key, ready to send (or to open in WhatsApp). Only exists right after conversion: the key is not recoverable afterwards. */
+function LoginMessage({ leadId, initial, onChanged }: { leadId: string; initial: string; onChanged: () => void }) {
+  const [text, setText] = useState(initial);
+  const [gateway, setGateway] = useState(false);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { superadminApi.getLeadTemplates(leadId).then((r) => { if (r) { setGateway(r.gateway); setPhone(r.phone); } }).catch(() => undefined); }, [leadId]);
+  const send = async () => {
+    setBusy(true);
+    try { await superadminApi.sendLeadWhatsapp(leadId, text, "gateway"); pushToast({ type: "success", title: "Pesan login & key terkirim" }); onChanged(); } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
+  };
+  const open = async () => {
+    if (!phone) return;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    try { await superadminApi.sendLeadWhatsapp(leadId, text, "manual"); onChanged(); } catch { /* best effort */ }
+  };
+  return (
+    <div className="mt-3 rounded-xl border border-fg/10 bg-surface p-3">
+      <p className={label}>Pesan login & key trial untuk tenant</p>
+      <textarea rows={11} value={text} onChange={(e) => setText(e.target.value)} className={`${fieldClass} mt-2 font-mono text-xs`} />
+      <p className="mt-1 text-[11px] text-fg/45">Berisi tautan atur kata sandi (sekali pakai, 7 hari) dan key trial. Password yang Anda isi tidak ikut dikirim. Key tidak disimpan di riwayat chat. Pesan ini hanya ada sekarang; sebelum menutup halaman, kirim atau salin.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" disabled={!gateway || !phone || busy} onClick={() => void send()} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-35">{busy ? "Mengirim…" : "Kirim lewat gateway"}</button>
+        <button type="button" disabled={!phone} onClick={() => void open()} className="rounded-lg border border-fg/20 px-4 py-2 text-xs font-semibold disabled:opacity-35">Buka WhatsApp dengan pesan terisi</button>
+        <button type="button" onClick={async () => pushToast({ type: (await copyText(text)) ? "success" : "error", title: "Pesan disalin" })} className="rounded-lg border border-fg/20 px-4 py-2 text-xs font-semibold">Salin</button>
+      </div>
+      {!phone && <p className="mt-2 text-xs text-amber-700">Lead ini belum punya nomor WhatsApp yang valid.</p>}
     </div>
   );
 }

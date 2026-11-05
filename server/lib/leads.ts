@@ -137,6 +137,11 @@ export interface TemplateVars {
   link_kontrak?: string | null;
   link_panduan?: string | null;
   pengirim?: string | null;
+  link_login?: string | null;
+  email_login?: string | null;
+  link_setup?: string | null;
+  key_trial?: string | null;
+  masa_trial?: string | number | null;
 }
 
 export const TEMPLATE_VARIABLES: { key: keyof TemplateVars; label: string }[] = [
@@ -149,6 +154,11 @@ export const TEMPLATE_VARIABLES: { key: keyof TemplateVars; label: string }[] = 
   { key: "link_kontrak", label: "Tautan kontrak" },
   { key: "link_panduan", label: "Tautan panduan onboarding" },
   { key: "pengirim", label: "Nama pengirim (tim STUDIODO)" },
+  { key: "link_login", label: "Alamat dashboard" },
+  { key: "email_login", label: "Email login tenant" },
+  { key: "link_setup", label: "Tautan atur kata sandi" },
+  { key: "key_trial", label: "Key kiosk trial" },
+  { key: "masa_trial", label: "Lama trial (hari)" },
 ];
 
 export interface LeadTemplate { key: string; label: string; stage: LeadStage | "any"; text: string }
@@ -181,6 +191,10 @@ export const DEFAULT_TEMPLATES: LeadTemplate[] = [
   {
     key: "contract_nudge", label: "Ingatkan kontrak", stage: "contract_sent",
     text: "Halo {nama}, kami cek lagi soal surat kerja sama {usaha}: {link_kontrak}. Ada bagian yang masih perlu kami jelaskan?",
+  },
+  {
+    key: "welcome_login", label: "Pengajuan disetujui: login & key trial", stage: "active",
+    text: "Halo {nama}, pengajuan {usaha} sudah kami setujui ✅ Trial {masa_trial} hari sudah berjalan.\n\nLogin dashboard: {link_login}\nEmail: {email_login}\nAtur kata sandi (berlaku 7 hari): {link_setup}\n\nKey trial booth:\n{key_trial}\n\nTempel key itu di layar \"Setup / Pair kiosk ini\" pada PC booth. Jaga kerahasiaan key ya. Panduan pemasangan: {link_panduan}",
   },
   {
     key: "welcome_active", label: "Selamat bergabung", stage: "active",
@@ -233,4 +247,9 @@ export interface FunnelRow { stage: LeadStage; label: string; count: number }
 
 export function summarizeFunnel(leads: { pipelineStage: string }[]): FunnelRow[] {
   return LEAD_STAGES.map((stage) => ({ stage, label: STAGE_LABELS[stage], count: leads.filter((l) => l.pipelineStage === stage).length }));
+}
+
+/** A kiosk key (64 hex chars) must not be copied into the lead timeline in the clear. */
+export function maskSecrets(text: string): string {
+  return text.replace(/\b([0-9a-f]{6})[0-9a-f]{58}\b/gi, "$1…(key disembunyikan)");
 }

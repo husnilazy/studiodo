@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  canMoveTo, DEFAULT_TEMPLATES, dueFromPreset, renderTemplate, resolveTemplates, sanitizeLeadPatch, sanitizeTemplateOverrides, summarizeFunnel, taskState, whatsappFallbackLink,
+  canMoveTo, DEFAULT_TEMPLATES, maskSecrets, dueFromPreset, renderTemplate, resolveTemplates, sanitizeLeadPatch, sanitizeTemplateOverrides, summarizeFunnel, taskState, whatsappFallbackLink,
 } from "./leads.js";
 
 describe("pipeline moves", () => {
@@ -69,7 +69,7 @@ describe("WhatsApp templates", () => {
     expect(out.missing).toEqual(["link_kontrak"]);
   });
   it("renders every default template for a fully-filled lead without leaving a placeholder behind", () => {
-    const vars = { nama: "Dika", usaha: "Fotosut", booth: 2, kota: "Bandung", paket: "PRO", harga: "Rp 1.000.000", link_kontrak: "https://x/k", link_panduan: "https://x/p", pengirim: "Tim" };
+    const vars = { nama: "Dika", usaha: "Fotosut", booth: 2, kota: "Bandung", paket: "PRO", harga: "Rp 1.000.000", link_kontrak: "https://x/k", link_panduan: "https://x/p", pengirim: "Tim", masa_trial: 7, link_login: "https://x", email_login: "d@x.id", link_setup: "https://x/s", key_trial: "k" };
     for (const t of DEFAULT_TEMPLATES) {
       const out = renderTemplate(t.text, vars);
       expect(out.text).not.toMatch(/[{}]/);
@@ -81,6 +81,14 @@ describe("WhatsApp templates", () => {
     expect(saved).toEqual({ greeting: "Halo {nama}!" });
     expect(resolveTemplates(saved).find((t) => t.key === "greeting")!.text).toBe("Halo {nama}!");
     expect(resolveTemplates(saved).find((t) => t.key === "pricing")!.text).toBe(DEFAULT_TEMPLATES.find((t) => t.key === "pricing")!.text);
+  });
+});
+
+describe("secret masking", () => {
+  it("hides a 64-hex kiosk key but leaves other text alone", () => {
+    const key = "ab12cd" + "0".repeat(58);
+    expect(maskSecrets(`Key:\n${key}\nSelesai`)).toBe("Key:\nab12cd…(key disembunyikan)\nSelesai");
+    expect(maskSecrets("tidak ada rahasia 123456")).toBe("tidak ada rahasia 123456");
   });
 });
 

@@ -20,7 +20,9 @@ import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
 import { contentStudioAdminRouter } from "./contentStudio.js";
 import { superadminFinanceRouter } from "./superadminFinance.js";
-import { superadminLeadsRouter, addActivity as addLeadActivity } from "./superadminLeads.js";
+import { superadminLeadsRouter, addActivity as addLeadActivity, onboardingUrl } from "./superadminLeads.js";
+import { renderTemplate, resolveTemplates, whatsappFallbackLink } from "../lib/leads.js";
+import { portalBaseUrl } from "../lib/urls.js";
 import { clearLicenseCache, computeKeyLock, extendKeys, getGracePeriodDays, issueKioskKey, resetGraceCache, summarizeLicenses, syncTenantEndsAt } from "../lib/license.js";
 import { sanitizeVolumeTiers } from "../lib/boothPricing.js";
 import { logEvent } from "../lib/platformEvents.js";
@@ -579,7 +581,8 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
   const [existingEmail] = await db.select({ id: admins.id }).from(admins).where(eq(admins.email, application.ownerEmail));
   if (existingEmail) return res.status(409).json({ error: "Email pemilik sudah dipakai sebagai admin tenant lain" });
 
-  const { defaultTrialDays } = await getOrCreatePlatformSettings();
+  const settings = await getOrCreatePlatformSettings();
+  const { defaultTrialDays } = settings;
   const trialDays = req.body?.trialDays === undefined || req.body.trialDays === "" ? defaultTrialDays : Math.round(Number(req.body.trialDays));
   if (!Number.isFinite(trialDays) || trialDays < 1 || trialDays > 3650) return res.status(400).json({ error: "Lama trial harus 1–3650 hari" });
   const subscriptionEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
@@ -624,9 +627,19 @@ superadminRouter.post("/tenant-applications/:id/convert", async (req, res) => {
 
   // Welcome email with a one-time "set your password" link (never the password itself).
   const [createdAdmin] = await db.select({ id: admins.id, hash: admins.passwordHash }).from(admins).where(eq(admins.email, application.ownerEmail));
-  if (createdAdmin) void deliver(application.ownerEmail, welcomeTenantMail({ ownerName: application.ownerName, businessName: application.businessName, email: application.ownerEmail, setupUrl: resetLink("tenant", createdAdmin.id, createdAdmin.hash, SETUP_TTL_MS), trialDays }), { tenantId: tenant.id, what: "selamat datang tenant" });
+  const setupUrl = createdAdmin ? resetLink("tenant", createdAdmin.id, createdAdmin.hash, SETUP_TTL_MS) : null;
+  if (createdAdmin && setupUrl) void deliver(application.ownerEmail, welcomeTenantMail({ ownerName: application.ownerName, businessName: application.businessName, email: application.ownerEmail, setupUrl, trialDays }), { tenantId: tenant.id, what: "selamat datang tenant" });
 
-  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays });
+  // Ready-to-send WhatsApp message with the login details and the trial key (the key is only known right now). The password the
+  // superadmin typed is never included; the owner sets their own through the one-time link.
+  const welcomeTemplate = resolveTemplates(settings.leadTemplates).find((t) => t.key === "welcome_login")!.text;
+  const welcome = renderTemplate(welcomeTemplate, {
+    nama: application.ownerName.trim().split(/\s+/)[0], usaha: application.businessName, masa_trial: trialDays, link_login: portalBaseUrl(),
+    email_login: application.ownerEmail, link_setup: setupUrl, key_trial: rawKioskKey, link_panduan: onboardingUrl(),
+  }).text;
+  await addLeadActivity(application.id, "system", `Tenant dibuat (login ${application.ownerEmail}, trial ${trialDays} hari, key trial dibuat). Pesan login siap dikirim.`, actorLabel);
+
+  res.status(201).json({ tenant, adminEmail: application.ownerEmail, kioskKey: rawKioskKey, trialDays, whatsappMessage: welcome, whatsappLink: whatsappFallbackLink(application.ownerWhatsapp, welcome) });
 });
 
 // --- Activity & error log -------------------------------------------------

@@ -257,6 +257,20 @@ describe.skipIf(!PGlite)("lead CRM (real SQL, real HTTP)", () => {
     expect(refused.status).toBe(400);
     const converted = await call("POST", `/api/superadmin/tenant-applications/${leadId}/convert`, owner, { slug: "fotosut", password: "secret123" });
     expect(converted.status).toBe(201);
+    // the ready-to-send WhatsApp message: login + one-time password link + trial key, never the typed password
+    const msg = converted.json.whatsappMessage as string;
+    expect(msg).toContain("Halo Dika");
+    expect(msg).toContain("dika@fotosut.id");
+    expect(msg).toContain(converted.json.kioskKey);
+    expect(msg).toMatch(/7 hari/);
+    expect(msg).toMatch(/\/reset|token|setup|=/); // the one-time set-password link is present
+    expect(msg).not.toContain("secret123");
+    expect(converted.json.whatsappLink).toMatch(/^https:\/\/wa\.me\/6287777373108\?text=/);
+    // logging the send must not copy the key into the lead timeline
+    await api("POST", `/${leadId}/whatsapp`, { text: msg, mode: "manual" });
+    const timeline = (await api("GET", `/${leadId}`)).json.activities as { body: string }[];
+    expect(JSON.stringify(timeline)).not.toContain(converted.json.kioskKey);
+    expect(JSON.stringify(timeline)).toContain("key disembunyikan");
     const detail = await api("GET", `/${leadId}`);
     expect(detail.json.lead).toMatchObject({ pipelineStage: "active", status: "converted" });
     expect((await api("POST", `/${leadId}/stage`, { stage: "new" })).status).toBe(409);

@@ -652,7 +652,7 @@ export const superadminApi = {
   getTenantApplications: (status: "pending" | "all" = "pending") => request<TenantApplication[]>(`/tenant-applications?status=${status}`),
   rejectApplication: (id: string, note?: string) => request<TenantApplication>(`/tenant-applications/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   convertApplication: (id: string, body: { slug: string; password: string; trialDays?: number }) =>
-    request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
+    request<{ tenant: SuperadminTenant; adminEmail: string; kioskKey: string; trialDays: number; whatsappMessage?: string; whatsappLink?: string | null }>(`/tenant-applications/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
 
   // Calon tenant (CRM)
   getLeads: (q = "") => request<{ leads: LeadListItem[] }>(`/leads${q ? `?q=${encodeURIComponent(q)}` : ""}`),
