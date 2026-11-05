@@ -16,6 +16,11 @@ export function getAdminToken() {
   return adminToken;
 }
 
+/** True when the current admin token is a read-only "lihat sebagai tenant" session opened from Admin Pusat (server refuses every write). */
+export function isViewOnlyAdmin(): boolean {
+  try { return Boolean(adminToken && JSON.parse(atob(adminToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).ro === true); } catch { return false; }
+}
+
 export function setAdminToken(token: string | null) {
   adminToken = token;
   try {

@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, isViewOnlyAdmin } from "@/lib/api";
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
@@ -263,7 +263,7 @@ export default function AdminPlaceholder() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-surface px-4 py-3 shadow-glass">
           <span role="status" title={syncState.message} className={`inline-flex items-center gap-2 text-sm font-medium ${failed ? "text-red-500" : saving ? "text-fg/60" : "text-emerald-600"}`}>
             <span className={`h-2 w-2 rounded-full ${failed ? "bg-red-500" : saving ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`} />
-            {saving ? "Menyimpan…" : failed ? "Gagal menyimpan ke server — coba lagi" : "Semua perubahan tersimpan & langsung dipakai semua kiosk"}
+            {isViewOnlyAdmin() ? "Mode lihat saja — perubahan tidak disimpan" : saving ? "Menyimpan…" : failed ? "Gagal menyimpan ke server — coba lagi" : "Semua perubahan tersimpan & langsung dipakai semua kiosk"}
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/admin/screen-builder/idle" className="inline-flex items-center gap-1.5 rounded-xl border border-fg/10 px-3.5 py-2 text-sm font-medium text-fg/70 transition hover:border-accent hover:text-fg">

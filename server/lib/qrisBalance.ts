@@ -1,3 +1,4 @@
+import { ts } from "./sqlDate.js";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { platformSettings, sessions, tenants, walletLedger, withdrawals } from "../db/schema.js";
@@ -66,7 +67,7 @@ export async function computeQrisBalance(tenantId: string, dbx: Dbx = db): Promi
       gross: sql<string>`coalesce(sum(${walletLedger.grossAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
       fee: sql<string>`coalesce(sum(${walletLedger.feeAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
       paymentNet: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
-      held: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment' and ${walletLedger.availableAt} > ${now}), 0)`,
+      held: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment' and ${walletLedger.availableAt} > ${ts(now)}), 0)`,
       adjustments: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'adjustment'), 0)`,
       count: sql<number>`count(*) filter (where ${walletLedger.kind} = 'payment')::int`,
     })

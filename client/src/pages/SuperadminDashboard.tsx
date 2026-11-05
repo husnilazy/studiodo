@@ -6,6 +6,7 @@ import AlertsPanel from "@/components/AlertsPanel";
 import { TenantWaAutoPanel, TenantWhatsAppCard } from "@/components/TenantWhatsApp";
 import InsightsPanel from "@/components/InsightsPanel";
 import CommandPalette from "@/components/CommandPalette";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import SupportInboxPanel from "@/components/SupportInboxPanel";
 import { useAdminAlerts } from "@/lib/useAdminAlerts";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -1476,6 +1477,7 @@ export default function SuperadminDashboard() {
         </nav>
 
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+        <ErrorBoundary label={current?.label} resetKey={section}>
         <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
         <div key={section} className="sa-page mx-auto w-full max-w-[96rem] space-y-6 pb-8 2xl:max-w-[110rem]">
         {section === "overview" && (
@@ -1543,6 +1545,7 @@ export default function SuperadminDashboard() {
         )}
         </div>
         </Suspense>
+        </ErrorBoundary>
         </main>
       </div>
     </div>

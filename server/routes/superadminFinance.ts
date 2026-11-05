@@ -1,3 +1,4 @@
+import { ts } from "../lib/sqlDate.js";
 import { Router, type Request, type Response } from "express";
 import crypto from "node:crypto";
 import { desc, eq, sql } from "drizzle-orm";
@@ -40,7 +41,7 @@ superadminFinanceRouter.get("/overview", async (_req, res) => {
       gross: sql<string>`coalesce(sum(${walletLedger.grossAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
       fee: sql<string>`coalesce(sum(${walletLedger.feeAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
       paymentNet: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment'), 0)`,
-      held: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment' and ${walletLedger.availableAt} > ${now}), 0)`,
+      held: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'payment' and ${walletLedger.availableAt} > ${ts(now)}), 0)`,
       adjustments: sql<string>`coalesce(sum(${walletLedger.netAmount}) filter (where ${walletLedger.kind} = 'adjustment'), 0)`,
       lastPaymentAt: sql<string | null>`max(${walletLedger.createdAt}) filter (where ${walletLedger.kind} = 'payment')`,
     }).from(walletLedger).groupBy(walletLedger.tenantId),
