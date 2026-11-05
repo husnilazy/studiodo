@@ -11,6 +11,27 @@ import { useAdminThemeScope } from "@/lib/adminTheme";
 
 type GateStatus = "checking" | "needsLogin" | "authenticated";
 
+/** True when the current admin token is a read-only "lihat sebagai tenant" session opened from Admin Pusat. */
+function isViewOnlyToken(token: string | null): boolean {
+  try { return Boolean(token && JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).ro === true); } catch { return false; }
+}
+
+function ViewOnlyBanner() {
+  let who = "";
+  try { who = JSON.parse(sessionStorage.getItem("studiodo-impersonating") ?? "{}").tenant ?? ""; } catch { /* name is optional */ }
+  const back = () => {
+    setAdminToken(null);
+    try { sessionStorage.removeItem("studiodo-impersonating"); } catch { /* ignore */ }
+    window.location.hash = "#/superadmin";
+  };
+  return (
+    <div className="fixed bottom-4 left-1/2 z-[1200] flex w-max max-w-[94vw] -translate-x-1/2 items-center gap-3 rounded-full bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black shadow-[0_12px_40px_-8px_rgba(0,0,0,0.5)]">
+      <span>👁️ Mode lihat saja{who ? ` — ${who}` : ""}. Perubahan dinonaktifkan · berakhir otomatis 30 menit.</span>
+      <button type="button" onClick={back} className="rounded-full bg-black/85 px-3 py-1 text-xs font-bold text-white hover:bg-black">← Kembali ke Admin Pusat</button>
+    </div>
+  );
+}
+
 /** `scopeTheme={false}` keeps the tenant's customer-facing kiosk theme (the WYSIWYG screen builder needs it). */
 export default function AdminAuthGate({ children, scopeTheme = true }: { children: ReactNode; scopeTheme?: boolean }) {
   useAdminThemeScope(scopeTheme);
@@ -23,6 +44,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
   // "waiting" = a passwordless sign-in is in progress (browser tab for Google, inbox for the email link)
   const [waiting, setWaiting] = useState<{ via: "google" | "email"; verified: boolean } | null>(null);
   const handle = useRef<HandoffHandle | null>(null);
+  const viewOnly = status === "authenticated" && isViewOnlyToken(getAdminToken());
 
   useEffect(() => { api.getLoginProviders().then((p) => p && setProviders({ google: p.google, magic: p.magic })).catch(() => undefined); }, []);
   useEffect(() => () => handle.current?.cancel(), []);
@@ -105,7 +127,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
     }
   };
 
-  if (status === "authenticated") return <>{children}<AdminKeyboard /><ToastHost /></>;
+  if (status === "authenticated") return <>{viewOnly && <ViewOnlyBanner />}{children}<AdminKeyboard /><ToastHost /></>;
 
   if (status === "checking") {
     return (
@@ -150,7 +172,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
           </>
         )}
 
-        <div className="mt-6 space-y-3">
+        <div className={`mt-6 space-y-3 ${waiting ? "hidden" : ""}`}>
           <input
             type="email"
             autoFocus
@@ -173,7 +195,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
         <button
           type="submit"
           disabled={submitting || !email || !password}
-          className="mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          className={`mt-6 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none ${waiting ? "hidden" : ""}`}
         >
           {submitting ? "Memproses…" : "Masuk"}
         </button>

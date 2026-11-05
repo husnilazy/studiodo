@@ -1,7 +1,7 @@
 import express, { Router } from "express";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { leadActivities, tenantApplications } from "../db/schema.js";
+import { leadActivities, supportMessages, supportThreads, tenantApplications, tenants } from "../db/schema.js";
 import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 import { renderContractHtml, type ContractSnapshot } from "../lib/contract.js";
 import { normalizeWhatsapp } from "../lib/crm.js";
@@ -68,7 +68,20 @@ publicLeadsRouter.post("/wa/webhook/:key", express.urlencoded({ extended: false,
   if (!msg) return res.json({ ok: true, ignored: true });
   const candidates = await db.select().from(tenantApplications).where(isNotNull(tenantApplications.ownerWhatsapp));
   const lead = candidates.find((l) => normalizeWhatsapp(l.ownerWhatsapp) === msg.phone);
-  if (!lead) return res.json({ ok: true, ignored: true });
+  if (!lead) {
+    // Not a prospect: maybe an existing tenant replying to our reminder / help message. Their text joins their Bantuan thread, so
+    // the whole conversation (app chat + WhatsApp) lives in one inbox and raises the usual "pesan bantuan" alert.
+    const owners = await db.select({ id: tenants.id, name: tenants.name, phone: tenants.ownerWhatsapp }).from(tenants).where(isNotNull(tenants.ownerWhatsapp));
+    const tenant = owners.find((t) => normalizeWhatsapp(t.phone) === msg.phone);
+    if (!tenant) return res.json({ ok: true, ignored: true });
+    await db.insert(supportThreads).values({ tenantId: tenant.id }).onConflictDoNothing();
+    const [thread] = await db.select().from(supportThreads).where(eq(supportThreads.tenantId, tenant.id));
+    const body = msg.text.slice(0, 4000);
+    await db.insert(supportMessages).values({ threadId: thread.id, sender: "tenant", author: `WhatsApp${msg.name ? ` (${msg.name})` : ""}`, body });
+    await db.update(supportThreads).set({ status: "open", lastSender: "tenant", lastBody: body, lastMessageAt: new Date() }).where(eq(supportThreads.id, thread.id));
+    logEvent({ tenantId: tenant.id, category: "tenant", action: "support.message", message: `${tenant.name} (WhatsApp): ${body.length > 140 ? `${body.slice(0, 137)}…` : body}`, actorType: "system" });
+    return res.json({ ok: true, via: "support" });
+  }
   await db.insert(leadActivities).values({ leadId: lead.id, kind: "whatsapp_in", body: msg.text, actor: "lead", meta: { name: msg.name } });
   await db.update(tenantApplications).set({ lastContactedAt: new Date() }).where(eq(tenantApplications.id, lead.id));
   logEvent({ category: "tenant", action: "lead.reply", message: `Balasan WhatsApp dari ${lead.ownerName} (${lead.businessName})`, actorType: "system", metadata: { leadId: lead.id } });

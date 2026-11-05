@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { verifyAdminToken } from "../lib/jwt.js";
+import { blocksWrite, verifyAdminToken } from "../lib/jwt.js";
 import { isSessionCurrent } from "../lib/sessionGuard.js";
 
 export async function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
@@ -11,7 +11,9 @@ export async function requireAdminAuth(req: Request, res: Response, next: NextFu
   }
 
   try {
-    const { adminId, tenantId, pv } = verifyAdminToken(token);
+    const claims = verifyAdminToken(token);
+    const { adminId, tenantId, pv } = claims;
+    if (blocksWrite(claims, req.method)) return res.status(403).json({ error: "Mode lihat saja: perubahan tidak diizinkan saat Anda melihat sebagai tenant.", code: "read_only_session" });
     // A password change/reset revokes every token issued before it (lib/sessionGuard.ts).
     if (!(await isSessionCurrent("admin", adminId, pv))) throw new Error("sesi dicabut");
     req.adminId = adminId;

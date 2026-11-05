@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates, withdrawals } from "../db/schema.js";
 import { computeQrisBalance } from "../lib/qrisBalance.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
-import { signSuperadminToken } from "../lib/jwt.js";
+import { signAdminToken, signSuperadminToken } from "../lib/jwt.js";
 import { sessionVersion } from "../lib/sessionGuard.js";
 import { issueTwoFactorChallenge, twoFactorAdminRouter, twoFactorLoginRouter } from "./superadminTwoFactor.js";
 import { requireSuperadminAuth } from "../middleware/superadminAuth.js";
@@ -439,6 +439,19 @@ superadminRouter.post("/tenants/:id/extend", async (req, res) => {
   });
   const [row] = await db.select().from(tenants).where(eq(tenants.id, tenant.id));
   res.json(row);
+});
+
+// POST /api/superadmin/tenants/:id/impersonate — "lihat sebagai tenant": a 30-minute, READ-ONLY admin session for support. Every
+// request that would change data is refused by the admin auth middleware (blocksWrite), and the access is recorded in the log.
+superadminRouter.post("/tenants/:id/impersonate", async (req, res) => {
+  const [tenant] = await db.select({ id: tenants.id, name: tenants.name }).from(tenants).where(eq(tenants.id, req.params.id));
+  if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  const [admin] = await db.select().from(admins).where(eq(admins.tenantId, tenant.id)).orderBy(admins.createdAt).limit(1);
+  if (!admin) return res.status(409).json({ error: "Tenant ini belum punya akun admin." });
+  const [me] = await db.select({ email: superadmins.email }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
+  const token = signAdminToken({ adminId: admin.id, tenantId: tenant.id, pv: sessionVersion(admin.passwordHash), ro: true, imp: me?.email ?? "superadmin" }, { expiresIn: "30m" });
+  logEvent({ tenantId: tenant.id, level: "warning", category: "auth", action: "tenant.impersonated", message: `${me?.email ?? "Superadmin"} membuka dashboard ${tenant.name} dalam mode lihat saja`, actorType: "superadmin", actorLabel: me?.email ?? null });
+  res.json({ token, tenantName: tenant.name, adminEmail: admin.email, expiresInMinutes: 30 });
 });
 
 // GET /api/superadmin/tenants/:id — single tenant detail: profile, kiosk keys,

@@ -196,4 +196,22 @@ describe.skipIf(!PGlite)("support chat + alert centre (real SQL, real HTTP)", ()
     expect((await adm("POST", "/alerts/read", { all: true })).json.unread).toBe(0);
     expect((await adm("GET", "/alerts?unread=1")).json.items).toHaveLength(0);
   });
+
+  it("'lihat sebagai tenant' gives a read-only 30-minute session that is audited", async () => {
+    expect((await adm("POST", "/tenants/00000000-0000-0000-0000-00000000dead/impersonate")).status).toBe(404);
+    const r = await adm("POST", `/tenants/${T1}/impersonate`);
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ tenantName: "Studio Satu", adminEmail: "satu@x.com", expiresInMinutes: 30 });
+    const { default: jwtLib } = await import("jsonwebtoken");
+    const claims = jwtLib.decode(r.json.token) as { ro: boolean; imp: string; exp: number; iat: number; tenantId: string };
+    expect(claims).toMatchObject({ ro: true, imp: "owner@studiodo.id", tenantId: T1 });
+    expect(claims.exp - claims.iat).toBe(1800);
+    expect((await call("GET", "/api/portal/support", r.json.token)).status).toBe(200); // can look
+    const write = await call("POST", "/api/portal/support", r.json.token, { body: "tidak boleh" });
+    expect(write.status).toBe(403);
+    expect(write.json.code).toBe("read_only_session");
+    await settle();
+    const events = (await adm("GET", `/events?tenantId=${T1}&limit=50`)).json; expect(JSON.stringify(events)).toContain("tenant.impersonated");
+    expect((await call("POST", "/api/portal/support", tenant1, { body: "tenant sendiri tetap bisa" })).status).toBe(201); // a normal session is unaffected
+  });
 });

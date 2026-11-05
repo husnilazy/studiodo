@@ -717,6 +717,16 @@ export const superadminApi = {
   // Pusat Notifikasi
   getAlerts: (opts: { unread?: boolean; kind?: string; limit?: number } = {}) => request<{ items: AdminAlert[]; unread: number; critical: number }>(`/alerts?limit=${opts.limit ?? 60}${opts.unread ? "&unread=1" : ""}${opts.kind ? `&kind=${encodeURIComponent(opts.kind)}` : ""}`),
   getAlertSummary: () => request<AlertSummary>("/alerts/summary"),
+  impersonateTenant: (tenantId: string) => request<{ token: string; tenantName: string; adminEmail: string; expiresInMinutes: number }>(`/tenants/${tenantId}/impersonate`, { method: "POST", body: "{}" }),
+  // Owner insights, search, morning summary
+  getInsightsHealth: () => request<{ rows: TenantHealthRow[]; summary: { healthy: number; watch: number; risk: number } }>("/insights/health"),
+  getInsightsRevenue: () => request<RevenueInsights>("/insights/revenue"),
+  getInsightsFleet: () => request<{ latest: string | null; rows: FleetRow[] }>("/insights/fleet"),
+  getInsightsAnomalies: () => request<{ items: AnomalyItem[] }>("/insights/anomalies"),
+  getDigest: () => request<{ settings: DigestSettings; preview: string; gateway: boolean; hasNumber: boolean }>("/insights/digest"),
+  saveDigest: (settings: DigestSettings) => request<{ settings: DigestSettings }>("/insights/digest", { method: "PUT", body: JSON.stringify(settings) }),
+  sendDigestNow: () => request<{ text: string; whatsapp: "sent" | "no_gateway" | "no_number" | "failed"; error?: string }>("/insights/digest/send", { method: "POST", body: "{}" }),
+  search: (q: string) => request<{ hits: SearchHit[] }>(`/search?q=${encodeURIComponent(q)}`),
   // WhatsApp to existing tenants (manual composer + automatic renewal reminders)
   getTenantWa: (tenantId: string) => request<TenantWaData>(`/tenant-wa/${tenantId}`),
   sendTenantWa: (tenantId: string, text: string, mode: "gateway" | "manual") => request<{ ok: true }>(`/tenant-wa/${tenantId}/send`, { method: "POST", body: JSON.stringify({ text, mode }) }),
@@ -741,7 +751,19 @@ export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | 
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
 export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
-export type TenantWaStage = "d7" | "d3" | "d1" | "expired";
+export type HealthLevel = "healthy" | "watch" | "risk";
+export interface TenantHealthRow { tenantId: string; name: string; status: string; ownerWhatsapp: string | null; score: number; level: HealthLevel; reasons: string[]; sessions30: number; keys: number; online: number; licence: "ok" | "ending" | "expired" | "none" }
+export interface RevenueInsights {
+  mrr: number; revenue30: number; revenuePrev30: number; payingTenants: number; newPaying30: number; churned30: number;
+  monthly: { month: string; revenue: number }[];
+  funnel: { trialsIssued: number; activated: number; used: number; converted: number; expiredUnconverted: number };
+}
+export interface FleetRow { keyId: string; label: string | null; tenantId: string; tenantName: string; version: string | null; outdated: boolean; online: boolean; lastUsedAt: string | null; issues: string[]; autoUpdate: boolean; licenceType: string; licenceEndsAt: string | null }
+export interface AnomalyItem { kind: string; severity: "warning" | "critical"; tenantId: string | null; tenantName: string | null; message: string }
+export interface DigestSettings { enabled: boolean; hour: number }
+export interface SearchHit { type: "tenant" | "lead" | "admin" | "booth"; id: string; title: string; subtitle: string; tenantId?: string }
+
+export type TenantWaStage ="d7" | "d3" | "d1" | "expired";
 export interface TenantWaAuto { enabled: boolean; stages: TenantWaStage[] }
 export interface TenantWaData {
   tenant: { id: string; name: string; ownerName: string | null }; phone: string | null; gateway: boolean; licenceStage: TenantWaStage | null;

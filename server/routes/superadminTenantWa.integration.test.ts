@@ -71,6 +71,8 @@ describe.skipIf(!PGlite)("tenant WhatsApp (real SQL, real HTTP)", () => {
     const app = express();
     app.use(express.json());
     app.use("/api/superadmin", superadminRouter);
+    const { publicLeadsRouter } = await import("./publicLeads.js");
+    app.use("/api/public", publicLeadsRouter);
     server = app.listen(0);
     origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
@@ -146,5 +148,19 @@ describe.skipIf(!PGlite)("tenant WhatsApp (real SQL, real HTTP)", () => {
     expect(overview.upcoming.find((u: { name: string }) => u.name === "Studio Satu").sent).toBe(true);
     const history = (await adm("GET", `/tenant-wa/${T1}`)).json.history;
     expect(history.some((h: { action: string }) => h.action === "tenant.wa.auto")).toBe(true);
+  });
+
+  it("a tenant's WhatsApp reply lands in their Bantuan thread (and raises the help alert); strangers are ignored", async () => {
+    const key = (await adm("POST", "/leads/settings/webhook-key")).json.key;
+    const hook = (sender: string, message: string) => realFetch(`${origin}/api/public/wa/webhook/${key}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ sender, message, name: "Rina" }).toString() }).then((r) => r.json());
+    expect(await hook("6289999999999", "halo?")).toMatchObject({ ignored: true });
+    expect(await hook("6281234567890", "Kak, printer saya tidak mau cetak")).toEqual({ ok: true, via: "support" });
+    await settle();
+    const threads = (await adm("GET", "/support/threads")).json;
+    expect(threads.threads[0]).toMatchObject({ tenantName: "Studio Satu", needsReply: true });
+    const msgs = (await adm("GET", `/support/threads/${threads.threads[0].id}`)).json.messages;
+    expect(msgs.at(-1)).toMatchObject({ sender: "tenant", body: "Kak, printer saya tidak mau cetak" });
+    expect(msgs.at(-1).author).toContain("WhatsApp");
+    expect((await adm("GET", "/alerts")).json.items.some((a: { kind: string }) => a.kind === "support.message")).toBe(true);
   });
 });

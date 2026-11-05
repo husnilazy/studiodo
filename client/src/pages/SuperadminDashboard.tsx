@@ -4,6 +4,8 @@ import { Icon } from "@/components/kiosk/Icons";
 import LeadsPanel from "@/components/LeadsPanel";
 import AlertsPanel from "@/components/AlertsPanel";
 import { TenantWaAutoPanel, TenantWhatsAppCard } from "@/components/TenantWhatsApp";
+import InsightsPanel from "@/components/InsightsPanel";
+import CommandPalette from "@/components/CommandPalette";
 import SupportInboxPanel from "@/components/SupportInboxPanel";
 import { useAdminAlerts } from "@/lib/useAdminAlerts";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -47,6 +49,8 @@ const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdm
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 import SuperadminFinancePanel from "@/components/SuperadminFinancePanel";
 import Select from "@/components/Select";
+import { setAdminToken } from "@/lib/api";
+import { pushToast } from "@/lib/toastStore";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -1120,6 +1124,17 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
 
   const refreshAll = () => { load(); onChanged(); };
 
+  // Opens the tenant's own dashboard with a read-only token; AdminAuthGate shows the banner and the way back.
+  const viewAsTenant = async (id: string, name: string) => {
+    try {
+      const r = await superadminApi.impersonateTenant(id);
+      if (!r) return;
+      setAdminToken(r.token);
+      try { sessionStorage.setItem("studiodo-impersonating", JSON.stringify({ tenant: name, email: r.adminEmail })); } catch { /* the banner just won't show the name */ }
+      window.location.hash = "#/admin";
+    } catch (err) { pushToast({ type: "error", title: err instanceof Error ? err.message : "Gagal membuka mode lihat saja" }); }
+  };
+
   const saveProfile = async () => {
     setSavingProfile(true);
     setProfileMessage("");
@@ -1142,7 +1157,12 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
           <h2 className="mt-2 font-display text-xl font-semibold">{tenant?.name ?? (loading ? "Memuat…" : "Tenant tidak ditemukan")}</h2>
           {tenant && <p className="mt-1 text-sm text-fg/45">{tenant.slug} · dibuat {formatDate(tenant.createdAt)}</p>}
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-fg/30">Tutup</button>
+        <div className="flex items-center gap-2">
+          {tenant && (
+            <button type="button" onClick={() => void viewAsTenant(tenant.id, tenant.name)} title="Buka dashboard tenant ini dalam mode lihat saja (30 menit, tercatat di log)" className="rounded-lg border border-accent/40 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/10">Lihat sebagai tenant</button>
+          )}
+          <button type="button" onClick={onClose} className="rounded-lg border border-fg/15 px-3 py-2 text-xs text-fg/60 hover:border-fg/30">Tutup</button>
+        </div>
       </div>
 
       {tenant && (
@@ -1253,10 +1273,11 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "alerts" | "support" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
+type Section = "overview" | "insights" | "alerts" | "support" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
+    { id: "insights", label: "Wawasan", icon: "sparkles" },
     { id: "alerts", label: "Pusat Notifikasi", icon: "bell" },
     { id: "support", label: "Bantuan Tenant", icon: "mail" },
     { id: "events", label: "Aktivitas & Error", icon: "activity" },
@@ -1390,6 +1411,7 @@ export default function SuperadminDashboard() {
   return (
     <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
       <NetProgressBar />
+      {role !== "finance" && <CommandPalette sections={SECTIONS} onSection={(id) => setSection(id as Section)} onTenant={selectTenantAndSwitch} onLead={() => setSection("applications")} />}
       <AdminKeyboard />
       <aside className="hidden w-[15.5rem] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
         <div className="mb-5 px-2">
@@ -1429,6 +1451,12 @@ export default function SuperadminDashboard() {
             <h2 className="font-display text-2xl font-bold leading-tight">{current?.label}</h2>
           </div>
           <div className="flex items-center gap-2">
+            {role !== "finance" && (
+              <button type="button" onClick={() => window.dispatchEvent(new Event("studiodo-open-palette"))} className="hidden h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/50 transition hover:border-accent hover:text-fg sm:flex" aria-label="Cari">
+                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="9" cy="9" r="6" /><path d="M14 14l4 4" /></svg>
+                Cari…<kbd className="ml-2 rounded-md border border-fg/15 px-1.5 py-0.5 text-[10px]">Ctrl K</kbd>
+              </button>
+            )}
             <AdminKeyboardToggle />
             <AdminThemeToggle />
             <button type="button" onClick={logout} className="flex h-10 items-center gap-2 rounded-full border border-fg/15 bg-surface px-4 text-sm text-fg/60 hover:border-red-400 hover:text-red-500">
@@ -1495,6 +1523,8 @@ export default function SuperadminDashboard() {
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
         {section === "finance" && <SuperadminFinancePanel isOwner={role === "owner"} />}
+
+        {section === "insights" && <InsightsPanel onOpenTenant={selectTenantAndSwitch} />}
 
         {section === "alerts" && <AlertsPanel onNavigate={(id) => setSection(id as Section)} onChanged={refreshAlerts} />}
 

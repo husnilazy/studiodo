@@ -15,18 +15,25 @@ export interface AdminTokenPayload {
   tenantId: string;
   /** Fingerprint of the password the token was issued under (lib/sessionGuard.ts); absent on older tokens. */
   pv?: string;
+  /** Read-only session opened by the platform team ("lihat sebagai tenant"): every request that changes data is refused. */
+  ro?: boolean;
+  /** Who opened it (superadmin email), for the banner and the audit trail. */
+  imp?: string;
 }
 
-export function signAdminToken(payload: AdminTokenPayload): string {
-  return jwt.sign(payload, getSecret(), { expiresIn: TOKEN_TTL });
+export function signAdminToken(payload: AdminTokenPayload, opts: { expiresIn?: string } = {}): string {
+  return jwt.sign(payload, getSecret(), { expiresIn: (opts.expiresIn ?? TOKEN_TTL) as jwt.SignOptions["expiresIn"] });
 }
+
+/** True when this token may not change anything (see AdminTokenPayload.ro) and the request would. */
+export const blocksWrite = (payload: AdminTokenPayload, method: string) => Boolean(payload.ro) && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 
 export function verifyAdminToken(token: string): AdminTokenPayload {
   const decoded = jwt.verify(token, getSecret());
   if (typeof decoded !== "object" || !decoded || typeof decoded.adminId !== "string" || typeof decoded.tenantId !== "string") {
     throw new Error("Token tidak valid");
   }
-  return { adminId: decoded.adminId, tenantId: decoded.tenantId, ...(typeof decoded.pv === "string" ? { pv: decoded.pv } : {}) };
+  return { adminId: decoded.adminId, tenantId: decoded.tenantId, ...(typeof decoded.pv === "string" ? { pv: decoded.pv } : {}), ...(decoded.ro === true ? { ro: true } : {}), ...(typeof decoded.imp === "string" ? { imp: decoded.imp } : {}) };
 }
 
 export interface SuperadminTokenPayload {
