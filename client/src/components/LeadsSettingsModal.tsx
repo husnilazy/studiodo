@@ -3,6 +3,7 @@ import { superadminApi, type LeadSettings } from "@/lib/superadminApi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import { copyText, downloadText, errMessage, fieldClass, openHtmlPage } from "@/lib/leadUi";
+import Select from "@/components/Select";
 
 const box = "rounded-2xl border border-fg/10 bg-fg/[0.03] p-4";
 const heading = "text-xs font-semibold uppercase tracking-[.12em] text-fg/45";
@@ -48,7 +49,7 @@ export default function LeadsSettingsModal({ onClose }: { onClose: () => void })
           <p className="mt-2 text-sm text-fg/60">Kirim pesan dari dashboard lewat gateway (Fonnte): nomor WhatsApp STUDIODO dipindai sekali dengan QR di fonnte.com, lalu token perangkat ditempel di sini. Tanpa gateway, tombol <b>Buka WhatsApp</b> tetap bisa dipakai.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-fg/60">Provider
-              <select className={fieldClass} value={wa.provider} onChange={(e) => void saveWa({ provider: e.target.value })}><option value="none">Tidak dipakai (hanya wa.me)</option><option value="fonnte">Fonnte</option></select>
+              <Select className={fieldClass} value={wa.provider} onChange={(e) => void saveWa({ provider: e.target.value })}><option value="none">Tidak dipakai (hanya wa.me)</option><option value="fonnte">Fonnte</option></Select>
             </label>
             <label className="text-sm text-fg/60">Token perangkat {wa.hasToken && <span className="text-emerald-700">(tersimpan terenkripsi)</span>}
               <input type="password" autoComplete="off" className={fieldClass} placeholder={wa.hasToken ? "Kosongkan untuk tetap memakai yang ada" : "Tempel token dari Fonnte"} value={token} onChange={(e) => setToken(e.target.value)} />

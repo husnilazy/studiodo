@@ -3,6 +3,7 @@ import { LEAD_SOURCES, LEAD_STAGES, LEAD_STAGE_LABELS, superadminApi, type LeadA
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import { copyText, errMessage, fieldClass, fmtDate, rupiah } from "@/lib/leadUi";
+import Select from "@/components/Select";
 
 // Everything about one lead: the info asked on the first follow-up, tasks, WhatsApp composer, contract, and the timeline.
 
@@ -38,22 +39,22 @@ function InfoForm({ detail, plans, onSaved }: { detail: LeadDetail; plans: Plan[
         <label className="text-sm text-fg/60">Email<input className={fieldClass} value={val("ownerEmail") ?? ""} onChange={(e) => set({ ownerEmail: e.target.value })} /></label>
         <label className="text-sm text-fg/60">Kota<input className={fieldClass} value={val("city") ?? ""} onChange={(e) => set({ city: e.target.value })} /></label>
         <label className="text-sm text-fg/60">Sumber lead
-          <select className={fieldClass} value={val("leadSource") ?? ""} onChange={(e) => set({ leadSource: (e.target.value || null) as LeadInput["leadSource"] })}>
+          <Select className={fieldClass} value={val("leadSource") ?? ""} onChange={(e) => set({ leadSource: (e.target.value || null) as LeadInput["leadSource"] })}>
             <option value="">—</option>{LEAD_SOURCES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Jumlah booth<input type="number" min={1} disabled={locked} className={fieldClass} value={val("boothCount") ?? ""} onChange={(e) => set({ boothCount: num(e.target.value) })} /></label>
         <label className="text-sm text-fg/60">Lokasi booth<input className={fieldClass} placeholder="Mall / event / studio…" value={val("boothLocation") ?? ""} onChange={(e) => set({ boothLocation: e.target.value })} /></label>
         <label className="text-sm text-fg/60">Rencana mulai<input className={fieldClass} placeholder="mis. minggu kedua Desember" value={val("plannedStart") ?? ""} onChange={(e) => set({ plannedStart: e.target.value })} /></label>
         <label className="text-sm text-fg/60">Pembayaran booth
-          <select disabled={locked} className={fieldClass} value={val("paymentSetup") ?? ""} onChange={(e) => set({ paymentSetup: (e.target.value || null) as LeadInput["paymentSetup"] })}>
+          <Select disabled={locked} className={fieldClass} value={val("paymentSetup") ?? ""} onChange={(e) => set({ paymentSetup: (e.target.value || null) as LeadInput["paymentSetup"] })}>
             <option value="">Belum ditanyakan</option><option value="own">Akun sendiri (Midtrans/Xendit/DOKU)</option><option value="platform">Pakai platform STUDIODO</option>
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Paket untuk kontrak
-          <select disabled={locked} className={fieldClass} value={val("planSlug") ?? ""} onChange={(e) => set({ planSlug: e.target.value || null })}>
+          <Select disabled={locked} className={fieldClass} value={val("planSlug") ?? ""} onChange={(e) => set({ planSlug: e.target.value || null })}>
             <option value="">Pilih paket…</option>{plans.map((p) => <option key={p.id} value={p.slug}>{p.name}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Masa kontrak (bulan)<input type="number" min={1} max={60} disabled={locked} className={fieldClass} value={val("contractMonths") ?? ""} onChange={(e) => set({ contractMonths: num(e.target.value) })} /></label>
       </div>
@@ -128,10 +129,10 @@ function WhatsAppCard({ detail, onChanged, onOpenSettings }: { detail: LeadDetai
         <button type="button" onClick={onOpenSettings} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${data?.gateway ? "bg-emerald-500/15 text-emerald-700" : "bg-fg/8 text-fg/55"}`}>{data?.gateway ? "Gateway tersambung" : "Gateway belum diatur"}</button>
       </div>
       {!phoneOk && data && <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700">Lead ini belum punya nomor WhatsApp yang valid — isi di Info follow-up.</p>}
-      <select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-3`} disabled={!data}>
+      <Select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-3`} disabled={!data}>
         <option value="">Pilih template pesan…</option>
         {data?.templates.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-      </select>
+      </Select>
       <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Tulis pesan atau pilih template di atas…" className={`${fieldClass} mt-2`} />
       {missing.length > 0 && <p className="mt-1 text-xs text-amber-700">Belum terisi: {missing.map((m) => `{${m}}`).join(", ")} — lengkapi data lead atau ubah teksnya.</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -341,9 +342,9 @@ export default function LeadDetailDrawer({ id, onClose, onChanged, onOpenSetting
             {l && <p className="truncate text-xs text-fg/50">{l.ownerName}{l.ownerWhatsapp ? ` · ${l.ownerWhatsapp}` : ""}{l.ownerEmail ? ` · ${l.ownerEmail}` : ""}{l.leadSource ? ` · via ${l.leadSource}` : ""}</p>}
           </div>
           {l && (
-            <select value={l.pipelineStage} onChange={(e) => void move(e.target.value as LeadStage)} className="rounded-full border border-fg/20 bg-surface px-3 py-1.5 text-xs font-semibold" aria-label="Tahap pipeline">
+            <Select value={l.pipelineStage} onChange={(e) => void move(e.target.value as LeadStage)} className="rounded-full border border-fg/20 bg-surface px-3 py-1.5 text-xs font-semibold" aria-label="Tahap pipeline">
               {LEAD_STAGES.map((s) => <option key={s} value={s} disabled={s === "active" && l.status !== "converted"}>{LEAD_STAGE_LABELS[s]}</option>)}
-            </select>
+            </Select>
           )}
           <button type="button" onClick={onClose} className="rounded-full border border-fg/20 px-3 py-1.5 text-xs font-semibold" aria-label="Tutup">Tutup ✕</button>
         </header>

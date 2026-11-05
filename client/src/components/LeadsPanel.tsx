@@ -5,6 +5,7 @@ import Spinner from "@/components/Spinner";
 import { errMessage, fieldClass, fmtDate } from "@/lib/leadUi";
 import LeadDetailDrawer from "@/components/LeadDetailDrawer";
 import LeadsSettingsModal, { LeadDocsModal } from "@/components/LeadsSettingsModal";
+import Select from "@/components/Select";
 
 // Follow-up CRM for prospective tenants: a pipeline board (drag a card to move it) or a list, with the day's follow-ups on top.
 // Everything per lead — info, tasks, WhatsApp, contract, timeline — lives in the drawer (LeadDetailDrawer).
@@ -70,9 +71,9 @@ function NewLeadModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <label className="text-sm text-fg/60">Email (boleh menyusul)<input className={fieldClass} value={draft.ownerEmail ?? ""} onChange={(e) => set({ ownerEmail: e.target.value })} /></label>
           <label className="text-sm text-fg/60">Kota<input className={fieldClass} value={draft.city ?? ""} onChange={(e) => set({ city: e.target.value })} /></label>
           <label className="text-sm text-fg/60">Sumber
-            <select className={fieldClass} value={draft.leadSource ?? ""} onChange={(e) => set({ leadSource: e.target.value || null })}>
+            <Select className={fieldClass} value={draft.leadSource ?? ""} onChange={(e) => set({ leadSource: e.target.value || null })}>
               {LEAD_SOURCES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </Select>
           </label>
         </div>
         <label className="mt-3 block text-sm text-fg/60">Catatan awal<textarea rows={2} className={fieldClass} value={draft.message ?? ""} onChange={(e) => set({ message: e.target.value })} /></label>

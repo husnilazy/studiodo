@@ -3,6 +3,7 @@ import { api, type WithdrawalOverview, type WithdrawalRow } from "@/lib/api";
 import { panel, inputClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
+import Select from "@/components/Select";
 
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 
@@ -132,9 +133,9 @@ export default function WithdrawalPanel() {
           </label>
           <label className="block text-sm text-fg/60">
             Bank / e-wallet
-            <select className={inputClass} value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })}>
+            <Select className={inputClass} value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })}>
               {BANKS.map((bank) => <option key={bank} value={bank}>{bank}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="block text-sm text-fg/60">
             Nomor rekening / e-wallet

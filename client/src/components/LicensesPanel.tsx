@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { superadminApi, type LicenseRow, type LicenseType, type SuperadminTenant } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin control over every booth licence: issue trial keys, convert trial → paid, shift or set the end date,
 // reset the device, revoke / restore. One kiosk key = one booth = one licence.
@@ -76,18 +77,18 @@ function IssueKeyForm({ tenants, fixedTenantId, onIssued }: { tenants: Superadmi
           <div className="mt-3 grid gap-3 sm:grid-cols-4">
             {!fixedTenantId && (
               <label className="text-sm text-fg/60 sm:col-span-2">Tenant
-                <select className={inputClass} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+                <Select className={inputClass} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
                   <option value="">Pilih tenant…</option>
                   {tenants.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>)}
-                </select>
+                </Select>
               </label>
             )}
             <label className="text-sm text-fg/60">Jenis
-              <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value as LicenseType)}>
+              <Select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value as LicenseType)}>
                 <option value="trial">Trial</option>
                 <option value="paid">Berlangganan (gratis/manual)</option>
                 <option value="unpaid">Belum bayar (terkunci)</option>
-              </select>
+              </Select>
             </label>
             {kind !== "unpaid" && (
               <label className="text-sm text-fg/60">Lama (hari)
@@ -143,9 +144,9 @@ function RowActions({ row, onChanged }: { row: LicenseRow; onChanged: () => void
       {editing && (
         <div className="flex flex-wrap items-end justify-end gap-2 rounded-xl border border-fg/10 bg-fg/5 p-3 text-left">
           <label className="text-xs text-fg/55">Jenis
-            <select className={inputClass} value={type} onChange={(e) => setType(e.target.value as LicenseType)}>
+            <Select className={inputClass} value={type} onChange={(e) => setType(e.target.value as LicenseType)}>
               <option value="trial">Trial</option><option value="paid">Berlangganan</option><option value="unpaid">Belum bayar</option>
-            </select>
+            </Select>
           </label>
           {type !== "unpaid" && (
             <label className="text-xs text-fg/55">Berakhir pada

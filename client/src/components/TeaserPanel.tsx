@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFitWidth } from "@/lib/useFitWidth";
 import { contentStudioApi, type CsJob, type CsTeaser } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Konten Instagram → Teaser Reel: one continuous 1080×1920 motion graphic (~19 s) that tells the whole story:
 // logo reveal → COMING SOON → four product beats (QRIS, shoot & print, results on the phone, dashboard) → All-in-One + call to action.
@@ -75,11 +76,11 @@ export function TeaserPanel() {
         <div className="grid gap-3 rounded-2xl border border-fg/10 bg-fg/5 p-4">
           <div className="flex items-center justify-between"><p className="text-sm font-bold">Pengaturan</p><button onClick={() => setOpts(DEFAULTS)} className="text-xs font-semibold text-accent underline">Kembalikan default</button></div>
           <Field label="Logo">
-            <select className={inputClass} value={opts.logoStyle} onChange={(e) => set("logoStyle", e.target.value as CsTeaser["logoStyle"])}>
+            <Select className={inputClass} value={opts.logoStyle} onChange={(e) => set("logoStyle", e.target.value as CsTeaser["logoStyle"])}>
               <option value="silver">Silver metalik (tanpa kotak)</option>
               <option value="squircle-white">Ikon kaca putih</option>
               <option value="squircle-dark">Ikon kaca gelap</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Judul adegan 2" hint="( | = baris baru, maks 2 baris )"><input className={inputClass} value={opts.comingTitle} onChange={(e) => set("comingTitle", e.target.value)} /></Field>
           <Field label="Empat langkah produk" hint="( pisah dengan | )"><input className={inputClass} value={opts.beats} onChange={(e) => set("beats", e.target.value)} /></Field>

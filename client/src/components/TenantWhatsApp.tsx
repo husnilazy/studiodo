@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { superadminApi, type TenantWaAuto, type TenantWaData, type TenantWaOverview, type TenantWaStage } from "@/lib/superadminApi";
 import { pushToast } from "@/lib/toastStore";
 import { errMessage, fieldClass } from "@/lib/leadUi";
+import Select from "@/components/Select";
 
 // WhatsApp to existing tenants. Two pieces: a composer inside the tenant detail (manual: gateway or wa.me), and the
 // "Pengingat WhatsApp otomatis" panel on the Tenant page (renewal reminders sent by the server, with a visible queue).
@@ -49,10 +50,10 @@ export function TenantWhatsAppCard({ tenantId }: { tenantId: string }) {
       {data && (
         <>
           {data.phone && <p className="mt-2 text-xs text-fg/45">Ke <b className="text-fg/70">{data.tenant.ownerName ?? "pemilik"}</b> · +{data.phone}</p>}
-          <select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-3`}>
+          <Select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-3`}>
             <option value="">Pilih template pesan…</option>
             {data.templates.map((t) => <option key={t.key} value={t.key}>{t.label}{t.key === suggested ? " — disarankan" : ""}</option>)}
-          </select>
+          </Select>
           <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Tulis pesan atau pilih template di atas…" className={`${fieldClass} mt-2`} />
           {missing.length > 0 && <p className="mt-1 text-xs text-amber-700">Belum terisi: {missing.map((m) => `{${m}}`).join(", ")} — tenant belum punya data ini (mis. belum ada booth berlangganan). Ubah teksnya sebelum dikirim.</p>}
           <div className="mt-3 flex flex-wrap items-center gap-2">

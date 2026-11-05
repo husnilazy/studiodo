@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { superadminApi, type MarketReportRow, type MarketReviewRow, type MarketplaceCategory, type MarketplaceItem, type MarketplaceSource, type SuperadminTenant } from "@/lib/superadminApi";
 import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
+import Select from "@/components/Select";
 
 // Superadmin curation of the template marketplace: publish a template from any tenant's library into
 // the shared catalog, then feature, hide, edit or remove entries. Tenants install from the website.
@@ -44,10 +45,10 @@ function PublishForm({ categories, onPublished }: { categories: MarketplaceCateg
       <p className="mt-1 text-xs text-fg/40">Pilih tenant pemilik template (mis. akun STUDIODO sendiri), lalu template-nya. Yang diterbitkan adalah salinan; mengubah aslinya tidak memengaruhi katalog.</p>
       <label className="mt-4 block text-sm text-fg/60">
         Tenant sumber
-        <select className={inputClass} value={tenantId} onChange={(e) => pickTenant(e.target.value)}>
+        <Select className={inputClass} value={tenantId} onChange={(e) => pickTenant(e.target.value)}>
           <option value="">— pilih tenant —</option>
           {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        </Select>
       </label>
 
       {sources !== null && (
@@ -72,9 +73,9 @@ function PublishForm({ categories, onPublished }: { categories: MarketplaceCateg
           <label className="text-sm text-fg/60">Nama<input maxLength={80} className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label className="text-sm text-fg/60">Kreator (kredit, opsional)<input maxLength={60} className={inputClass} value={form.creatorName} onChange={(e) => setForm({ ...form, creatorName: e.target.value })} placeholder="kosong = STUDIODO" /></label>
           <label className="text-sm text-fg/60">Kategori
-            <select className={inputClass} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <Select className={inputClass} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="flex items-end gap-2 pb-2 text-sm text-fg/60"><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> Tampilkan sebagai unggulan</label>
           <label className="text-sm text-fg/60 sm:col-span-2">Deskripsi (opsional)<textarea rows={2} maxLength={300} className={inputClass} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>

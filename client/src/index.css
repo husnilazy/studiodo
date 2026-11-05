@@ -463,8 +463,43 @@ html.admin-themed input[type="file"]::file-selector-button {
 html.admin-themed input[type="file"]::file-selector-button:hover {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
+/* Native selects that are not the custom <Select> yet: custom chevron, rounded, and a list that follows the theme (no white OS list). */
 html.admin-themed select {
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23919bb8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  color-scheme: inherit;
+}
+html.admin-themed select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+html.admin-themed select option {
+  background-color: var(--kiosk-surface, #fff);
+  color: var(--kiosk-text);
+}
+
+/* Custom <Select> popup and page-to-page motion in the dashboards. */
+@keyframes sa-pop { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes sa-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.sa-select-list { animation: sa-pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sa-page { animation: sa-rise 0.32s cubic-bezier(0.22, 0.8, 0.24, 1) both; }
+.sa-select:focus-visible { outline: none; border-color: var(--accent); }
+html.admin-themed button, html.admin-themed a, html.admin-themed input, html.admin-themed textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 0.16s;
+  transition-timing-function: ease;
+}
+html.admin-themed button:active:not(:disabled) { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) {
+  .sa-select-list, .sa-page { animation: none; }
+  html.admin-themed button:active:not(:disabled) { transform: none; }
 }
 html.admin-themed table thead th {
   font-size: 0.6875rem;

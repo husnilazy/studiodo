@@ -46,6 +46,7 @@ const EmailLogPanel = lazy(() => import("@/components/EmailLogPanel").then((m) =
 const NotificationsAdminPanel = lazy(() => import("@/components/NotificationsAdminPanel").then((m) => ({ default: m.NotificationsAdminPanel })));
 import SuperadminWithdrawalsPanel, { QrisSettlementControl } from "@/components/SuperadminWithdrawalsPanel";
 import SuperadminFinancePanel from "@/components/SuperadminFinancePanel";
+import Select from "@/components/Select";
 
 const inputClass = "mt-1 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent";
 const money = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -337,9 +338,9 @@ function ProfileFieldsGrid({ value, onChange }: { value: Partial<TenantProfileFi
         <input className={inputClass} placeholder="628xxxxxxxxxx" value={value.ownerWhatsapp ?? ""} onChange={(e) => onChange({ ownerWhatsapp: e.target.value })} />
       </label>
       <label className="text-sm text-fg/60">Jenis usaha
-        <select className={inputClass} value={value.businessType ?? ""} onChange={(e) => onChange({ businessType: e.target.value })}>
+        <Select className={inputClass} value={value.businessType ?? ""} onChange={(e) => onChange({ businessType: e.target.value })}>
           {BUSINESS_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="text-sm text-fg/60">Kota
         <input className={inputClass} value={value.city ?? ""} onChange={(e) => onChange({ city: e.target.value })} />
@@ -641,20 +642,20 @@ function EventsLogPanel({ tenants }: { tenants: SuperadminTenant[] }) {
           <p className="mt-1 text-sm text-fg/45">Semua perubahan tenant/billing/plan, dan error server yang belum tertangani.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={level} onChange={(e) => setLevel(e.target.value)}>
             <option value="all">Semua level</option>
             <option value="info">Info</option>
             <option value="warning">Warning</option>
             <option value="error">Error</option>
-          </select>
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
+          </Select>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="all">Semua kategori</option>
             {Object.entries(CATEGORY_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-          <select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+          </Select>
+          <Select className="rounded-lg border border-fg/15 bg-fg/5 px-2 py-1.5 text-xs" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
             <option value="">Semua tenant</option>
             {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -778,7 +779,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                   </td>
                   <td className="p-3 text-fg/60">{tenant.adminEmail ?? "-"}</td>
                   <td className="p-3">
-                    <select
+                    <Select
                       className="w-28 rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={knownPlan ? draft.plan : "__custom__"}
                       onChange={(e) => {
@@ -788,10 +789,10 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                     >
                       {!knownPlan && <option value="__custom__">{draft.plan || "(kosong)"}</option>}
                       {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td className="p-3">
-                    <select
+                    <Select
                       className="rounded border border-fg/15 bg-fg/5 px-2 py-1 text-xs"
                       value={draft.status}
                       onChange={(e) => setDrafts({ ...drafts, [tenant.id]: { ...draft, status: e.target.value } })}
@@ -799,7 +800,7 @@ function TenantsTable({ plans, onSelectTenant, reloadRef }: { plans: Plan[]; onS
                       <option value="active">active</option>
                       <option value="trial">trial</option>
                       <option value="suspended">suspended</option>
-                    </select>
+                    </Select>
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
@@ -938,10 +939,10 @@ function CreateTenantPanel({ plans, onCreated }: { plans: Plan[]; onCreated: () 
                 <input className={inputClass} type="number" min={1} max={3650} placeholder="Kosong = default platform" value={draft.trialDays} onChange={(e) => setDraft({ ...draft, trialDays: e.target.value })} />
               </label>
               <label className="text-sm text-fg/60">Plan awal (opsional)
-                <select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
+                <Select className={inputClass} value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
                   <option value="">Trial (default)</option>
                   {plans.map((plan) => <option key={plan.id} value={plan.slug}>{plan.name}</option>)}
-                </select>
+                </Select>
               </label>
             </div>
 
@@ -1015,20 +1016,20 @@ function RecordPaymentForm({ tenant, plans, onRecorded }: { tenant: TenantDetail
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Catat pembayaran</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-fg/60 sm:col-span-2">Plan (opsional — isi otomatis nominal & periode)
-          <select className={inputClass} value={planId} onChange={(e) => applyPlan(e.target.value)}>
+          <Select className={inputClass} value={planId} onChange={(e) => applyPlan(e.target.value)}>
             <option value="">Tanpa plan (manual)</option>
             {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {money(Number(plan.price))}{BILLING_LABEL[plan.billingInterval]}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Nominal (Rp)<input className={inputClass} type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
         <label className="text-sm text-fg/60">Perpanjang (hari)<input className={inputClass} type="number" min={1} value={periodDays} onChange={(e) => setPeriodDays(e.target.value)} /></label>
         <label className="text-sm text-fg/60">Metode
-          <select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>
+          <Select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="manual">Manual</option>
             <option value="transfer">Transfer bank</option>
             <option value="cash">Cash</option>
             <option value="other">Lainnya</option>
-          </select>
+          </Select>
         </label>
         <label className="text-sm text-fg/60">Catatan (opsional)<input className={inputClass} placeholder="mis. Perpanjangan Feb 2026" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       </div>
@@ -1448,7 +1449,7 @@ export default function SuperadminDashboard() {
 
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
         <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
-        <div className="mx-auto w-full max-w-[96rem] space-y-6 pb-8 2xl:max-w-[110rem]">
+        <div key={section} className="sa-page mx-auto w-full max-w-[96rem] space-y-6 pb-8 2xl:max-w-[110rem]">
         {section === "overview" && (
           <div className="space-y-6">
             <SecurityAlertsPanel />

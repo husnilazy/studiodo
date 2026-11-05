@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFitWidth } from "@/lib/useFitWidth";
 import { contentStudioApi, type CsJob, type CsTriptych } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Konten Instagram → Pembuka Feed: three seamless animated tiles for the top row of the profile grid.
 // Geometry mirrors server/lib/contentStudio/triptych.ts:
@@ -124,17 +125,17 @@ export function TriptychPanel() {
         <div className="grid gap-3 rounded-2xl border border-fg/10 bg-fg/5 p-4">
           <div className="flex items-center justify-between"><p className="text-sm font-bold">Pengaturan</p><button onClick={() => setOpts(DEFAULTS)} className="text-xs font-semibold text-accent underline">Kembalikan default</button></div>
           <Field label="Mode sambungan">
-            <select className={inputClass} value={opts.seam} onChange={(e) => set("seam", e.target.value as CsTriptych["seam"])}>
+            <Select className={inputClass} value={opts.seam} onChange={(e) => set("seam", e.target.value as CsTriptych["seam"])}>
               <option value="panorama">Panorama: PNG menyambung persis</option>
               <option value="grid">Grid 3:4: mulus di grid Instagram</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Logo (tile kiri)">
-            <select className={inputClass} value={opts.logoStyle} onChange={(e) => set("logoStyle", e.target.value as CsTriptych["logoStyle"])}>
+            <Select className={inputClass} value={opts.logoStyle} onChange={(e) => set("logoStyle", e.target.value as CsTriptych["logoStyle"])}>
               <option value="silver">Silver metalik (tanpa kotak)</option>
               <option value="squircle-white">Ikon kaca putih</option>
               <option value="squircle-dark">Ikon kaca gelap</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Judul tile tengah" hint="( | = baris baru, maks 2 baris )"><input className={inputClass} value={opts.comingTitle} onChange={(e) => set("comingTitle", e.target.value)} /></Field>
           <Field label="Teks di bawah judul"><input className={inputClass} value={opts.comingSub} onChange={(e) => set("comingSub", e.target.value)} /></Field>

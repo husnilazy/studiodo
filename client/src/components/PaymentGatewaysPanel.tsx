@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { superadminApi, type GatewayInfo, type GatewaysOverview, type PlatformDokuInfo } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Pengaturan → "Pembayaran langganan": the gateways STUDIODO uses to collect subscription fees
 // from tenants. Secrets are write-only (the server never sends them back, only a masked tail), checkout tries
@@ -88,10 +89,10 @@ function GatewayCard({ gateway, onChanged }: { gateway: GatewayInfo; onChanged: 
         {gateway.provider === "midtrans" && (
           <label className="text-sm text-fg/60">
             Mode
-            <select className={inputClass} value={environment} onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}>
+            <Select className={inputClass} value={environment} onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}>
               <option value="sandbox">Sandbox (uji coba)</option>
               <option value="production">Produksi (uang sungguhan)</option>
-            </select>
+            </Select>
           </label>
         )}
         <label className={`text-sm text-fg/60 ${gateway.provider === "midtrans" ? "sm:col-span-2" : ""}`}>
@@ -172,8 +173,8 @@ function PlatformDokuCard() {
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-fg/60">Client ID<input className={inputClass} value={form.clientId} onChange={(e) => set("clientId", e.target.value)} /></label>
         <label className="text-sm text-fg/60">Secret Key {info?.hasSecret && <span className="text-xs text-emerald-300">(tersimpan)</span>}<input className={inputClass} type="password" autoComplete="off" placeholder={info?.hasSecret ? "kosongkan bila tidak diganti" : ""} value={form.secretKey} onChange={(e) => set("secretKey", e.target.value)} /></label>
-        <label className="text-sm text-fg/60">Mode<select className={inputClass} value={form.environment} onChange={(e) => set("environment", e.target.value)}><option value="sandbox">Sandbox (uji coba)</option><option value="production">Produksi</option></select></label>
-        <label className="text-sm text-fg/60">Tampilan QRIS<select className={inputClass} value={form.qrisMode} onChange={(e) => set("qrisMode", e.target.value)}><option value="checkout">Halaman DOKU (Checkout)</option><option value="snap">QRIS langsung (SNAP)</option></select></label>
+        <label className="text-sm text-fg/60">Mode<Select className={inputClass} value={form.environment} onChange={(e) => set("environment", e.target.value)}><option value="sandbox">Sandbox (uji coba)</option><option value="production">Produksi</option></Select></label>
+        <label className="text-sm text-fg/60">Tampilan QRIS<Select className={inputClass} value={form.qrisMode} onChange={(e) => set("qrisMode", e.target.value)}><option value="checkout">Halaman DOKU (Checkout)</option><option value="snap">QRIS langsung (SNAP)</option></Select></label>
       </div>
       {form.qrisMode === "snap" && (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">

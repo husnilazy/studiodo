@@ -4,6 +4,7 @@ import { IconPanel } from "@/components/IconPanel";
 import { TeaserPanel } from "@/components/TeaserPanel";
 import { TriptychPanel } from "@/components/TriptychPanel";
 import { contentStudioApi, type CsDeck, type CsIdea, type CsJob, type CsMockup, type CsSlide, type CsSlideKind, type CsTone } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Konten Instagram. Decks (carousel / reel) are rendered by the server PC from the same HTML templates the
 // preview uses: PNG per carousel slide, MP4 (30 fps, 1080×1920) for reels. See server/lib/contentStudio.
@@ -277,8 +278,8 @@ export function ContentStudioPanel() {
               <div className="grid gap-3 rounded-2xl border border-fg/10 bg-fg/5 p-4">
                 <Field label="Nama deck (internal)"><input className={inputClass} value={draft.title} onChange={(e) => edit((d) => { d.title = e.target.value; })} /></Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Format"><select className={inputClass} value={draft.format} onChange={(e) => edit((d) => { d.format = e.target.value as "carousel" | "reel" | "highlight"; })}><option value="carousel">Carousel 4:5</option><option value="reel">Reel 9:16</option><option value="highlight">Cover Sorotan 9:16</option></select></Field>
-                  <Field label="Tema dasar"><select className={inputClass} value={draft.tone} onChange={(e) => edit((d) => { d.tone = e.target.value as CsTone; })}>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+                  <Field label="Format"><Select className={inputClass} value={draft.format} onChange={(e) => edit((d) => { d.format = e.target.value as "carousel" | "reel" | "highlight"; })}><option value="carousel">Carousel 4:5</option><option value="reel">Reel 9:16</option><option value="highlight">Cover Sorotan 9:16</option></Select></Field>
+                  <Field label="Tema dasar"><Select className={inputClass} value={draft.tone} onChange={(e) => edit((d) => { d.tone = e.target.value as CsTone; })}>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                 </div>
                 <Field label="Handle Instagram"><input className={inputClass} value={draft.handle} onChange={(e) => edit((d) => { d.handle = e.target.value; })} /></Field>
                 <div className="flex gap-2">
@@ -299,14 +300,14 @@ export function ContentStudioPanel() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Jenis"><select className={inputClass} value={slide.kind} onChange={(e) => editSlide((s) => { s.kind = e.target.value as CsSlideKind; })}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-                  <Field label="Tema slide"><select className={inputClass} value={slide.tone ?? ""} onChange={(e) => editSlide((s) => { s.tone = (e.target.value || undefined) as CsTone | undefined; })}><option value="">Ikut deck</option>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+                  <Field label="Jenis"><Select className={inputClass} value={slide.kind} onChange={(e) => editSlide((s) => { s.kind = e.target.value as CsSlideKind; })}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
+                  <Field label="Tema slide"><Select className={inputClass} value={slide.tone ?? ""} onChange={(e) => editSlide((s) => { s.tone = (e.target.value || undefined) as CsTone | undefined; })}><option value="">Ikut deck</option>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                 </div>
                 {slide.kind !== "badge" && <Field label="Label kecil (eyebrow)"><input className={inputClass} value={slide.eyebrow ?? ""} onChange={(e) => editSlide((s) => { s.eyebrow = e.target.value; })} /></Field>}
                 <Field label={slide.kind === "badge" ? "Nama sorotan (untuk nama file)" : "Judul  ( | = baris baru, *kata* = warna aksen )"}><textarea rows={2} className={inputClass} value={slide.title} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} /></Field>
                 {!["compare", "badge", "chat"].includes(slide.kind) && <Field label="Teks pendukung"><textarea rows={2} className={inputClass} value={slide.body ?? ""} onChange={(e) => editSlide((s) => { s.body = e.target.value; })} /></Field>}
-                {slide.kind === "badge" && <Field label="Ikon"><select className={inputClass} value={slide.icon ?? "spark"} onChange={(e) => editSlide((s) => { s.icon = e.target.value; })}>{ICON_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
-                {["cover", "feature", "steps", "cta", "hook", "note"].includes(slide.kind) && <Field label="Mockup"><select className={inputClass} value={slide.mockup ?? "none"} onChange={(e) => editSlide((s) => { s.mockup = e.target.value as CsMockup; })}>{MOCKUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
+                {slide.kind === "badge" && <Field label="Ikon"><Select className={inputClass} value={slide.icon ?? "spark"} onChange={(e) => editSlide((s) => { s.icon = e.target.value; })}>{ICON_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>}
+                {["cover", "feature", "steps", "cta", "hook", "note"].includes(slide.kind) && <Field label="Mockup"><Select className={inputClass} value={slide.mockup ?? "none"} onChange={(e) => editSlide((s) => { s.mockup = e.target.value as CsMockup; })}>{MOCKUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>}
                 {["feature", "stat", "compare", "hook", "chat", "note"].includes(slide.kind) && <Field label="Catatan di bawah (pill)"><input className={inputClass} value={slide.note ?? ""} onChange={(e) => editSlide((s) => { s.note = e.target.value; })} /></Field>}
                 {slide.kind === "hook" && <Field label="Emoji sticker (satu emoji)"><input className={inputClass} value={slide.emoji ?? ""} onChange={(e) => editSlide((s) => { s.emoji = e.target.value; })} /></Field>}
                 {slide.kind === "chat" && <Field label="Obrolan (satu pesan per baris: Q: penanya, A: STUDIODO)"><textarea rows={7} className={inputClass} value={(slide.chat ?? []).map((m) => `${m.from === "us" ? "A" : "Q"}: ${m.text}`).join("\n")} onChange={(e) => editSlide((s) => { s.chat = lines(e.target.value).map((l) => (/^a\s*:/i.test(l) ? { from: "us" as const, text: l.replace(/^a\s*:\s*/i, "") } : { from: "them" as const, text: l.replace(/^q\s*:\s*/i, "") })); })} /></Field>}

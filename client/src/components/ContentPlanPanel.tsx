@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentStudioApi, type CsDeck, type CsPlan, type CsPlanItem, type CsPlanStatus } from "@/lib/superadminApi";
+import Select from "@/components/Select";
 
 // Superadmin → Konten Instagram → Rencana & jadwal: what to post, in which order, on which day, with a checklist per post.
 // Edits autosave (debounced) to the server; "Susun ulang jadwal" re-dates every post that is not live yet.
@@ -260,9 +261,9 @@ export function ContentPlanPanel({ decks, onOpenDeck }: { decks: CsDeck[]; onOpe
                           </span>
                         </button>
                         <span className="text-[11px] font-semibold text-fg/50">{done}/{POST_CHECKS.length}</span>
-                        <select value={item.status} onChange={(e) => patchItem(item.id, (i) => ({ ...i, status: e.target.value as CsPlanStatus }))} className={`rounded-full border-0 px-3 py-1.5 text-xs font-bold outline-none ${STATUS[item.status].tone}`}>
+                        <Select value={item.status} onChange={(e) => patchItem(item.id, (i) => ({ ...i, status: e.target.value as CsPlanStatus }))} className={`rounded-full border-0 px-3 py-1.5 text-xs font-bold outline-none ${STATUS[item.status].tone}`}>
                           {(Object.keys(STATUS) as CsPlanStatus[]).map((s) => <option key={s} value={s} className="text-black">{STATUS[s].label}</option>)}
-                        </select>
+                        </Select>
                       </div>
                       {expanded && (
                         <div className="grid gap-4 border-t border-fg/10 p-4 lg:grid-cols-2">
@@ -301,7 +302,7 @@ export function ContentPlanPanel({ decks, onOpenDeck }: { decks: CsDeck[]; onOpe
 
         <div className="mt-5 grid gap-2 rounded-2xl border border-dashed border-fg/20 p-4 sm:grid-cols-[1fr_130px_auto]">
           <input className={inputClass + " !mt-0"} placeholder="Tambah post sendiri (mis. Story pengumuman, repost testimoni)…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addItem()} />
-          <select className={inputClass + " !mt-0"} value={newFormat} onChange={(e) => setNewFormat(e.target.value as "carousel" | "reel" | "story")}><option value="carousel">Carousel</option><option value="reel">Reel</option><option value="story">Story</option></select>
+          <Select className={inputClass + " !mt-0"} value={newFormat} onChange={(e) => setNewFormat(e.target.value as "carousel" | "reel" | "story")}><option value="carousel">Carousel</option><option value="reel">Reel</option><option value="story">Story</option></Select>
           <button disabled={!newTitle.trim()} onClick={addItem} className="rounded-full bg-fg px-5 py-2 text-xs font-bold text-canvas disabled:opacity-40">+ Tambah</button>
         </div>
       </section>
