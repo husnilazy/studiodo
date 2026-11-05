@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { pushConfigNow, useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 
 import { inputClass } from "@/lib/adminUi";
+import { pushToast } from "@/lib/toastStore";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block text-sm text-fg/60">{label}{children}</label>;
@@ -13,12 +14,16 @@ export default function GalleryProfile() {
   const config = useBoothConfig((state) => state.config);
   const update = useBoothConfig((state) => state.update);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   // The real public address customers land on after scanning the QR (was a hard-coded example string).
   const [shareBase, setShareBase] = useState<string | null>(null);
   useEffect(() => { api.getPublicConfig().then((r) => setShareBase(r?.baseUrl ?? null)).catch(() => setShareBase(null)); }, []);
   const set = <K extends keyof BoothConfig>(key: K, value: BoothConfig[K]) => update({ [key]: value } as Partial<BoothConfig>);
 
   const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
     await api.updateGalleryProfile({
       brandName: config.brandName,
       tagline: config.tagline,
@@ -35,6 +40,11 @@ export default function GalleryProfile() {
     await pushConfigNow(); // keeps the saved design (and any new logo file) in step with the profile
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2200);
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menyimpan profil", sub: error instanceof Error ? error.message : "Coba lagi." });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -67,7 +77,7 @@ export default function GalleryProfile() {
         </Field>
         {config.logoUrl && <img src={config.logoUrl} alt={config.brandName} className="mt-3 h-20 w-20 rounded-xl bg-fg/10 object-contain p-2" />}
         <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-fg/10 pt-5">
-          <button type="button" onClick={save} className="k-btn k-btn-accent !min-h-0 !py-3 !text-sm">{saved ? "Profil tersimpan" : "Simpan profil gallery"}</button>
+          <button type="button" onClick={save} disabled={saving} className="k-btn k-btn-accent !min-h-0 !py-3 !text-sm disabled:opacity-60">{saving ? "Menyimpan…" : saved ? "Profil tersimpan" : "Simpan profil gallery"}</button>
           <span className="text-xs text-fg/45">{shareBase ? `Link hasil pelanggan: ${shareBase}/#/share/<id-sesi>` : "Link hasil pelanggan dibuat otomatis per sesi."}</span>
         </div>
       </section>

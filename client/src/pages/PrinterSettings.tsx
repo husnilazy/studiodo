@@ -108,11 +108,15 @@ export default function PrinterSettings() {
   };
 
   const saveAdditionalPrintConfig = async () => {
-    const savedConfig = await api.updatePrintingConfig(additionalPrintConfig);
-    if (savedConfig) setAdditionalPrintConfig(savedConfig);
-    setAdditionalPrintSaved(true);
-    pushToast({ type: "success", title: "Additional print tersimpan" });
-    window.setTimeout(() => setAdditionalPrintSaved(false), 1800);
+    try {
+      const savedConfig = await api.updatePrintingConfig(additionalPrintConfig);
+      if (savedConfig) setAdditionalPrintConfig(savedConfig);
+      setAdditionalPrintSaved(true);
+      pushToast({ type: "success", title: "Additional print tersimpan" });
+      window.setTimeout(() => setAdditionalPrintSaved(false), 1800);
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menyimpan additional print", sub: error instanceof Error ? error.message : undefined });
+    }
   };
 
   const applyPreset = (preset: Partial<PrinterDraft>, nameMatch: RegExp) => {

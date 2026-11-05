@@ -247,6 +247,9 @@ const updaterStatus = {
   state: "idle", // idle | checking | available | not-available | downloading | downloaded | error
   version: null,
   progressPercent: null,
+  transferredBytes: null,
+  totalBytes: null,
+  bytesPerSecond: null,
   error: null,
   lastCheckedAt: null,
   // Mirrors the per-kiosk "auto-update" switch so the screen can decide whether it may restart the app by itself.
@@ -262,6 +265,14 @@ const updaterStatus = {
 // startup checks below — a manual "Cek update sekarang" click
 // (updater:checkNow) always bypasses it, same as most OS update UIs
 // separate "auto-update" from "check now".
+// Every state change is pushed to all open windows so the screens can show a real progress notice instead of a version
+// number that silently changes. (Polling getStatus still works as a fallback.)
+function broadcastUpdaterStatus() {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("updater:status", updaterStatus);
+  }
+}
+
 let autoUpdateEnabled = true;
 ipcMain.on("updater:setEnabled", (_event, enabled) => {
   autoUpdateEnabled = Boolean(enabled);
@@ -274,36 +285,51 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on("checking-for-update", () => {
+    // A background re-check must not knock a finished download or a running install back to "checking".
+    if (updaterStatus.state === "downloaded" || updaterStatus.state === "downloading" || updaterStatus.state === "installing") return;
     updaterStatus.state = "checking";
     updaterStatus.error = null;
     console.log("[updater] checking for update");
+    broadcastUpdaterStatus();
   });
   autoUpdater.on("update-available", (info) => {
     updaterStatus.state = "available";
     updaterStatus.version = info.version;
+    updaterStatus.progressPercent = 0;
     updaterStatus.lastCheckedAt = new Date().toISOString();
     console.log(`[updater] update available: ${info.version}`);
+    broadcastUpdaterStatus();
   });
   autoUpdater.on("update-not-available", () => {
+    if (updaterStatus.state === "downloaded" || updaterStatus.state === "installing") return;
     updaterStatus.state = "not-available";
     updaterStatus.lastCheckedAt = new Date().toISOString();
     console.log("[updater] no update available");
+    broadcastUpdaterStatus();
   });
   autoUpdater.on("download-progress", (progress) => {
     updaterStatus.state = "downloading";
     updaterStatus.progressPercent = Math.round(progress.percent);
+    updaterStatus.transferredBytes = progress.transferred;
+    updaterStatus.totalBytes = progress.total;
+    updaterStatus.bytesPerSecond = progress.bytesPerSecond;
     console.log(`[updater] downloading update: ${updaterStatus.progressPercent}%`);
+    broadcastUpdaterStatus();
   });
   autoUpdater.on("update-downloaded", (info) => {
     updaterStatus.state = "downloaded";
     updaterStatus.version = info.version;
+    updaterStatus.progressPercent = 100;
     console.log(`[updater] update ${info.version} downloaded, will install on next restart`);
+    broadcastUpdaterStatus();
   });
   autoUpdater.on("error", (error) => {
+    if (updaterStatus.state === "installing") return;
     updaterStatus.state = "error";
     updaterStatus.error = error instanceof Error ? error.message : String(error);
     updaterStatus.lastCheckedAt = new Date().toISOString();
     console.error("[updater] error", error);
+    broadcastUpdaterStatus();
   });
 
   const check = () => {
@@ -326,15 +352,21 @@ ipcMain.handle("updater:getStatus", () => updaterStatus);
 ipcMain.handle("updater:installNow", () => {
   if (isDev || updaterStatus.state !== "downloaded") return { ok: false, error: "Belum ada update yang siap dipasang" };
   console.log("[updater] installing update now (quitAndInstall)");
-  // Let the IPC reply go out first; quitAndInstall closes every window.
+  // Tell every screen first so the tenant sees "Memasang update..." instead of a window that simply vanishes.
+  updaterStatus.state = "installing";
+  broadcastUpdaterStatus();
+  // Let the IPC reply go out first; quitAndInstall closes every window. The pause gives the notice time to be read.
   setTimeout(() => {
     try {
       stopDigicamBridge();
       autoUpdater.quitAndInstall(true, true);
     } catch (error) {
       console.error("[updater] quitAndInstall gagal", error);
+      updaterStatus.state = "error";
+      updaterStatus.error = "Gagal memasang update. Coba lagi atau restart aplikasi.";
+      broadcastUpdaterStatus();
     }
-  }, 300);
+  }, 2500);
   return { ok: true };
 });
 ipcMain.handle("updater:checkNow", async () => {

@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { getApiBaseUrl } from "@/lib/apiConfig";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { inputClass, sectionClass } from "@/lib/adminUi";
+import { pushToast } from "@/lib/toastStore";
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -80,14 +81,18 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
   }, []);
 
   const savePaymentConfig = async () => {
-    await api.updatePaymentConfig(paymentConfig);
-    setPaymentConfig({ secretKey: "", webhookToken: "" });
-    setPaymentSaved(true);
-    setPaymentStatus((state) => ({
-      ...state,
-      hasSecretKey: Boolean(paymentConfig.secretKey.trim()) || state.hasSecretKey,
-      hasWebhookToken: Boolean(paymentConfig.webhookToken.trim()) || state.hasWebhookToken,
-    }));
+    try {
+      await api.updatePaymentConfig(paymentConfig);
+      setPaymentConfig({ secretKey: "", webhookToken: "" });
+      setPaymentSaved(true);
+      setPaymentStatus((state) => ({
+        ...state,
+        hasSecretKey: Boolean(paymentConfig.secretKey.trim()) || state.hasSecretKey,
+        hasWebhookToken: Boolean(paymentConfig.webhookToken.trim()) || state.hasWebhookToken,
+      }));
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menyimpan pengaturan Xendit", sub: error instanceof Error ? error.message : "Coba lagi." });
+    }
   };
 
   const chooseProvider = async (paymentProvider: "xendit" | "doku") => {
@@ -229,17 +234,27 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
 
   const deleteExtra = async (pkg: any, extraId: string) => {
     const extraPrints = (pkg.extraPrints ?? []).filter((extra: { id: string }) => extra.id !== extraId);
-    await api.updatePackage(pkg.id, { extraPrints });
-    refreshPackages();
+    try {
+      await api.updatePackage(pkg.id, { extraPrints });
+      refreshPackages();
+      pushToast({ type: "success", title: "Add-on dihapus" });
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menghapus add-on", sub: error instanceof Error ? error.message : undefined });
+    }
   };
 
   const addExtra = async (pkg: any) => {
     const draft = extraDrafts[pkg.id];
     if (!draft?.name.trim()) return;
     const extraPrints = [...(pkg.extraPrints ?? []), { id: crypto.randomUUID(), name: draft.name, price: Number(draft.price) || 0 }];
-    await api.updatePackage(pkg.id, { extraPrints });
-    setExtraDrafts((state) => ({ ...state, [pkg.id]: { name: "", price: "0" } }));
-    refreshPackages();
+    try {
+      await api.updatePackage(pkg.id, { extraPrints });
+      setExtraDrafts((state) => ({ ...state, [pkg.id]: { name: "", price: "0" } }));
+      refreshPackages();
+      pushToast({ type: "success", title: "Add-on ditambahkan" });
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menambah add-on", sub: error instanceof Error ? error.message : undefined });
+    }
   };
 
   return (

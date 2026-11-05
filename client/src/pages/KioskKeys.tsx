@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { sectionClass } from "@/lib/adminUi";
+import { pushToast } from "@/lib/toastStore";
 
 const inputClass = "mt-1 w-full rounded-xl border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent";
 
@@ -116,7 +117,12 @@ export default function KioskKeys() {
 
   const revoke = async (id: string) => {
     if (!window.confirm("Cabut kiosk key ini? Kiosk yang memakainya akan langsung berhenti bisa mengakses server.")) return;
-    await api.revokeKioskKey(id).catch(() => undefined);
+    try {
+      await api.revokeKioskKey(id);
+      pushToast({ type: "success", title: "Kiosk key dicabut" });
+    } catch (err) {
+      pushToast({ type: "error", title: "Gagal mencabut kiosk key", sub: err instanceof Error ? err.message : undefined });
+    }
     refresh();
   };
 
@@ -181,8 +187,11 @@ export default function KioskKeys() {
     if (!window.confirm("Reset device untuk kiosk key ini? Komputer yang sedang memakainya akan langsung ditolak sampai key ini dipasang ulang — pakai ini kalau kamu mengganti komputer booth ini.")) return;
     setResettingId(id);
     try {
-      await api.resetKioskKeyDevice(id).catch(() => undefined);
+      await api.resetKioskKeyDevice(id);
+      pushToast({ type: "success", title: "Device direset", sub: "Pasang ulang key ini di komputer booth." });
       refresh();
+    } catch (err) {
+      pushToast({ type: "error", title: "Gagal mereset device", sub: err instanceof Error ? err.message : undefined });
     } finally {
       setResettingId(null);
     }

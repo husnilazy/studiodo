@@ -34,9 +34,12 @@ export interface StudiodoSystemDiagnostics {
 
 export interface StudiodoUpdaterStatus {
   currentVersion: string;
-  state: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+  state: "idle" | "checking" | "available" | "not-available" | "downloading" | "downloaded" | "installing" | "error";
   version: string | null;
   progressPercent: number | null;
+  transferredBytes?: number | null;
+  totalBytes?: number | null;
+  bytesPerSecond?: number | null;
   error: string | null;
   lastCheckedAt: string | null;
   autoUpdateEnabled?: boolean;
@@ -66,6 +69,7 @@ export interface StudiodoBridgeAPI {
   checkForUpdate: () => Promise<StudiodoUpdaterStatus>;
   installUpdateNow: () => Promise<{ ok: boolean; error?: string }>;
   setAutoUpdateEnabled: (enabled: boolean) => void;
+  onUpdaterStatus?: (callback: (status: StudiodoUpdaterStatus) => void) => () => void;
   onOperatorConsoleToggle: (callback: () => void) => () => void;
   logRenderer: (level: "log" | "warn" | "error", args: unknown[]) => void;
   platform: string;

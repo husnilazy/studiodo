@@ -59,10 +59,43 @@ export default function VoucherManagement() {
 
   const saveVoucherEdit = async () => {
     if (!editingVoucherId) return;
-    await api.updateVoucher(editingVoucherId, { ...editingVoucher, maxUses: editingVoucher.maxUses || null });
-    setEditingVoucherId(null);
-    refreshVouchers();
-    pushToast({ type: "success", title: "Perubahan voucher tersimpan" });
+    try {
+      await api.updateVoucher(editingVoucherId, { ...editingVoucher, maxUses: editingVoucher.maxUses || null });
+      setEditingVoucherId(null);
+      refreshVouchers();
+      pushToast({ type: "success", title: "Perubahan voucher tersimpan" });
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menyimpan voucher", sub: error instanceof Error ? error.message : undefined });
+    }
+  };
+
+  // Toggle / delete used to fire with no feedback at all (and delete had no confirmation): the button looked dead while
+  // the request ran and a failure vanished silently.
+  const [voucherBusyId, setVoucherBusyId] = useState<string | null>(null);
+  const toggleVoucher = async (voucher: any) => {
+    setVoucherBusyId(voucher.id);
+    try {
+      await api.updateVoucher(voucher.id, { active: !voucher.active });
+      await refreshVouchers();
+      pushToast({ type: "success", title: voucher.active ? `Voucher ${voucher.code} dinonaktifkan` : `Voucher ${voucher.code} diaktifkan` });
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal mengubah status voucher", sub: error instanceof Error ? error.message : undefined });
+    } finally {
+      setVoucherBusyId(null);
+    }
+  };
+  const removeVoucher = async (voucher: any) => {
+    if (!window.confirm(`Hapus voucher ${voucher.code}? Tindakan ini tidak bisa dibatalkan.`)) return;
+    setVoucherBusyId(voucher.id);
+    try {
+      await api.deleteVoucher(voucher.id);
+      await refreshVouchers();
+      pushToast({ type: "success", title: `Voucher ${voucher.code} dihapus` });
+    } catch (error) {
+      pushToast({ type: "error", title: "Gagal menghapus voucher", sub: error instanceof Error ? error.message : undefined });
+    } finally {
+      setVoucherBusyId(null);
+    }
   };
 
   // --- Cash invoice generator (relocated, unchanged) ------------------------
@@ -247,8 +280,8 @@ export default function VoucherManagement() {
               </div>}
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-fg/10 pt-3">
                 <button onClick={() => beginVoucherEdit(voucher)} className="rounded-full border border-fg/15 px-3 py-1 text-xs">Edit</button>
-                <button onClick={async () => { await api.updateVoucher(voucher.id, { active: !voucher.active }); refreshVouchers(); }} className="rounded-full border border-fg/15 px-3 py-1 text-xs">{voucher.active ? "Nonaktifkan" : "Aktifkan"}</button>
-                <button onClick={async () => { await api.deleteVoucher(voucher.id); refreshVouchers(); }} className="text-xs text-red-300">Hapus</button>
+                <button onClick={() => toggleVoucher(voucher)} disabled={voucherBusyId === voucher.id} className="rounded-full border border-fg/15 px-3 py-1 text-xs disabled:opacity-50">{voucherBusyId === voucher.id ? "Memproses…" : voucher.active ? "Nonaktifkan" : "Aktifkan"}</button>
+                <button onClick={() => removeVoucher(voucher)} disabled={voucherBusyId === voucher.id} className="text-xs text-red-300 disabled:opacity-50">Hapus</button>
               </div>
             </div>
           ))}

@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("studiodo", {
   checkForUpdate: () => ipcRenderer.invoke("updater:checkNow"),
   installUpdateNow: () => ipcRenderer.invoke("updater:installNow"),
   setAutoUpdateEnabled: (enabled) => ipcRenderer.send("updater:setEnabled", enabled),
+  onUpdaterStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("updater:status", listener);
+    return () => ipcRenderer.removeListener("updater:status", listener);
+  },
   // Renderer console.error/warn used to only exist for the instant they
   // happened — no DevTools console is reachable on an unattended, fullscreen
   // kiosk window. Forwarding them into the same app.log the main process

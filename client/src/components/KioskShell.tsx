@@ -8,6 +8,7 @@ import NetworkToast from "@/components/NetworkToast";
 import OperatorConsole from "@/components/OperatorConsole";
 import { useHiddenAdminEntry } from "@/lib/adminEntry";
 import { useAutoInstallUpdate } from "@/lib/autoInstallUpdate";
+import UpdateNotice from "@/components/UpdateNotice";
 import { IS_KIOSK_PREVIEW } from "@/lib/previewMode";
 
 export default function KioskShell({ children }: { children: React.ReactNode }) {
@@ -20,7 +21,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
   // Crew shortcut: five quick taps on the bottom-left corner open the admin (see lib/adminEntry.ts).
   useHiddenAdminEntry();
   // A downloaded app update restarts the kiosk by itself while it sits idle (see lib/autoInstallUpdate.ts).
-  useAutoInstallUpdate();
+  const { countdown: updateCountdown } = useAutoInstallUpdate();
 
   // Start network monitor + fleet heartbeat once
   useEffect(() => {
@@ -108,6 +109,17 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
 
       {/* Global network change toasts */}
       {!IS_KIOSK_PREVIEW && <NetworkToast />}
+
+      {/* Update notices: a countdown before the idle kiosk restarts itself (touch to postpone), and the "installing" screen */}
+      {!IS_KIOSK_PREVIEW && <UpdateNotice mode="kiosk" />}
+      <AnimatePresence>
+        {updateCountdown && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="absolute inset-x-0 bottom-6 z-[9000] mx-auto w-[min(90%,420px)] rounded-2xl border border-accent/40 bg-black/80 px-5 py-4 text-center text-white shadow-2xl backdrop-blur-md">
+            <p className="text-sm font-semibold">Pembaruan{updateCountdown.version ? ` v${updateCountdown.version}` : ""} akan dipasang dalam {updateCountdown.seconds} detik</p>
+            <p className="mt-1 text-xs text-white/70">Aplikasi akan restart sebentar. Sentuh layar untuk menunda.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Operator console overlay — hidden until Ctrl+Shift+O */}
       {!IS_KIOSK_PREVIEW && <OperatorConsole />}

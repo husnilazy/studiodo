@@ -7,6 +7,8 @@ import { setAdminToken } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
+import UpdateNotice from "@/components/UpdateNotice";
+import { useUpdaterStatus } from "@/lib/useUpdaterStatus";
 import Spinner from "@/components/Spinner";
 import TrendChart from "@/components/TrendChart";
 import WithdrawalPanel from "@/components/WithdrawalPanel";
@@ -597,25 +599,21 @@ function KioskWindowToggle() {
 }
 
 function AppVersionFooter() {
-  const [status, setStatus] = useState<StudiodoUpdaterStatus | null>(null);
+  const live = useUpdaterStatus();
+  const [checked, setChecked] = useState<StudiodoUpdaterStatus | null>(null);
   const [checking, setChecking] = useState(false);
-
-  useEffect(() => {
-    if (!window.studiodo?.getUpdaterStatus) return;
-    window.studiodo.getUpdaterStatus().then(setStatus).catch(() => undefined);
-  }, []);
+  const status = checked && live && checked.lastCheckedAt && (!live.lastCheckedAt || checked.lastCheckedAt > live.lastCheckedAt) ? checked : live;
 
   if (!window.studiodo?.getUpdaterStatus) return null;
 
   const installNow = async () => {
-    if (!window.confirm("Aplikasi akan restart untuk memasang update. Lanjutkan?")) return;
     await window.studiodo?.installUpdateNow?.();
   };
 
   const checkNow = async () => {
     setChecking(true);
     try {
-      setStatus(await window.studiodo!.checkForUpdate());
+      setChecked(await window.studiodo!.checkForUpdate());
     } finally {
       setChecking(false);
     }
@@ -624,24 +622,31 @@ function AppVersionFooter() {
   const statusLabel = (() => {
     if (checking || status?.state === "checking") return "Mengecek...";
     switch (status?.state) {
-      case "downloading": return `Update v${status.version} — ${status.progressPercent ?? 0}%`;
+      case "downloading": return `Mengunduh v${status.version} — ${status.progressPercent ?? 0}%`;
       case "downloaded": return `Update v${status.version} siap dipasang`;
+      case "installing": return `Memasang v${status.version}...`;
       case "available": return `Update v${status.version} ditemukan...`;
       case "not-available": return "Versi terbaru";
       case "error": return "Gagal cek update";
       default: return "Belum pernah dicek";
     }
   })();
+  const busyState = status?.state === "downloading" || status?.state === "installing";
 
   return (
     <div className="mt-auto border-t border-fg/10 pt-4 text-center">
       <p className="text-[11px] text-fg/35">STUDIODO v{status?.currentVersion ?? "-"} — {statusLabel}</p>
+      {status?.state === "downloading" && (
+        <div className="mx-auto mt-2 h-1.5 w-full overflow-hidden rounded-full bg-fg/10">
+          <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${status.progressPercent ?? 0}%` }} />
+        </div>
+      )}
       {status?.state === "downloaded" ? (
         <button type="button" onClick={installNow} className="mt-2 w-full rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white shadow-md shadow-accent/25">
           Pasang update v{status.version} &amp; restart
         </button>
       ) : (
-        <button type="button" onClick={checkNow} disabled={checking} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
+        <button type="button" onClick={checkNow} disabled={checking || busyState} className="mt-1 text-[11px] font-semibold text-accent hover:underline disabled:opacity-50">
           {checking ? "Mengecek..." : "Cek update"}
         </button>
       )}
@@ -820,6 +825,7 @@ export default function AdminDashboard() {
   return (
     <div className="flex h-full gap-3 overflow-hidden bg-[var(--kiosk-background)] p-0 text-[var(--kiosk-text)] md:p-3 md:gap-4">
       <NetProgressBar />
+      <UpdateNotice mode="admin" />
       <aside className="hidden w-64 shrink-0 flex-col gap-1 overflow-y-auto rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm md:flex">
         <div className="mb-4 px-2 pt-2">
           <BrandLogo className="h-8" />
