@@ -285,6 +285,15 @@ describe.skipIf(!PGlite)("lead CRM (real SQL, real HTTP)", () => {
     expect((await api("GET", "/docs/rahasia")).status).toBe(404);
     const pub = await fetch(`${origin}/api/public/panduan/onboarding`);
     expect(pub.status).toBe(200);
-    expect(await pub.text()).toContain("Panduan Onboarding STUDIODO");
+    expect(await pub.text()).toContain("Panduan Memulai STUDIODO");
+  });
+
+  it("the guides promise a 7-day trial even when the owner set a long default trial for their own studio", async () => {
+    await pg.exec(`UPDATE platform_settings SET default_trial_days = 360`);
+    const html = await (await fetch(`${origin}/api/public/panduan/onboarding`)).text();
+    expect(html).toContain("Trial gratis 7 hari");
+    expect(html).not.toContain("360 hari");
+    expect((await api("GET", "/docs/team")).json.markdown).toContain("(7 hari)");
+    await pg.exec(`UPDATE platform_settings SET default_trial_days = 7`);
   });
 });

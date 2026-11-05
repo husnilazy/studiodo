@@ -425,11 +425,21 @@ superadminLeadsRouter.post("/settings/whatsapp-test", async (req, res) => {
 
 // --- docs --------------------------------------------------------------------------------------------------------------------------
 
+/**
+ * The trial length the guides PROMISE to prospects. It is deliberately not the platform's "default trial" setting: the owner may
+ * set that high for their own studio's booths, and a customer-facing guide must not then claim "360 days free". Override with
+ * GUIDE_TRIAL_DAYS if the public offer ever changes.
+ */
+export const guideTrialDays = (): number => {
+  const n = Number(process.env.GUIDE_TRIAL_DAYS);
+  return Number.isInteger(n) && n > 0 && n <= 365 ? n : 7;
+};
+
 export async function loadDocFacts(): Promise<DocFacts> {
   const row = await settingsRow();
   const policy = mergePolicy(row.withdrawalPolicy, null);
   return {
-    trialDays: row.defaultTrialDays, graceDays: row.gracePeriodDays, qrisFeePercent: Number(row.qrisFeePercent), withdrawalMinAmount: policy.minAmount || row.withdrawalMinAmount,
+    trialDays: guideTrialDays(), graceDays: row.gracePeriodDays, qrisFeePercent: Number(row.qrisFeePercent), withdrawalMinAmount: policy.minAmount || row.withdrawalMinAmount,
     withdrawalFlatFee: row.withdrawalFlatFee, withdrawalSchedule: describeSchedule(policy), holdDays: policy.holdDays, volumeTiers: readVolumeTiers(row.volumeDiscounts), portalUrl: portalBaseUrl(),
   };
 }
