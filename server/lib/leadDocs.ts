@@ -53,7 +53,7 @@ Selamat datang! Panduan ini menjelaskan dari awal sampai booth Anda bisa dipakai
 
 Ada dua pilihan, bisa dipilih saat onboarding:
 
-**A. Akun payment gateway sendiri (Midtrans, Xendit, atau DOKU)**
+**A. Akun payment gateway sendiri (Xendit atau DOKU)**
 Uang dari pengunjung masuk langsung ke akun Anda. Anda mengisi kunci API di dashboard (menu pembayaran). STUDIODO tidak menyentuh dana tersebut.
 
 **B. Ditampung STUDIODO (platform default)**

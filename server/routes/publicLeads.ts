@@ -5,7 +5,8 @@ import { leadActivities, supportMessages, supportThreads, tenantApplications, te
 import { clientIp, makeRateLimiter } from "../lib/clientIp.js";
 import { renderContractHtml, type ContractSnapshot } from "../lib/contract.js";
 import { normalizeWhatsapp } from "../lib/crm.js";
-import { renderDocPage, onboardingGuide } from "../lib/leadDocs.js";
+import { renderDocPage } from "../lib/leadDocs.js";
+import { renderOnboardingPage } from "../lib/onboardingPage.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { loadWaRow, parseInbound, webhookKeyMatches } from "../lib/whatsapp.js";
 import { contractUrl, loadDocFacts } from "./superadminLeads.js";
@@ -55,8 +56,7 @@ publicLeadsRouter.post("/kontrak/:token/setuju", express.urlencoded({ extended: 
 
 publicLeadsRouter.get("/panduan/onboarding", async (req, res) => {
   if (tooMany(clientIp(req))) return res.status(429).send("Terlalu banyak permintaan");
-  const doc = onboardingGuide(await loadDocFacts());
-  res.set("Cache-Control", "public, max-age=300").type("html").send(renderDocPage(doc.title, doc.markdown));
+  res.set("Cache-Control", "public, max-age=300").type("html").send(renderOnboardingPage(await loadDocFacts()));
 });
 
 // Gateway → us. Always answers 200 to a valid key (gateways retry on errors); unknown numbers are ignored on purpose so a stranger
