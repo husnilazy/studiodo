@@ -15,9 +15,13 @@ html {
   font-size: calc(clamp(16px, 1vw + 1vh, 26px) * var(--ui-scale, 1));
 }
 html.admin-mode,
-html.superadmin-mode,
 html.public-gallery-mode {
   font-size: 16px;
+}
+/* The platform dashboard grows with the screen: 16px up to ~1600px wide (laptops), then gently up to 20px at 2560px (2K/QHD)
+   and 22px at 4K, so text and controls stay readable instead of a small column floating in the middle of a huge monitor. */
+html.superadmin-mode {
+  font-size: clamp(16px, calc(10px + 0.4vw), 22px);
 }
 
 html,

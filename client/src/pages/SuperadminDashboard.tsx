@@ -3,6 +3,7 @@ import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControl
 import { Icon } from "@/components/kiosk/Icons";
 import LeadsPanel from "@/components/LeadsPanel";
 import AlertsPanel from "@/components/AlertsPanel";
+import { TenantWaAutoPanel, TenantWhatsAppCard } from "@/components/TenantWhatsApp";
 import SupportInboxPanel from "@/components/SupportInboxPanel";
 import { useAdminAlerts } from "@/lib/useAdminAlerts";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -14,6 +15,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   superadminApi,
   getSuperadminToken,
+  prefetchSuperadmin,
   setSuperadminToken,
   SuperadminApiError,
   type SuperadminTenant,
@@ -1216,6 +1218,8 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
               </div>
             </div>
 
+            <TenantWhatsAppCard tenantId={tenantId} />
+
             <TenantDiscountForm tenant={tenant} onSaved={refreshAll} />
 
             <div className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
@@ -1328,6 +1332,9 @@ export default function SuperadminDashboard() {
       loadPlans();
       loadTenantsForFilter();
       loadPendingApplicationCount();
+      // Warm the most-opened screens in the background so the first click on each is answered from memory.
+      if (role !== "finance") prefetchSuperadmin(["/overview", "/security-alerts", "/fleet-alerts", "/leads", "/finance/overview", "/withdrawals?status=open", "/billing/orders"]);
+      else prefetchSuperadmin(["/finance/overview", "/withdrawals?status=open"]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -1383,7 +1390,7 @@ export default function SuperadminDashboard() {
     <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
       <NetProgressBar />
       <AdminKeyboard />
-      <aside className="hidden w-[250px] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
+      <aside className="hidden w-[15.5rem] shrink-0 flex-col rounded-[28px] border border-fg/10 bg-surface p-4 shadow-sm lg:flex">
         <div className="mb-5 px-2">
           <BrandLogo className="h-7" />
           <h1 className="mt-1.5 font-display text-xl font-bold leading-tight">Admin Pusat</h1>
@@ -1399,7 +1406,7 @@ export default function SuperadminDashboard() {
                       type="button"
                       onClick={() => setSection(item.id)}
                       aria-current={section === item.id ? "page" : undefined}
-                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
+                      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-medium transition ${section === item.id ? "bg-fg text-canvas shadow-md" : "text-fg/60 hover:bg-fg/[0.07] hover:text-fg"}`}
                     >
                       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
                       <span className="flex-1 truncate">{item.label}</span>
@@ -1441,7 +1448,7 @@ export default function SuperadminDashboard() {
 
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
         <Suspense fallback={<div className="space-y-4" aria-busy="true"><div className="h-24 animate-pulse rounded-3xl bg-fg/[0.06]" /><div className="h-64 animate-pulse rounded-3xl bg-fg/[0.06]" /></div>}>
-        <div className="mx-auto max-w-6xl space-y-6 pb-8">
+        <div className="mx-auto w-full max-w-[96rem] space-y-6 pb-8 2xl:max-w-[110rem]">
         {section === "overview" && (
           <div className="space-y-6">
             <SecurityAlertsPanel />
@@ -1461,6 +1468,7 @@ export default function SuperadminDashboard() {
                 onChanged={() => tenantsReloadRef.current?.()}
               />
             )}
+            <TenantWaAutoPanel onOpenTenant={selectTenantAndSwitch} />
             <TenantsTable plans={plans} onSelectTenant={selectTenantAndSwitch} reloadRef={tenantsReloadRef} />
           </div>
         )}

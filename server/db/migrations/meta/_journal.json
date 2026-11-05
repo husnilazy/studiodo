@@ -337,6 +337,13 @@
       "when": 1793867055921,
       "tag": "0047_support_chat_admin_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793878964936,
+      "tag": "0048_tenant_wa_auto",
+      "breakpoints": true
     }
   ]
 }

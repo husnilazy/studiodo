@@ -20,6 +20,7 @@ import { licensesAdminRouter } from "./licenses.js";
 import { notificationsAdminRouter } from "./notifications.js";
 import { contentStudioAdminRouter } from "./contentStudio.js";
 import { superadminFinanceRouter } from "./superadminFinance.js";
+import { superadminTenantWaRouter } from "./superadminTenantWa.js";
 import { supportAdminRouter, alertsAdminRouter } from "./supportAlerts.js";
 import { superadminLeadsRouter, addActivity as addLeadActivity, onboardingUrl } from "./superadminLeads.js";
 import { renderTemplate, resolveTemplates, whatsappFallbackLink } from "../lib/leads.js";
@@ -88,15 +89,27 @@ superadminRouter.use(requireSuperadminAuth);
 
 // A 'finance' account only reaches the money screens (and its own 2FA); everything else is the owner's.
 const FINANCE_ALLOWED = [/^\/2fa(\/|$)/, /^\/finance(\/|$)/, /^\/withdrawals(\/|$)/, /^\/tenants\/[0-9a-f-]{36}\/qris-balance$/i];
+// The role rarely changes, so it is remembered for a short while instead of costing a database round trip on every single request
+// (the dashboard fires many in parallel, and on a remote database each one adds noticeable latency).
+const roleCache = new Map<string, { role: string | undefined; at: number }>();
+const ROLE_TTL_MS = 30_000;
 superadminRouter.use(async (req, res, next) => {
-  const [row] = await db.select({ role: superadmins.role }).from(superadmins).where(eq(superadmins.id, req.superadminId!));
-  if (row?.role === "finance" && !FINANCE_ALLOWED.some((pattern) => pattern.test(req.path))) {
+  const id = req.superadminId!;
+  let hit = roleCache.get(id);
+  if (!hit || Date.now() - hit.at > ROLE_TTL_MS) {
+    const [row] = await db.select({ role: superadmins.role }).from(superadmins).where(eq(superadmins.id, id));
+    hit = { role: row?.role, at: Date.now() };
+    roleCache.set(id, hit);
+    if (roleCache.size > 200) roleCache.clear();
+  }
+  if (hit.role === "finance" && !FINANCE_ALLOWED.some((pattern) => pattern.test(req.path))) {
     return res.status(403).json({ error: "Akun finance hanya bisa mengakses menu keuangan." });
   }
   next();
 });
 superadminRouter.use("/finance", superadminFinanceRouter);
 superadminRouter.use("/leads", superadminLeadsRouter);
+superadminRouter.use("/tenant-wa", superadminTenantWaRouter);
 superadminRouter.use("/support", supportAdminRouter);
 superadminRouter.use("/alerts", alertsAdminRouter);
 superadminRouter.use("/2fa", twoFactorAdminRouter);

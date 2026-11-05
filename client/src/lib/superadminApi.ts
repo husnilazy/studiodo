@@ -100,7 +100,33 @@ export class SuperadminApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+// Short-lived GET cache: opening a section a second time (or one the dashboard already warmed up) shows data instantly instead of
+// waiting on a fresh round trip, and identical requests made at the same moment share one network call. Any write clears it so
+// nothing stale survives an edit. Polling endpoints and CSV/other custom fetches do not go through here.
+const GET_TTL_MS = 20_000;
+const getCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    getCache.clear();
+    return rawRequest<T>(path, options);
+  }
+  const key = `${superadminToken ?? ""}|${path}`;
+  const hit = getCache.get(key);
+  if (hit && Date.now() - hit.at < GET_TTL_MS) return hit.promise as Promise<T | undefined>;
+  const promise = rawRequest<T>(path, options);
+  getCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => { if (getCache.get(key)?.promise === promise) getCache.delete(key); });
+  return promise;
+}
+
+/** Warm the cache for the screens people open most, right after login, so the first click is already answered. */
+export function prefetchSuperadmin(paths: string[]) {
+  for (const path of paths) void request(path).catch(() => undefined);
+}
+
+async function rawRequest<T>(path: string, options?: RequestInit): Promise<T | undefined> {
   const res = await tracked(() => fetch(`${getApiBaseUrl()}/superadmin${path}`, {
     ...options,
     // See client/src/lib/api.ts's request() for why — same Express ETag-without-
@@ -691,6 +717,11 @@ export const superadminApi = {
   // Pusat Notifikasi
   getAlerts: (opts: { unread?: boolean; kind?: string; limit?: number } = {}) => request<{ items: AdminAlert[]; unread: number; critical: number }>(`/alerts?limit=${opts.limit ?? 60}${opts.unread ? "&unread=1" : ""}${opts.kind ? `&kind=${encodeURIComponent(opts.kind)}` : ""}`),
   getAlertSummary: () => request<AlertSummary>("/alerts/summary"),
+  // WhatsApp to existing tenants (manual composer + automatic renewal reminders)
+  getTenantWa: (tenantId: string) => request<TenantWaData>(`/tenant-wa/${tenantId}`),
+  sendTenantWa: (tenantId: string, text: string, mode: "gateway" | "manual") => request<{ ok: true }>(`/tenant-wa/${tenantId}/send`, { method: "POST", body: JSON.stringify({ text, mode }) }),
+  getTenantWaOverview: () => request<TenantWaOverview>("/tenant-wa/overview"),
+  saveTenantWaAuto: (auto: TenantWaAuto) => request<{ auto: TenantWaAuto; warning?: string }>("/tenant-wa/auto", { method: "PUT", body: JSON.stringify(auto) }),
   markAlertsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number; critical: number }>("/alerts/read", { method: "POST", body: JSON.stringify(body) }),
   getAlertSettings: () => request<AlertSettings>("/alerts/settings"),
   saveAlertSettings: (body: { number?: string; prefs?: Record<string, { inApp?: boolean; whatsapp?: boolean }> }) => request<{ ok: boolean }>("/alerts/settings", { method: "PUT", body: JSON.stringify(body) }),
@@ -710,7 +741,19 @@ export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | 
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
 export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
-export type CsPlanStatus = "ide" | "draf" | "siap" | "terjadwal" | "terposting";
+export type TenantWaStage = "d7" | "d3" | "d1" | "expired";
+export interface TenantWaAuto { enabled: boolean; stages: TenantWaStage[] }
+export interface TenantWaData {
+  tenant: { id: string; name: string; ownerName: string | null }; phone: string | null; gateway: boolean; licenceStage: TenantWaStage | null;
+  templates: { key: string; label: string; text: string; missing: string[]; waLink: string | null }[];
+  history: { id: string; action: string; message: string; actor: string | null; at: string; metadata: Record<string, unknown> | null }[];
+}
+export interface TenantWaOverview {
+  gateway: boolean; auto: TenantWaAuto; sendingNow: boolean;
+  upcoming: { tenantId: string; name: string; stage: TenantWaStage; kind: "trial" | "paid"; booths: number; endsAt: string; phone: string | null; sent: boolean }[];
+}
+
+export type CsPlanStatus ="ide" | "draf" | "siap" | "terjadwal" | "terposting";
 export type CsPlanItem = { id: string; title: string; phase: string; pillar: string; format: "carousel" | "reel" | "story"; deckId?: string; date?: string; time?: string; status: CsPlanStatus; checks: string[]; notes?: string };
 export type CsPlan = { startDate: string; days: number[]; time: string; items: CsPlanItem[]; profileChecks: string[]; updatedAt?: string };
 
