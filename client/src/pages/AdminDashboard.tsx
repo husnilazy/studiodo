@@ -25,6 +25,7 @@ import { Icon } from "@/components/kiosk/Icons";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
+import HelpChatButton from "@/components/HelpChatButton";
 import NetProgressBar from "@/components/NetProgressBar";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
@@ -962,6 +963,7 @@ export default function AdminDashboard() {
           )}
         </div>
       </main>
+      <HelpChatButton />
     </div>
   );
 }

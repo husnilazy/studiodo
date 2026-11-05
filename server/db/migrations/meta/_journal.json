@@ -330,6 +330,13 @@
       "when": 1793863924922,
       "tag": "0046_crm_leads_whatsapp_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793867055921,
+      "tag": "0047_support_chat_admin_alerts",
+      "breakpoints": true
     }
   ]
 }

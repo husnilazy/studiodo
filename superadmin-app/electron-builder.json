@@ -1,0 +1,23 @@
+{
+  "appId": "com.framelesscreative.studiodo.admin",
+  "productName": "STUDIODO Admin",
+  "asar": true,
+  "npmRebuild": false,
+  "directories": { "output": "dist-superadmin" },
+  "extraMetadata": { "main": "superadmin-app/main.cjs" },
+  "asarUnpack": ["dist-client/**/*"],
+  "files": ["superadmin-app/**/*", "electron/icon.png", "electron/icon.ico", "dist-client/**/*", "package.json"],
+  "win": {
+    "signAndEditExecutable": false,
+    "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] }],
+    "icon": "electron/icon.ico"
+  },
+  "portable": { "artifactName": "STUDIODO-Admin-${version}.${ext}" },
+  "nsis": {
+    "artifactName": "STUDIODO-Admin-Setup-${version}.${ext}",
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true
+  }
+}

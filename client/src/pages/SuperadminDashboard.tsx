@@ -2,6 +2,9 @@ import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
 import { Icon } from "@/components/kiosk/Icons";
 import LeadsPanel from "@/components/LeadsPanel";
+import AlertsPanel from "@/components/AlertsPanel";
+import SupportInboxPanel from "@/components/SupportInboxPanel";
+import { useAdminAlerts } from "@/lib/useAdminAlerts";
 import { BrandLogo } from "@/components/BrandLogo";
 import WhatsAppFollowUp from "@/components/WhatsAppFollowUp";
 import NetProgressBar from "@/components/NetProgressBar";
@@ -1245,10 +1248,12 @@ function TenantDetailPanel({ tenantId, plans, onClose, onChanged }: { tenantId: 
   );
 }
 
-type Section = "overview" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
+type Section = "overview" | "alerts" | "support" | "tenants" | "licenses" | "applications" | "events" | "plans" | "website" | "blog" | "marketplace" | "creators" | "instagram" | "billing" | "withdrawals" | "finance" | "notifications" | "email" | "settings";
 const SECTION_GROUPS: { title: string; items: { id: Section; label: string; icon: string }[] }[] = [
   { title: "Platform", items: [
     { id: "overview", label: "Ringkasan", icon: "chart" },
+    { id: "alerts", label: "Pusat Notifikasi", icon: "bell" },
+    { id: "support", label: "Bantuan Tenant", icon: "mail" },
     { id: "events", label: "Aktivitas & Error", icon: "activity" },
     { id: "notifications", label: "Notifikasi", icon: "bell" },
     { id: "email", label: "Email", icon: "mail" },
@@ -1286,6 +1291,7 @@ export default function SuperadminDashboard() {
   const [section, setSection] = useState<Section>("overview");
   const [pendingApplicationCount, setPendingApplicationCount] = useState(0);
   const [openWithdrawalCount, setOpenWithdrawalCount] = useState(0);
+  const { summary: alertSummary, refresh: refreshAlerts } = useAdminAlerts(status === "authenticated");
   const [creatorQueueCount, setCreatorQueueCount] = useState(0);
   const [marketReportCount, setMarketReportCount] = useState(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -1371,7 +1377,7 @@ export default function SuperadminDashboard() {
   };
 
   const current = SECTIONS.find((item) => item.id === section);
-  const badgeFor = (id: Section) => (id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
+  const badgeFor = (id: Section) => (id === "alerts" ? (alertSummary?.unread ?? 0) : id === "support" ? (alertSummary?.followUp.find((f) => f.key === "support")?.count ?? 0) : id === "withdrawals" ? openWithdrawalCount : id === "applications" ? pendingApplicationCount : id === "creators" ? creatorQueueCount : id === "marketplace" ? marketReportCount : 0);
 
   return (
     <div className="flex h-[100dvh] flex-col gap-3 overflow-hidden bg-canvas p-3 text-fg lg:flex-row lg:gap-4 lg:p-4">
@@ -1480,6 +1486,10 @@ export default function SuperadminDashboard() {
         {section === "billing" && <BillingOrdersPanel />}
         {section === "withdrawals" && <SuperadminWithdrawalsPanel onSummary={setOpenWithdrawalCount} />}
         {section === "finance" && <SuperadminFinancePanel isOwner={role === "owner"} />}
+
+        {section === "alerts" && <AlertsPanel onNavigate={(id) => setSection(id as Section)} onChanged={refreshAlerts} />}
+
+        {section === "support" && <SupportInboxPanel onChanged={refreshAlerts} />}
 
         {section === "notifications" && <NotificationsAdminPanel tenants={tenants} />}
 

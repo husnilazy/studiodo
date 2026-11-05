@@ -475,6 +475,10 @@ export const api = {
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
   getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
   markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
+  // Help chat with the STUDIODO team ("Bantuan")
+  getSupport: () => request<SupportChat>("/portal/support"),
+  sendSupport: (body: string) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body }) }),
+  readSupport: () => request<{ unread: number }>("/portal/support/read", { method: "POST" }),
   startQris: (sessionId: string) =>
     request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string; direct?: boolean }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
   getPaymentStatus: (sessionId: string) => request<any>(`/payment/status/${sessionId}`),
@@ -538,6 +542,8 @@ export const api = {
   deletePackage: (id: string) => request<{ ok: boolean; deleted: boolean; softDeleted: boolean; id: string }>(`/packages/${id}`, { method: "DELETE" }),
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
+
+export interface SupportChat { status: "open" | "resolved"; unread: number; messages: { id: string; sender: "tenant" | "admin"; body: string; createdAt: string }[] }
 
 export interface AdminNotification {
   id: string;

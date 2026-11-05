@@ -14,6 +14,8 @@
     "build:client": "node ./node_modules/vite/bin/vite.js build --config client/vite.config.ts",
     "build:server": "node ./node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run build:client && npm run build:server",
+    "superadmin:dev": "node ./node_modules/electron/cli.js superadmin-app/main.cjs",
+    "superadmin:dist": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --config superadmin-app/electron-builder.json --win nsis portable",
     "dist": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable",
     "dist:publish": "npm run build:client && node ./node_modules/electron-builder/out/cli/cli.js --win nsis portable --publish always",
     "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",

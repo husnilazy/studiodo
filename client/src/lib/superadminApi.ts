@@ -471,6 +471,13 @@ export interface TenantDetail extends SuperadminTenant {
 
 export interface TwoFactorStatus { enabled: boolean; enabledAt: string | null; recoveryCodesLeft: number; setupPending: boolean }
 
+// ---- Bantuan tenant & Pusat Notifikasi ----
+export interface SupportThread { id: string; tenantId: string; status: "open" | "resolved"; lastSender: "tenant" | "admin" | null; lastBody: string | null; lastMessageAt: string; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; unread: number; needsReply: boolean }
+export interface SupportMessage { id: string; sender: "tenant" | "admin"; author: string | null; body: string; createdAt: string }
+export interface AdminAlert { id: string; kind: string; severity: "info" | "success" | "warning" | "critical"; title: string; body: string | null; link: string | null; tenantId: string | null; tenantName: string | null; readAt: string | null; waSentAt: string | null; waError: string | null; createdAt: string }
+export interface AlertSummary { unread: number; critical: number; followUp: { key: string; label: string; count: number; link: string; tone: "warn" | "bad" | "info" }[]; followUpTotal: number }
+export interface AlertSettings { number: string; gateway: boolean; kinds: { kind: string; label: string; severity: string; inApp: boolean; whatsapp: boolean }[] }
+
 // ---- Calon tenant (CRM follow-up) ----
 export type LeadStage = "new" | "contacted" | "trial_given" | "negotiation" | "contract_sent" | "active" | "lost";
 export interface Lead {
@@ -676,6 +683,18 @@ export const superadminApi = {
   rotateLeadWebhookKey: () => request<{ key: string; url: string }>("/leads/settings/webhook-key", { method: "POST" }),
   testLeadWhatsapp: (phone: string) => request<{ ok: boolean }>("/leads/settings/whatsapp-test", { method: "POST", body: JSON.stringify({ phone }) }),
   getLeadDoc: (which: "onboarding" | "team") => request<{ title: string; markdown: string; html: string; page: string; publicUrl: string | null }>(`/leads/docs/${which}`),
+  // Bantuan tenant
+  getSupportThreads: () => request<{ threads: SupportThread[]; needsReply: number; unread: number }>("/support/threads"),
+  getSupportThread: (id: string) => request<{ thread: { id: string; tenantId: string; status: "open" | "resolved"; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; plan: string }; messages: SupportMessage[] }>(`/support/threads/${id}`),
+  replySupport: (id: string, body: string) => request<SupportMessage>(`/support/threads/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) }),
+  setSupportStatus: (id: string, status: "open" | "resolved") => request<{ id: string; status: string }>(`/support/threads/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  // Pusat Notifikasi
+  getAlerts: (opts: { unread?: boolean; kind?: string; limit?: number } = {}) => request<{ items: AdminAlert[]; unread: number; critical: number }>(`/alerts?limit=${opts.limit ?? 60}${opts.unread ? "&unread=1" : ""}${opts.kind ? `&kind=${encodeURIComponent(opts.kind)}` : ""}`),
+  getAlertSummary: () => request<AlertSummary>("/alerts/summary"),
+  markAlertsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number; critical: number }>("/alerts/read", { method: "POST", body: JSON.stringify(body) }),
+  getAlertSettings: () => request<AlertSettings>("/alerts/settings"),
+  saveAlertSettings: (body: { number?: string; prefs?: Record<string, { inApp?: boolean; whatsapp?: boolean }> }) => request<{ ok: boolean }>("/alerts/settings", { method: "PUT", body: JSON.stringify(body) }),
+  testAlertWhatsapp: () => request<{ ok: boolean }>("/alerts/test", { method: "POST" }),
 };
 
 // ---- Konten Instagram (Content Studio) ----

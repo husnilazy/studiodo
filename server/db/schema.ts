@@ -243,6 +243,9 @@ export const platformSettings = pgTable("platform_settings", {
   leadTemplates: jsonb("lead_templates").$type<Record<string, string>>().notNull().default({}), // editable overrides of the default WhatsApp templates
   // Who "Pihak Pertama" is on contracts (company name, address, contact). Plain text, edited in Superadmin; see lib/contract.ts.
   contractIssuer: jsonb("contract_issuer").$type<{ name?: string; address?: string; contact?: string }>().notNull().default({}),
+  // Superadmin alerts (lib/adminAlerts.ts): the WhatsApp number that receives important alerts, and per-kind overrides { kind: { inApp?, whatsapp? } }.
+  adminWaNumber: text("admin_wa_number"),
+  adminAlertPrefs: jsonb("admin_alert_prefs").$type<Record<string, { inApp?: boolean; whatsapp?: boolean }>>().notNull().default({}),
   defaultTrialDays: integer("default_trial_days").notNull().default(7),
   // How long a NEW tenant's trial runs before subscriptionEndsAt is even reached —
   // distinct from gracePeriodDays below, which is what happens AFTER it's reached.
@@ -1016,3 +1019,40 @@ export const posQueueTickets = pgTable("pos_queue_tickets", {
   index("pos_queue_tenant_day_idx").on(table.tenantId, table.queueDate),
   unique("pos_queue_tenant_day_seq_unique").on(table.tenantId, table.queueDate, table.seq),
 ]);
+
+// Tenant <-> STUDIODO help chat: one continuous thread per tenant (the "Bantuan" button in the tenant dashboard).
+export const supportThreads = pgTable("support_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("open"), // 'open' | 'resolved'
+  lastSender: text("last_sender"), // 'tenant' | 'admin'
+  lastBody: text("last_body"),
+  lastMessageAt: timestamp("last_message_at").notNull().defaultNow(),
+  adminLastReadAt: timestamp("admin_last_read_at"),
+  tenantLastReadAt: timestamp("tenant_last_read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("support_threads_tenant_idx").on(table.tenantId), index("support_threads_last_idx").on(table.lastMessageAt)]);
+
+export const supportMessages = pgTable("support_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  threadId: uuid("thread_id").notNull().references(() => supportThreads.id, { onDelete: "cascade" }),
+  sender: text("sender").notNull(), // 'tenant' | 'admin'
+  author: text("author"), // tenant admin email / superadmin email
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("support_messages_thread_idx").on(table.threadId, table.createdAt)]);
+
+// Alerts for the platform team (new sign-up, payment, withdrawal, help message, errors…). Created by lib/adminAlerts.ts from platform events.
+export const adminNotifications = pgTable("admin_notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(), // the event action, e.g. 'payment.received'
+  severity: text("severity").notNull().default("info"), // 'info' | 'success' | 'warning' | 'critical'
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"), // Superadmin section id to open, e.g. 'billing'
+  tenantId: uuid("tenant_id"),
+  readAt: timestamp("read_at"),
+  waSentAt: timestamp("wa_sent_at"),
+  waError: text("wa_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("admin_notifications_created_idx").on(table.createdAt), index("admin_notifications_read_idx").on(table.readAt)]);
