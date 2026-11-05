@@ -15,7 +15,7 @@ const NOT_REGISTERED = "Email ini belum terdaftar sebagai admin tenant STUDIODO.
 
 /** This API's own public address (Google redirects back here). PUBLIC_BASE_URL wins; otherwise derived from the request. */
 function publicBase(req: Request): string {
-  const fixed = (process.env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
+  const fixed = (process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
   if (fixed) return fixed;
   const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol).split(",")[0];
   return `${proto}://${req.get("host")}`;

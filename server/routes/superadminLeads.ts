@@ -6,7 +6,7 @@ import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { readVolumeTiers } from "../lib/boothPricing.js";
 import { mergePolicy } from "../lib/withdrawalPolicy.js";
-import { portalBaseUrl } from "../lib/urls.js";
+import { appBaseUrl, portalBaseUrl } from "../lib/urls.js";
 import { normalizeWhatsapp } from "../lib/crm.js";
 import {
   canMoveTo, dueFromPreset, isStage, maskSecrets, LEAD_STAGES, OPEN_STAGES, renderTemplate, resolveTemplates, sanitizeLeadPatch, sanitizeTemplateOverrides,
@@ -25,7 +25,7 @@ superadminLeadsRouter.param("id", validateUuidParam("Lead tidak ditemukan"));
 superadminLeadsRouter.param("taskId", validateUuidParam("Tugas tidak ditemukan"));
 
 /** Where the public pages (contract, onboarding guide) live: this API's own address. */
-export const publicApiBase = () => (process.env.PUBLIC_BASE_URL || portalBaseUrl()).replace(/\/$/, "");
+export const publicApiBase = () => appBaseUrl();
 export const contractUrl = (token: string) => `${publicApiBase()}/api/public/kontrak/${token}`;
 export const onboardingUrl = () => `${publicApiBase()}/api/public/panduan/onboarding`;
 
