@@ -266,7 +266,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   autoCaptureEnabled: false,
   sessionTimerMinutes: 5,
   cameraMode: "webcam",
-  tetherBridgeUrl: "http://localhost:5510",
+  tetherBridgeUrl: "http://127.0.0.1:5510",
   cameraPreset: {},
   qrisEnabled: true,
   stripLayout: "classic-vertical",

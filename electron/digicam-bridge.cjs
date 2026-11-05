@@ -87,7 +87,7 @@ let server = null;
 // started using slc=get/list. Not fixable on digiCamControl's side from here
 // — it's closed, unmaintained server code — so this bypasses Node's HTTP
 // parsing for ALL requests to it, uniformly, rather than special-casing one path.
-function digicamGet(pathAndQuery) {
+function digicamGet(pathAndQuery, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const target = new URL(`${DIGICAM_URL}${pathAndQuery}`);
     const socket = net.connect({ host: target.hostname, port: Number(target.port) || 80 });
@@ -100,7 +100,7 @@ function digicamGet(pathAndQuery) {
       fn(value);
     };
 
-    socket.setTimeout(5000);
+    socket.setTimeout(timeoutMs);
     socket.on("timeout", () => finish(reject, new Error("Timeout menghubungi digiCamControl")));
     socket.on("error", (error) => finish(reject, error));
     socket.on("connect", () => {
@@ -147,9 +147,9 @@ function digicamGet(pathAndQuery) {
 // see WebServerModule.cs in digiCamControl's source, which forwards
 // [slc, param1, param2] straight into the same command parser its scripting
 // engine and CameraControlCmd.exe use.
-async function digicamSlc(action, param1, param2 = "") {
+async function digicamSlc(action, param1, param2 = "", timeoutMs = 5000) {
   const query = `/?slc=${encodeURIComponent(action)}&param1=${encodeURIComponent(param1)}&param2=${encodeURIComponent(param2)}`;
-  const response = await digicamGet(query);
+  const response = await digicamGet(query, timeoutMs);
   return response.body.toString("utf8").trim();
 }
 
@@ -200,7 +200,7 @@ async function setCameraProperties(values) {
 
 async function checkDigicamReachable() {
   try {
-    const response = await digicamGet("/session.json");
+    const response = await digicamGet("/session.json", 2500);
     return response.statusCode > 0 && response.statusCode < 500;
   } catch {
     return false;
@@ -211,16 +211,25 @@ async function checkDigicamReachable() {
 // camera is plugged in. Verified live: "slc=list&param1=cameras" returns the
 // connected camera's serial number (one per line), and just "OK" when none is
 // connected. Anything else (errors, empty) counts as not connected.
+// Returns true / false, or null when digiCamControl gave no usable answer (different
+// versions answer this command differently — then fall back to reading a property the
+// camera must answer, instead of wrongly reporting "no camera").
 async function checkCameraConnected() {
+  let raw = "";
   try {
-    const raw = await digicamSlc("list", "cameras");
-    return raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .some((line) => line && line.toUpperCase() !== "OK" && !/error|exception|object reference|wrong|not found/i.test(line));
+    raw = await digicamSlc("list", "cameras", "", 2500);
   } catch {
-    return false;
+    raw = "";
   }
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.some((line) => line.toUpperCase() !== "OK" && !/error|exception|object reference|wrong|not found/i.test(line))) return true;
+  try {
+    const iso = await digicamSlc("get", "iso", "", 2500);
+    if (iso && !UNSUPPORTED_REPLY.test(iso)) return true;
+  } catch {
+    // fall through
+  }
+  return lines.length > 0 ? false : null;
 }
 
 // digiCamControl occasionally answers a command with a transient 5xx/timeout

@@ -188,7 +188,7 @@ export interface TetherBridgeHealth {
  */
 export async function checkTetherBridge(bridgeUrl: string): Promise<TetherBridgeHealth> {
   try {
-    const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(4000) });
+    const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(9000) });
     if (!response.ok) return { ok: false, error: `Bridge merespons status ${response.status}` };
     const payload = (await response.json()) as { ok?: boolean; digicamReachable?: boolean; cameraConnected?: boolean; digicamUrl?: string; engine?: string; camera?: string; state?: string; error?: string | null };
     // The native bridge talks to the camera itself — there is no digiCamControl to reach, so "reachable" is just "answered".
@@ -209,7 +209,7 @@ export interface DetectedCamera {
 
 const BRIDGE_CANDIDATES: { url: string; engine: "native" | "digicam" }[] = [
   { url: "http://127.0.0.1:5514", engine: "native" },
-  { url: "http://localhost:5510", engine: "digicam" },
+  { url: "http://127.0.0.1:5510", engine: "digicam" },
 ];
 
 /** Probes the known bridges on this PC and returns the ones that currently have a camera connected. */
