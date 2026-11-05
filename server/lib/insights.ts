@@ -1,3 +1,4 @@
+import { ts } from "./sqlDate.js";
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { billingOrders, kioskKeys, platformEvents, sessions, supportThreads, tenantPayments, tenants, withdrawals } from "../db/schema.js";
@@ -82,8 +83,8 @@ export async function tenantHealth(now: Date = new Date()): Promise<TenantHealth
     db.select({ id: tenants.id, name: tenants.name, status: tenants.status, phone: tenants.ownerWhatsapp }).from(tenants),
     db.select({
       tenantId: sessions.tenantId,
-      cur: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${d30})::int`,
-      prev: sql<number>`count(*) filter (where ${sessions.createdAt} < ${d30})::int`,
+      cur: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${ts(d30)})::int`,
+      prev: sql<number>`count(*) filter (where ${sessions.createdAt} < ${ts(d30)})::int`,
     }).from(sessions).where(and(eq(sessions.paymentStatus, "success"), gte(sessions.createdAt, d60))).groupBy(sessions.tenantId),
     db.select({ tenantId: kioskKeys.tenantId, lastUsedAt: kioskKeys.lastUsedAt, diag: kioskKeys.lastDiagnostics, type: kioskKeys.licenseType, endsAt: kioskKeys.licenseEndsAt }).from(kioskKeys).where(isNull(kioskKeys.revokedAt)),
     db.select({ tenantId: supportThreads.tenantId }).from(supportThreads).where(and(eq(supportThreads.status, "open"), eq(supportThreads.lastSender, "tenant"))),
@@ -122,7 +123,7 @@ export async function revenueInsights(now: Date = new Date()): Promise<RevenueIn
       issued: sql<number>`count(*)::int`,
       activated: sql<number>`count(*) filter (where ${kioskKeys.activatedAt} is not null)::int`,
       converted: sql<number>`count(*) filter (where ${kioskKeys.licenseType} = 'paid')::int`,
-      expired: sql<number>`count(*) filter (where ${kioskKeys.licenseType} = 'trial' and ${kioskKeys.licenseEndsAt} < ${now})::int`,
+      expired: sql<number>`count(*) filter (where ${kioskKeys.licenseType} = 'trial' and ${kioskKeys.licenseEndsAt} < ${ts(now)})::int`,
     }).from(kioskKeys).where(gte(kioskKeys.trialStartedAt, d90)),
     db.select({ n: sql<number>`count(distinct ${sessions.kioskKeyId})::int` }).from(sessions).innerJoin(kioskKeys, eq(kioskKeys.id, sessions.kioskKeyId)).where(and(gte(kioskKeys.trialStartedAt, d90), eq(sessions.paymentStatus, "success"))),
   ]);
@@ -192,10 +193,10 @@ export async function anomalies(now: Date = new Date()): Promise<Anomaly[]> {
   // A sudden burst of paid sessions, or a payment-failure storm, in the last 24h
   const perTenant = await db.select({
     tenantId: sessions.tenantId,
-    today: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${d1} and ${sessions.paymentStatus} = 'success')::int`,
-    base: sql<number>`count(*) filter (where ${sessions.createdAt} < ${d1} and ${sessions.paymentStatus} = 'success')::int`,
-    bad: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${d1} and ${sessions.paymentStatus} in ('failed', 'expired'))::int`,
-    all: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${d1})::int`,
+    today: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${ts(d1)} and ${sessions.paymentStatus} = 'success')::int`,
+    base: sql<number>`count(*) filter (where ${sessions.createdAt} < ${ts(d1)} and ${sessions.paymentStatus} = 'success')::int`,
+    bad: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${ts(d1)} and ${sessions.paymentStatus} in ('failed', 'expired'))::int`,
+    all: sql<number>`count(*) filter (where ${sessions.createdAt} >= ${ts(d1)})::int`,
   }).from(sessions).where(gte(sessions.createdAt, d14)).groupBy(sessions.tenantId);
   for (const r of perTenant) {
     const avg = r.base / 14;
