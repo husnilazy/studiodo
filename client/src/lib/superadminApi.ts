@@ -734,6 +734,7 @@ export const superadminApi = {
   search: (q: string) => request<{ hits: SearchHit[] }>(`/search?q=${encodeURIComponent(q)}`),
   // WhatsApp to existing tenants (manual composer + automatic renewal reminders)
   getTenantWa: (tenantId: string) => request<TenantWaData>(`/tenant-wa/${tenantId}`),
+  prepareTenantAccountMessage: (tenantId: string) => request<{ text: string; missing: string[]; waLink: string | null; includes: { email: string; hasKey: boolean; keyLabel: string | null; trialDays: number | null; setupLinkDays: number } }>(`/tenant-wa/${tenantId}/account-message`, { method: "POST", body: "{}" }),
   sendTenantWa: (tenantId: string, text: string, mode: "gateway" | "manual") => request<{ ok: true }>(`/tenant-wa/${tenantId}/send`, { method: "POST", body: JSON.stringify({ text, mode }) }),
   getTenantWaOverview: () => request<TenantWaOverview>("/tenant-wa/overview"),
   saveTenantWaAuto: (auto: TenantWaAuto) => request<{ auto: TenantWaAuto; warning?: string }>("/tenant-wa/auto", { method: "PUT", body: JSON.stringify(auto) }),

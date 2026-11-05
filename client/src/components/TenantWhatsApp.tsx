@@ -20,8 +20,23 @@ export function TenantWhatsAppCard({ tenantId }: { tenantId: string }) {
   const [text, setText] = useState("");
   const [picked, setPicked] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => { void superadminApi.getTenantWa(tenantId).then((r) => { if (r) setData(r); }).catch(() => undefined); }, [tenantId]);
-  useEffect(() => { setData(null); setText(""); setPicked(""); load(); }, [load]);
+  const [loadError, setLoadError] = useState("");
+  const [account, setAccount] = useState<{ email: string; hasKey: boolean; keyLabel: string | null; trialDays: number | null; missing: string[] } | null>(null);
+  const load = useCallback(() => {
+    setLoadError("");
+    void superadminApi.getTenantWa(tenantId).then((r) => { if (r) setData(r); else setLoadError("Server tidak mengirim data."); }).catch((e) => setLoadError(errMessage(e)));
+  }, [tenantId]);
+  useEffect(() => { setData(null); setText(""); setPicked(""); setAccount(null); load(); }, [load]);
+
+  // One click: login email + one-time password link + trial key, ready to send.
+  const prepareAccount = async () => {
+    setBusy(true);
+    try {
+      const r = await superadminApi.prepareTenantAccountMessage(tenantId);
+      if (!r) return;
+      setText(r.text); setPicked("account"); setAccount({ ...r.includes, missing: r.missing });
+    } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
+  };
 
   // The licence state suggests the right template up front (a tenant already past its end date gets the "habis" one).
   const suggested = data?.licenceStage === "expired" ? "expired" : data?.licenceStage ? "expiring" : "";
@@ -45,12 +60,25 @@ export function TenantWhatsAppCard({ tenantId }: { tenantId: string }) {
         <p className={label}>Kirim WhatsApp ke tenant</p>
         {data && <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${data.gateway ? "bg-emerald-500/15 text-emerald-700" : "bg-fg/10 text-fg/55"}`}>{data.gateway ? "Gateway tersambung" : "Gateway belum diatur"}</span>}
       </div>
-      {!data && <p className="mt-3 text-sm text-fg/40">Memuat…</p>}
+      {!data && !loadError && <p className="mt-3 text-sm text-fg/40">Memuat…</p>}
+      {!data && loadError && <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600">{loadError}<button type="button" onClick={load} className="ml-2 font-semibold underline">Coba lagi</button></p>}
       {data && !phoneOk && <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700">Tenant ini belum punya nomor WhatsApp yang valid — isi di kolom <b>Profil bisnis</b> (WhatsApp pemilik), lalu simpan.</p>}
       {data && (
         <>
           {data.phone && <p className="mt-2 text-xs text-fg/45">Ke <b className="text-fg/70">{data.tenant.ownerName ?? "pemilik"}</b> · +{data.phone}</p>}
-          <Select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-3`}>
+          <button type="button" disabled={busy} onClick={() => void prepareAccount()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent/10 px-4 py-3 text-sm font-semibold text-accent transition hover:bg-accent/20 disabled:opacity-50">
+            ⚡ Isi otomatis: data akun & key trial
+          </button>
+          {account && (
+            <ul className="mt-2 space-y-0.5 rounded-lg bg-fg/[0.05] px-3 py-2 text-xs text-fg/65">
+              <li>✓ Email login: <b>{account.email}</b></li>
+              <li>✓ Tautan atur password sekali pakai ({7} hari) — password tidak pernah dikirim</li>
+              <li>{account.hasKey ? `✓ Key booth${account.keyLabel ? ` “${account.keyLabel}”` : ""}${account.trialDays !== null ? ` · trial ${account.trialDays} hari` : ""}` : "⚠️ Key booth tidak bisa ditampilkan (dibuat sebelum fitur lihat-ulang) — buat key baru di Booth & Lisensi"}</li>
+              <li className="text-amber-700">Isi pesan ini rahasia: kirim hanya ke pemilik tenant.</li>
+            </ul>
+          )}
+          <p className="mt-3 text-[11px] uppercase tracking-[.14em] text-fg/40">atau pilih template lain</p>
+          <Select value={picked} onChange={(e) => pick(e.target.value)} className={`${fieldClass} mt-1`}>
             <option value="">Pilih template pesan…</option>
             {data.templates.map((t) => <option key={t.key} value={t.key}>{t.label}{t.key === suggested ? " — disarankan" : ""}</option>)}
           </Select>
