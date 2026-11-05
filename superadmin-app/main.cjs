@@ -10,6 +10,10 @@ const SMOKE = process.env.SUPERADMIN_SMOKE === "1"; // load, report, quit (used 
 const ICON = path.join(__dirname, "..", "electron", "icon.png");
 const BASE_TITLE = "STUDIODO Admin";
 
+// This app shares package.json's name with the kiosk app, so Electron gave both the SAME data folder (%APPDATA%\studiodo-kiosk)
+// and therefore the SAME single-instance lock: while one was running, launching the other only brought the first to the
+// front ("open STUDIODO, get Superadmin"). Its own data folder keeps the two apps fully independent. Must run before the lock.
+app.setPath("userData", path.join(app.getPath("appData"), "STUDIODO Admin"));
 if (!app.requestSingleInstanceLock()) app.quit();
 if (process.platform === "win32") app.setAppUserModelId("com.framelesscreative.studiodo.admin");
 
