@@ -282,6 +282,11 @@ export interface TenantQrisBalance {
   paymentCount: number;
 }
 
+export interface PlatformDokuInfo {
+  configured: boolean; clientId: string; hasSecret: boolean; environment: "sandbox" | "production"; qrisMode: "checkout" | "snap";
+  merchantId: string; terminalId: string; postalCode: string; hasPrivateKey: boolean; snapReady: boolean; notificationUrl: string;
+}
+
 export interface WithdrawalPolicy {
   enabled: boolean;
   mode: "anytime" | "window";
@@ -557,6 +562,9 @@ export const superadminApi = {
   getSecurityAlerts: () => request<SecurityAlert[]>("/security-alerts"),
   getFleetAlerts: () => request<{ offline: FleetAlertKiosk[]; diagnosticIssues: FleetAlertKiosk[] }>("/fleet-alerts"),
 
+  getPlatformDoku: () => request<PlatformDokuInfo>("/payment-gateways/doku"),
+  savePlatformDoku: (body: Record<string, unknown>) => request<PlatformDokuInfo>("/payment-gateways/doku", { method: "PUT", body: JSON.stringify(body) }),
+  testPlatformDoku: () => request<{ ok: boolean; message: string }>("/payment-gateways/doku/test", { method: "POST" }),
   getPaymentGateways: () => request<GatewaysOverview>("/payment-gateways"),
   savePaymentGateway: (provider: string, body: GatewayPatch) =>
     request<GatewayInfo>(`/payment-gateways/${provider}`, { method: "PUT", body: JSON.stringify(body) }),

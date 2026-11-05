@@ -179,6 +179,15 @@ export const superadmins = pgTable("superadmins", {
 // the tenant-facing "Perpanjang" (renew) button should point.
 export const platformSettings = pgTable("platform_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // STUDIODO's own DOKU account for kiosk sales of platform-settled tenants (see lib/platformDoku.ts). Secrets are encrypted.
+  dokuClientId: text("doku_client_id"),
+  dokuSecretKeyEnc: text("doku_secret_key_enc"),
+  dokuEnvironment: text("doku_environment").notNull().default("sandbox"), // 'sandbox' | 'production'
+  dokuQrisMode: text("doku_qris_mode").notNull().default("checkout"), // 'checkout' | 'snap'
+  dokuMerchantId: text("doku_merchant_id"),
+  dokuTerminalId: text("doku_terminal_id"),
+  dokuPostalCode: text("doku_postal_code"),
+  dokuSnapPrivateKeyEnc: text("doku_snap_private_key_enc"),
   defaultTrialDays: integer("default_trial_days").notNull().default(7),
   // How long a NEW tenant's trial runs before subscriptionEndsAt is even reached —
   // distinct from gracePeriodDays below, which is what happens AFTER it's reached.

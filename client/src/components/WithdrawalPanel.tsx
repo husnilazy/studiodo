@@ -58,7 +58,7 @@ export default function WithdrawalPanel() {
         <h3 className="mt-2 font-display text-2xl font-semibold">Pembayaran QRIS langsung ke rekening kamu</h3>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
           Akun kamu memakai Xendit milikmu sendiri (diatur di <strong>Paket &amp; QRIS</strong>), jadi uang QRIS masuk langsung ke saldo Xendit kamu — tidak ada saldo yang perlu ditarik di sini.
-          Kalau kamu ingin STUDIODO yang menampung pembayaran QRIS (tanpa perlu akun Xendit sendiri) lalu kamu tarik ke rekening kapan saja, hubungi admin STUDIODO untuk mengaktifkannya.
+          Kalau kamu ingin STUDIODO yang menampung pembayaran QRIS (tanpa perlu akun pembayaran sendiri) lalu kamu tarik ke rekening kapan saja, hubungi admin STUDIODO untuk mengaktifkannya.
         </p>
       </section>
     );

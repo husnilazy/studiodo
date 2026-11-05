@@ -182,6 +182,23 @@ describe.skipIf(!PGlite)("superadmin finance + tenant withdrawals (real SQL, rea
     expect(same.json.holdUntil).toBeNull();
   });
 
+  it("platform DOKU account: secrets are write-only, and DOKU payments of platform tenants are credited and reconciled", async () => {
+    expect((await call("GET", "/superadmin/payment-gateways/doku", ownerToken)).json.configured).toBe(false);
+    expect((await call("PUT", "/superadmin/payment-gateways/doku", ownerToken, { clientId: "BRN-0000-1", secretKey: "short" })).status).toBe(400);
+    const saved = await call("PUT", "/superadmin/payment-gateways/doku", ownerToken, { clientId: "BRN-0000-1", secretKey: "SK-rahasia-panjang", environment: "production" });
+    expect(saved.status).toBe(200);
+    expect(saved.json).toMatchObject({ configured: true, clientId: "BRN-0000-1", hasSecret: true, environment: "production" });
+    expect(JSON.stringify(saved.json)).not.toContain("SK-rahasia-panjang");
+    expect((await call("GET", "/superadmin/payment-gateways/doku", financeToken)).status).toBe(403); // finance role stays out of gateway settings
+
+    const sid = "30000000-0000-0000-0000-000000000003";
+    await (holder.db as any).insert((await import("../db/schema.js")).sessions).values({ id: sid, tenantId: T, paymentMethod: "doku", paymentStatus: "success", totalAmount: "50000" }); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect((await call("GET", "/superadmin/finance/reconcile", financeToken)).json.count).toBe(1); // a DOKU payment is found too
+    expect(await wallet.creditPlatformPayment(T, sid, 50000, "session")).toBe(true);
+    expect(await wallet.creditPlatformPayment(T, sid, 50000, "session")).toBe(false); // the same notification twice credits once
+    expect((await call("GET", "/superadmin/finance/reconcile", financeToken)).json.count).toBe(0);
+  });
+
   it("only the owner manages finance accounts", async () => {
     expect((await call("GET", "/superadmin/finance/users", financeToken)).status).toBe(403);
     expect((await call("POST", "/superadmin/finance/users", ownerToken, { email: "baru@studiodo.id", password: "short" })).status).toBe(400);

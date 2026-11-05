@@ -65,8 +65,11 @@ export function orderGateways(configs: GatewayConfig[]): GatewayConfig[] {
   return configs.filter(isUsable).sort((a, b) => a.priority - b.priority || a.provider.localeCompare(b.provider));
 }
 
+/** Gateways that can take STUDIODO subscription payments. Subscriptions go through Midtrans only (Xendit is kept just to settle orders already in flight). */
+export const SUBSCRIPTION_PROVIDERS: Provider[] = ["midtrans"];
+
 export async function usableGateways(): Promise<GatewayConfig[]> {
-  return orderGateways(await Promise.all(PROVIDERS.map(loadGateway)));
+  return orderGateways(await Promise.all(SUBSCRIPTION_PROVIDERS.map(loadGateway)));
 }
 
 export async function noteWebhook(provider: Provider, result: string) {

@@ -10,6 +10,7 @@ import { loadGateway } from "../lib/gateways.js";
 import { expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 import { createDokuCheckout, createDokuQris, dokuInvoicePaid, queryDokuQris, verifyDokuNotification, type DokuCfg } from "../lib/doku.js";
 import { decryptSecret, readStoredSecret } from "../lib/secretBox.js";
+import { loadPlatformDoku } from "../lib/platformDoku.js";
 import { creditPlatformPayment } from "../lib/qrisBalance.js";
 
 export const paymentRouter = Router();
@@ -54,9 +55,13 @@ async function getXenditConfig(tenantId: string) {
   };
 }
 
-// DOKU: the tenant opts in via tenantSettings.paymentProvider = 'doku'. Platform-settled tenants always stay on Xendit
-// (the platform's own gateway), since their money must land on STUDIODO's account.
+// DOKU: the tenant opts in via tenantSettings.paymentProvider = 'doku' (their own DOKU account). Platform-settled tenants use
+// STUDIODO's DOKU account instead (lib/platformDoku.ts), since their money must land on STUDIODO's account; if that is not
+// configured yet they fall back to the platform Xendit gateway so payments never stop.
 async function getDokuConfig(tenantId: string): Promise<DokuCfg | null> {
+  // Platform-settled tenants are collected on STUDIODO's own DOKU account (Superadmin -> Pembayaran), whatever the tenant picked.
+  const [owner] = await db.select({ settlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId));
+  if (owner?.settlement === "platform") return loadPlatformDoku();
   const [row] = await db.select({
     provider: tenantSettings.paymentProvider, clientId: tenantSettings.dokuClientId, secretEnc: tenantSettings.dokuSecretKeyEnc, environment: tenantSettings.dokuEnvironment, settlement: tenants.qrisSettlement,
     qrisMode: tenantSettings.dokuQrisMode, merchantId: tenantSettings.dokuMerchantId, terminalId: tenantSettings.dokuTerminalId, postalCode: tenantSettings.dokuPostalCode, privateKeyEnc: tenantSettings.dokuSnapPrivateKeyEnc,
@@ -172,7 +177,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
     } else {
       await completeAdditionalPrintPayment(tenantId, sessionId);
       // Only money the gateway really received is credited to a platform-settled tenant's wallet (a voucher-paid extra print is not).
-      if (method === "qris") await creditPlatformPayment(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`);
+      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`);
     }
   } else {
     const expected = Number(session.totalAmount ?? 0);
@@ -180,7 +185,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari total sesi (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
       await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
-      if (method === "qris") await creditPlatformPayment(tenantId, sessionId, expected, "session");
+      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, "session");
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
   }

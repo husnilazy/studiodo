@@ -189,7 +189,7 @@ export function QrisSettlementControl({ tenantId, current, onChanged }: { tenant
   const change = async (mode: "direct" | "platform") => {
     if (mode === current) return;
     const warning = mode === "platform"
-      ? "Mulai sekarang QRIS tenant ini ditampung di akun Xendit STUDIODO dan tenant menarik saldonya lewat permintaan penarikan. Lanjutkan?"
+      ? "Mulai sekarang QRIS tenant ini ditampung di akun DOKU STUDIODO dan tenant menarik saldonya lewat permintaan penarikan. Lanjutkan?"
       : "Kembali ke mode langsung: tenant harus mengisi Xendit-nya sendiri. Lanjutkan?";
     if (!window.confirm(warning)) return;
     setSaving(true);
@@ -210,8 +210,8 @@ export function QrisSettlementControl({ tenantId, current, onChanged }: { tenant
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg/50">Penampungan pembayaran QRIS</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {([
-          ["direct", "Langsung ke tenant", "Tenant isi Xendit sendiri. Uang masuk ke akun Xendit mereka."],
-          ["platform", "Ditampung STUDIODO", "Pakai akun Xendit STUDIODO. Tenant menarik saldo (ada fee)."],
+          ["direct", "Langsung ke tenant", "Tenant isi DOKU/Xendit sendiri. Uang masuk ke akun mereka."],
+          ["platform", "Ditampung STUDIODO", "Pakai akun DOKU STUDIODO. Tenant menarik saldo (ada fee)."],
         ] as const).map(([mode, title, hint]) => (
           <button key={mode} type="button" disabled={saving} onClick={() => change(mode)} className={`rounded-xl border p-3 text-left transition ${current === mode ? "border-accent bg-accent/10" : "border-fg/10 hover:border-fg/30"}`}>
             <p className="text-sm font-semibold">{title}</p>

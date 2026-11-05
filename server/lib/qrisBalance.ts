@@ -145,7 +145,7 @@ export async function findUncreditedPayments(tenantId?: string, dbx: Dbx = db) {
     .innerJoin(tenants, eq(tenants.id, sessions.tenantId))
     .where(and(
       eq(tenants.qrisSettlement, "platform"),
-      eq(sessions.paymentMethod, "qris"),
+      inArray(sessions.paymentMethod, ["qris", "doku"]),
       eq(sessions.paymentStatus, "success"),
       sql`${sessions.totalAmount} > 0`,
       sql`(${tenants.qrisPlatformSince} is null or ${sessions.createdAt} >= ${tenants.qrisPlatformSince})`,
