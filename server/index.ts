@@ -20,6 +20,7 @@ import { publicLeadsRouter } from "./routes/publicLeads.js";
 import { supportTenantRouter } from "./routes/supportAlerts.js";
 import { runLeadReminders } from "./lib/leadReminders.js";
 import { runTenantWaReminders } from "./lib/tenantWhatsapp.js";
+import { runDailyDigest } from "./lib/digest.js";
 import { withdrawalsRouter } from "./routes/withdrawals.js";
 import { tenantApplicationsRouter } from "./routes/tenantApplications.js";
 import { publicPlansRouter } from "./routes/publicPlans.js";
@@ -215,6 +216,10 @@ function startLeadReminders() {
   const runTenantWa = () => runTenantWaReminders().catch((error: any) => console.error("[STUDIODO] pengingat WhatsApp tenant gagal:", error?.message ?? error));
   setTimeout(runTenantWa, 150_000);
   setInterval(runTenantWa, 30 * 60 * 1000);
+  // Morning summary to the owner's WhatsApp (off until switched on; at most once per WIB day).
+  const runDigest = () => runDailyDigest().catch((error: any) => console.error("[STUDIODO] ringkasan pagi gagal:", error?.message ?? error));
+  setTimeout(runDigest, 180_000);
+  setInterval(runDigest, 10 * 60 * 1000);
 }
 
 // On Vercel the platform calls the exported app per request (api/index.js): there is no long-lived process to listen on a

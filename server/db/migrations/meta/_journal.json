@@ -351,6 +351,13 @@
       "when": 1793880088621,
       "tag": "0049_auth_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793880338520,
+      "tag": "0050_digest_settings",
+      "breakpoints": true
     }
   ]
 }

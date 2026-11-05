@@ -248,6 +248,8 @@ export const platformSettings = pgTable("platform_settings", {
   adminAlertPrefs: jsonb("admin_alert_prefs").$type<Record<string, { inApp?: boolean; whatsapp?: boolean }>>().notNull().default({}),
   // Automatic WhatsApp renewal reminders to existing tenants (lib/tenantWhatsapp.ts): { enabled, stages }. null = off.
   tenantWaAuto: jsonb("tenant_wa_auto").$type<{ enabled: boolean; stages: string[] }>(),
+  // Daily morning summary to the owner's WhatsApp (lib/digest.ts): { enabled, hour } with the hour in WIB. null = off.
+  digestSettings: jsonb("digest_settings").$type<{ enabled: boolean; hour: number }>(),
   defaultTrialDays: integer("default_trial_days").notNull().default(7),
   // How long a NEW tenant's trial runs before subscriptionEndsAt is even reached —
   // distinct from gracePeriodDays below, which is what happens AFTER it's reached.

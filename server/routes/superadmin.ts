@@ -21,6 +21,7 @@ import { notificationsAdminRouter } from "./notifications.js";
 import { contentStudioAdminRouter } from "./contentStudio.js";
 import { superadminFinanceRouter } from "./superadminFinance.js";
 import { superadminTenantWaRouter } from "./superadminTenantWa.js";
+import { superadminInsightsRouter } from "./superadminInsights.js";
 import { supportAdminRouter, alertsAdminRouter } from "./supportAlerts.js";
 import { superadminLeadsRouter, addActivity as addLeadActivity, onboardingUrl } from "./superadminLeads.js";
 import { renderTemplate, resolveTemplates, whatsappFallbackLink } from "../lib/leads.js";
@@ -110,6 +111,7 @@ superadminRouter.use(async (req, res, next) => {
 superadminRouter.use("/finance", superadminFinanceRouter);
 superadminRouter.use("/leads", superadminLeadsRouter);
 superadminRouter.use("/tenant-wa", superadminTenantWaRouter);
+superadminRouter.use(superadminInsightsRouter);
 superadminRouter.use("/support", supportAdminRouter);
 superadminRouter.use("/alerts", alertsAdminRouter);
 superadminRouter.use("/2fa", twoFactorAdminRouter);
