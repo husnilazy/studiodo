@@ -1,10 +1,15 @@
 import { Router } from "express";
-import { desc, eq, inArray, and } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { platformEvents, platformSettings, superadmins, tenants } from "../db/schema.js";
+import { admins, kioskKeys, platformEvents, platformSettings, superadmins, tenants } from "../db/schema.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { normalizeWhatsapp } from "../lib/crm.js";
+import { maskSecrets, renderTemplate, resolveTemplates } from "../lib/leads.js";
+import { readStoredSecret } from "../lib/secretBox.js";
+import { resetLink, SETUP_TTL_MS } from "../lib/emails.js";
+import { portalBaseUrl } from "../lib/urls.js";
+import { onboardingUrl } from "./superadminLeads.js";
 import { loadWaConfig, loadWaRow, publicWaStatus, sendWhatsapp } from "../lib/whatsapp.js";
 import {
   TENANT_TEMPLATES, loadLicences, loadTenantAuto, renderTenantMessage, sanitizeAutoSettings, stageFor, upcomingReminders, varsFor, whatsappFallbackLink, withinSendingHours,
@@ -65,6 +70,40 @@ superadminTenantWaRouter.get("/:id", async (req, res) => {
   });
 });
 
+/** One-time links carry a signed token; the activity log keeps the shape of the message, not a working credential. */
+const maskLinks = (text: string) => text.replace(/([?&]token=)[^\s&]+/g, "$1…");
+const safeForLog = (text: string) => maskLinks(maskSecrets(text));
+
+// POST /:id/account-message — fills the "login + trial key" WhatsApp for an existing tenant in one click: the login email, a fresh
+// one-time "set your password" link (never the password), and the booth's trial key. Revealing the key is audited like in Lisensi.
+superadminTenantWaRouter.post("/:id/account-message", async (req, res) => {
+  const [tenant] = await db.select({ id: tenants.id, name: tenants.name, ownerName: tenants.ownerName, phone: tenants.ownerWhatsapp }).from(tenants).where(eq(tenants.id, req.params.id));
+  if (!tenant) return res.status(404).json({ error: "Tenant tidak ditemukan" });
+  const [admin] = await db.select().from(admins).where(eq(admins.tenantId, tenant.id)).orderBy(asc(admins.createdAt)).limit(1);
+  if (!admin) return res.status(409).json({ error: "Tenant ini belum punya akun admin, jadi belum ada data login yang bisa dikirim." });
+
+  const now = new Date();
+  const keys = await db.select().from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenant.id), isNull(kioskKeys.revokedAt))).orderBy(desc(kioskKeys.createdAt));
+  const key = keys.find((k) => k.licenseType === "trial" && k.licenseEndsAt && k.licenseEndsAt > now) ?? keys.find((k) => k.licenseType === "trial") ?? keys[0];
+  const plainKey = key ? readStoredSecret(key.rawKey) : null;
+  const trialDays = key?.licenseType === "trial" && key.licenseEndsAt ? Math.max(0, Math.ceil((key.licenseEndsAt.getTime() - now.getTime()) / 86_400_000)) : null;
+
+  const [settings] = await db.select({ templates: platformSettings.leadTemplates }).from(platformSettings).limit(1);
+  const template = resolveTemplates(settings?.templates).find((t) => t.key === "welcome_login")!.text;
+  const rendered = renderTemplate(template, {
+    nama: (tenant.ownerName ?? "").trim().split(/\s+/)[0] || "Kak", usaha: tenant.name, masa_trial: trialDays, link_login: portalBaseUrl(),
+    email_login: admin.email, link_setup: resetLink("tenant", admin.id, admin.passwordHash, SETUP_TTL_MS), key_trial: plainKey, link_panduan: onboardingUrl(),
+  });
+
+  const actor = await whoAmI(req.superadminId!);
+  if (plainKey && key) logEvent({ tenantId: tenant.id, category: "auth", action: "kiosk_key.revealed", message: `Key booth "${key.label ?? key.id.slice(0, 8)}" dimasukkan ke pesan WhatsApp oleh superadmin`, actorType: "superadmin", actorLabel: actor });
+  logEvent({ tenantId: tenant.id, level: "info", category: "tenant", action: "tenant.wa.account_prepared", message: `Pesan data akun & key trial disiapkan untuk ${tenant.name}`, actorType: "superadmin", actorLabel: actor });
+  res.json({
+    text: rendered.text, missing: rendered.missing, waLink: whatsappFallbackLink(tenant.phone, rendered.text),
+    includes: { email: admin.email, hasKey: Boolean(plainKey), keyLabel: key?.label ?? null, trialDays, setupLinkDays: 7 },
+  });
+});
+
 // POST /:id/send { text, mode: "gateway" | "manual" } — gateway sends through the provider; manual = the operator pressed send in wa.me, only logged
 superadminTenantWaRouter.post("/:id/send", async (req, res) => {
   const [tenant] = await db.select({ id: tenants.id, name: tenants.name, phone: tenants.ownerWhatsapp }).from(tenants).where(eq(tenants.id, req.params.id));
@@ -74,19 +113,20 @@ superadminTenantWaRouter.post("/:id/send", async (req, res) => {
   const phone = normalizeWhatsapp(tenant.phone);
   if (!phone) return res.status(400).json({ error: "Tenant ini belum punya nomor WhatsApp yang valid. Isi dulu di kolom profil tenant." });
   const actor = await whoAmI(req.superadminId!);
-  const preview = text.length > 160 ? `${text.slice(0, 157)}…` : text;
+  const safe = safeForLog(text);
+  const preview = safe.length > 160 ? `${safe.slice(0, 157)}…` : safe;
 
   if (req.body?.mode !== "gateway") {
-    logEvent({ level: "info", category: "tenant", action: "tenant.wa", message: `WhatsApp ke ${tenant.name} (dibuka manual): ${preview}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "wa.me", text } });
+    logEvent({ level: "info", category: "tenant", action: "tenant.wa", message: `WhatsApp ke ${tenant.name} (dibuka manual): ${preview}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "wa.me", text: safe } });
     return res.status(201).json({ ok: true });
   }
   const config = await loadWaConfig();
   if (!config) return res.status(409).json({ error: "Gateway WhatsApp belum diatur. Pakai tombol Buka WhatsApp, atau atur di Calon Tenant → Pengaturan." });
   const result = await sendWhatsapp(config, phone, text);
   if (!result.ok) {
-    logEvent({ level: "warning", category: "tenant", action: "tenant.wa.failed", message: `WhatsApp ke ${tenant.name} gagal: ${result.error}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "gateway", text } });
+    logEvent({ level: "warning", category: "tenant", action: "tenant.wa.failed", message: `WhatsApp ke ${tenant.name} gagal: ${result.error}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "gateway", text: safe } });
     return res.status(502).json({ error: `Pesan gagal dikirim: ${result.error}` });
   }
-  logEvent({ level: "info", category: "tenant", action: "tenant.wa", message: `WhatsApp ke ${tenant.name} (terkirim): ${preview}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "gateway", text, providerId: result.providerId } });
+  logEvent({ level: "info", category: "tenant", action: "tenant.wa", message: `WhatsApp ke ${tenant.name} (terkirim): ${preview}`, tenantId: tenant.id, actorType: "superadmin", actorLabel: actor, metadata: { via: "gateway", text: safe, providerId: result.providerId } });
   res.status(201).json({ ok: true });
 });

@@ -163,4 +163,40 @@ describe.skipIf(!PGlite)("tenant WhatsApp (real SQL, real HTTP)", () => {
     expect(msgs.at(-1).author).toContain("WhatsApp");
     expect((await adm("GET", "/alerts")).json.items.some((a: { kind: string }) => a.kind === "support.message")).toBe(true);
   });
+
+  it("one click fills login + one-time password link + trial key for an existing tenant, and the log never keeps the secrets", async () => {
+    const KEY = "ab12cd".repeat(10) + "abcd"; // 64 hex like a real booth key
+    await pg.exec(`
+      UPDATE kiosk_keys SET raw_key = '${KEY}', label = 'Booth Trial' WHERE key_hash = 'h1';
+      INSERT INTO admins (tenant_id, email, password_hash) VALUES ('${T1}', 'rina@example.com', 'hash');
+    `);
+    expect((await adm("POST", `/tenant-wa/${T3}/account-message`)).status).toBe(409); // no admin account yet
+    const r = await adm("POST", `/tenant-wa/${T1}/account-message`);
+    expect(r.status).toBe(200);
+    expect(r.json.text).toContain("rina@example.com");
+    expect(r.json.text).toContain(KEY);
+    expect(r.json.text).toMatch(/atur-password\?jenis=tenant&token=/);
+    expect(r.json.text).toMatch(/Trial \d+ hari/);
+    expect(r.json.text).not.toMatch(/password: /i); // the password itself is never part of it
+    expect(r.json.includes).toMatchObject({ email: "rina@example.com", hasKey: true, keyLabel: "Booth Trial" });
+    expect(r.json.waLink).toContain("https://wa.me/6281234567890");
+    expect(r.json.missing).toEqual([]);
+
+    // sending it through the gateway delivers the real text but records a masked copy
+    const before = sent.length;
+    expect((await adm("POST", `/tenant-wa/${T1}/send`, { text: r.json.text, mode: "gateway" })).status).toBe(201);
+    expect(sent.at(-1)!.message).toContain(KEY);
+    expect(sent).toHaveLength(before + 1);
+    await settle();
+    const history = (await adm("GET", `/tenant-wa/${T1}`)).json.history;
+    const logged = history.find((h: { action: string; metadata: { text?: string } }) => h.action === "tenant.wa" && h.metadata?.text?.includes("Booth") === false && h.metadata?.text?.includes("rina@example.com"));
+    expect(logged).toBeTruthy();
+    expect(logged.metadata.text).not.toContain(KEY);
+    expect(logged.metadata.text).toContain("key disembunyikan");
+    expect(logged.metadata.text).not.toMatch(/token=[A-Za-z0-9_%.-]{10,}/);
+    // revealing the key is audited
+    const events = JSON.stringify((await adm("GET", `/events?tenantId=${T1}&limit=50`)).json);
+    expect(events).toContain("kiosk_key.revealed");
+    expect(events).not.toContain(KEY);
+  });
 });
