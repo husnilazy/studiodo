@@ -63,7 +63,7 @@ interface KioskSessionState {
   outputPreset: string;
   photoStickers: PhotoSticker[];
   templatePhotoMap: Record<number, number>;
-  selectedExtras: { id: string; name: string; price: number }[];
+  selectedExtras: { id: string; name: string; price: number; qty?: number }[];
   sessionStartedAt: number | null;
   mediaUrl: string | null;
   mediaUrls: string[];
@@ -95,7 +95,7 @@ interface KioskSessionState {
   setOutputPreset: (preset: string) => void;
   setPhotoStickers: (stickers: PhotoSticker[]) => void;
   setTemplatePhotoMap: (map: Record<number, number>) => void;
-  setSelectedExtras: (extras: { id: string; name: string; price: number }[]) => void;
+  setSelectedExtras: (extras: { id: string; name: string; price: number; qty?: number }[]) => void;
   setMediaUrl: (url: string, kind?: "gif" | "video") => void;
   setMediaPipeline: (state: "idle" | "working" | "done" | "failed") => void;
   setStopMotionUrl: (url: string | null) => void;

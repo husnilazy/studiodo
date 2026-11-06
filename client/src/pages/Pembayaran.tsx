@@ -97,7 +97,7 @@ export default function Pembayaran() {
     if (!sessionId && !creatingSessionRef.current) {
       creatingSessionRef.current = true;
       api
-        .createSession({ packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id, orientation, selectedExtras })
+        .createSession({ packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id, orientation, selectedExtras, printQty: selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0 })
         .then((s) => {
           setSessionId(s.id);
           if (eventFreeEntryActive) {

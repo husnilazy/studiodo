@@ -14,7 +14,7 @@ import { renderStopMotion } from "@/lib/stopMotion";
 import { OUTPUT_PRESETS, useTemplateLibrary } from "@/lib/templateStore";
 import type { LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
-import { buildStickerAssets } from "@/lib/builtinStickers";
+import { buildStickerAssets, useEmojiVersion } from "@/lib/builtinStickers";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
 import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
 import { Icon } from "@/components/kiosk/Icons";
@@ -120,7 +120,8 @@ export default function Hasil() {
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
   const stickerList = useStickerLibrary((state) => state.stickers);
-  const stickerAssets = useMemo(() => buildStickerAssets(photoStickers, stickerList), [photoStickers, stickerList]);
+  const emojiVersion = useEmojiVersion();
+  const stickerAssets = useMemo(() => buildStickerAssets(photoStickers, stickerList), [photoStickers, stickerList, emojiVersion]);
   const config = useBoothConfig((s) => s.config);
   const wide = useWideLandscape();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -431,7 +432,8 @@ export default function Hasil() {
     }
   };
 
-  const printNow = async (copies = config.printCopies) => {
+  // The booth's normal copy count plus any extra prints the customer already paid for on the package screen.
+  const printNow = async (copies = config.printCopies + (useKioskSession.getState().selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0)) => {
     if (!stripDataUrl || printing) return;
     setPrinting(true);
     setPrintStatus("idle");

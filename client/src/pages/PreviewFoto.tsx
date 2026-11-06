@@ -7,7 +7,7 @@ import { drawStickers, renderTemplate } from "@/lib/output";
 import { renderPhotoStrip } from "@/lib/stripRenderer";
 import { useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
-import { BUILTIN_CATEGORIES, buildStickerAssets, resolveStickerDataUrl } from "@/lib/builtinStickers";
+import { BUILTIN_CATEGORIES, buildStickerAssets, resolveStickerDataUrl, useEmojiVersion } from "@/lib/builtinStickers";
 import { api } from "@/lib/api";
 import type { PhotoSticker, CameraFilter } from "@/lib/sessionStore";
 import { FILTER_LABELS, FILTER_CSS, composeFilterCss } from "@/lib/sessionStore";
@@ -141,6 +141,9 @@ export default function PreviewFoto() {
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const [rendering, setRendering] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(0);
+  // Arranging photos into boxes: tap a box and a photo (either order) to put that photo in that box; a photo already used
+  // elsewhere swaps places with it, so nothing is ever lost.
+  const [pending, setPending] = useState<{ kind: "slot" | "photo"; index: number } | null>(null);
   const [serverTemplates, setServerTemplates] = useState<LocalTemplate[]>([]);
   const [zoomSnapshot, setZoomSnapshot] = useState<string | null>(null);
 
@@ -149,15 +152,17 @@ export default function PreviewFoto() {
     const list: { key: Tab; label: string; icon: string }[] = [];
     // Minimalis: the filter comes first and opens by default; stickers stay one tap away instead of filling the screen.
     const minimal = config.kioskStyle === "minimal";
+    // Arranging comes first: it is the step customers get lost on (which photo goes in which box).
+    if (template && photoUrls.length > 1) list.push({ key: "susunan", label: "Susunan foto", icon: "layers" });
     if (features.stickers && !minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.filters) list.push({ key: "filter", label: "Filter", icon: "palette" });
     if (features.stickers && minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.advancedPhotoEditor) list.push({ key: "warna", label: "Warna", icon: "sliders" });
-    if (template) list.push({ key: "susunan", label: "Susunan", icon: "layers" });
+    if (template && photoUrls.length <= 1) list.push({ key: "susunan", label: "Susunan", icon: "layers" });
     if (features.frameChoice && template) list.push({ key: "frame", label: "Frame", icon: "frame" });
     return list;
-  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template, config.kioskStyle]);
-  const [tab, setTab] = useState<Tab>(features.stickers && config.kioskStyle !== "minimal" ? "stiker" : "filter");
+  }, [features.stickers, features.filters, features.advancedPhotoEditor, features.frameChoice, template, config.kioskStyle, photoUrls.length]);
+  const [tab, setTab] = useState<Tab>(photoUrls.length > 1 ? "susunan" : features.stickers && config.kioskStyle !== "minimal" ? "stiker" : "filter");
   const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
 
   // ---- stickers -------------------------------------------------------------------------------------------
@@ -165,7 +170,8 @@ export default function PreviewFoto() {
   const [categoryKey, setCategoryKey] = useState(BUILTIN_CATEGORIES[0].key);
   const history = useRef<PhotoSticker[][]>([]);
   const [canUndo, setCanUndo] = useState(false);
-  const assets = useMemo(() => buildStickerAssets(photoStickers, library), [photoStickers, library]);
+  const emojiVersion = useEmojiVersion(); // re-resolve stickers as their Fluent emoji images finish loading
+  const assets = useMemo(() => buildStickerAssets(photoStickers, library), [photoStickers, library, emojiVersion]);
   const selectedSticker = photoStickers.find((s) => s.id === selectedStickerId) ?? null;
 
   const pushHistory = useCallback(() => {
@@ -275,6 +281,30 @@ export default function PreviewFoto() {
     navigate("/sesi-foto");
   };
 
+  const photoForSlot = (slot: number): number | null => {
+    const index = templatePhotoMap[slot] ?? slot;
+    return index >= 0 && index < photoUrls.length ? index : null;
+  };
+  const assignPhoto = (slot: number, photo: number) => {
+    if (!template) return;
+    const current = photoForSlot(slot);
+    const next = { ...templatePhotoMap };
+    template.slots.forEach((_, other) => {
+      if (other !== slot && photoForSlot(other) === photo) next[other] = current ?? -1; // swap with the box that held this photo
+    });
+    next[slot] = photo;
+    setTemplatePhotoMap(next);
+  };
+  const tapSlot = (slot: number) => {
+    if (pending?.kind === "photo") { assignPhoto(slot, pending.index); setSelectedPhoto(pending.index); setPending(null); return; }
+    setPending(pending?.kind === "slot" && pending.index === slot ? null : { kind: "slot", index: slot });
+  };
+  const tapPhoto = (photo: number) => {
+    setSelectedPhoto(photo);
+    if (pending?.kind === "slot") { assignPhoto(pending.index, photo); setPending(null); return; }
+    setPending(pending?.kind === "photo" && pending.index === photo ? null : { kind: "photo", index: photo });
+  };
+
   const goNext = () => navigate(getNextRoute("preview", config.kioskFlow));
 
   const retakesLeft = 3 - (retakeCounts[selectedPhoto] ?? 0);
@@ -289,7 +319,7 @@ export default function PreviewFoto() {
           <Positionable id="heading" type="text" label="Judul">
             <div>
               <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{config.previewHeadline || "Edit Foto"}</h1>
-              <p className="mt-0.5 hidden text-sm text-muted sm:block">Tambahkan stiker atau filter, lalu lanjut. Hasilnya langsung terlihat.</p>
+              <p className="mt-0.5 hidden text-sm text-muted sm:block">Atur foto ke kotak yang kamu mau, tambahkan stiker atau filter, lalu lanjut.</p>
             </div>
           </Positionable>
           <Positionable id="next-button" type="system-button" label="Tombol Lanjut">
@@ -308,6 +338,27 @@ export default function PreviewFoto() {
               <div className="relative shadow-2xl" style={{ width: box?.width, height: box?.height, visibility: box ? "visible" : "hidden" }}>
                 <canvas ref={canvasRef} className="h-full w-full rounded-lg bg-white" />
                 {rendering && canvasSize && <div className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5"><Spinner className="h-4 w-4 !border-white/30 !border-t-white" /></div>}
+                {template && activeTab === "susunan" && box && (
+                  <div className="pointer-events-none absolute inset-0 z-30">
+                    {template.slots.map((slot, slotIndex) => {
+                      const photo = photoForSlot(slotIndex);
+                      const active = pending?.kind === "slot" && pending.index === slotIndex;
+                      return (
+                        <button
+                          key={slotIndex}
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => tapSlot(slotIndex)}
+                          aria-label={`Kotak ${slotIndex + 1}`}
+                          className={`pointer-events-auto absolute flex items-start justify-start rounded-md border-2 transition ${active ? "border-accent bg-accent/25 shadow-[0_0_0_4px_rgba(255,255,255,0.7)]" : pending?.kind === "photo" ? "animate-pulse border-dashed border-white bg-white/20" : "border-dashed border-white/80 bg-black/10 hover:bg-white/20"}`}
+                          style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` }}
+                        >
+                          <span className="m-1 rounded-full bg-black/75 px-2 py-0.5 text-xs font-bold text-white">Kotak {slotIndex + 1}{photo !== null ? ` · Foto ${photo + 1}` : ""}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {box && features.stickers && (
                   <StickerLayer
                     box={box}
@@ -434,23 +485,66 @@ export default function PreviewFoto() {
                 </div>
               )}
 
-              {/* ---- Susunan (slots) ---- */}
+              {/* ---- Susunan (which photo goes in which box) ---- */}
               {activeTab === "susunan" && template && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-xs text-muted">Mau menukar posisi foto? Pilih fotonya di bawah kanvas (kiri), lalu ketuk kotak nomor yang kamu inginkan.</p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5rem, 1fr))" }}>
-                    {template.slots.map((_, slotIndex) => {
-                      const photoIndex = templatePhotoMap[slotIndex] ?? Math.min(slotIndex, photoUrls.length - 1);
-                      const photoForSlot = photoUrls[photoIndex];
-                      return (
-                        <button key={slotIndex} type="button" onClick={() => setTemplatePhotoMap({ ...templatePhotoMap, [slotIndex]: selectedPhoto })} className="rounded-2xl border border-dashed border-fg/25 bg-fg/5 p-1.5 text-center transition hover:border-accent hover:bg-accent/10">
-                          <span className="block text-[0.7rem] font-bold text-muted">Kotak {slotIndex + 1}</span>
-                          {photoForSlot ? <img src={photoForSlot} alt="" className="mt-1 aspect-square w-full rounded-xl object-cover" /> : <span className="mt-1 flex aspect-square items-center justify-center rounded-xl bg-fg/5 text-muted">–</span>}
-                        </button>
-                      );
-                    })}
+                  <div className={`rounded-2xl border p-3 text-sm font-medium transition ${pending ? "border-accent bg-accent/10 text-fg" : "border-fg/10 bg-fg/5 text-muted"}`} aria-live="polite">
+                    {pending?.kind === "slot" && <>Kotak {pending.index + 1} dipilih. <b>Sekarang ketuk foto</b> yang mau ditaruh di sana.</>}
+                    {pending?.kind === "photo" && <>Foto {pending.index + 1} dipilih. <b>Sekarang ketuk kotak</b> di frame (atau di daftar kotak) tujuannya.</>}
+                    {!pending && <>Ketuk <b>sebuah foto</b> lalu <b>kotak</b> di frame (atau sebaliknya) untuk memindahkannya. Foto yang sudah dipakai akan bertukar tempat.</>}
                   </div>
-                  <button type="button" onClick={() => setTemplatePhotoMap({})} className="k-btn self-start !min-h-0 !py-2.5 !text-sm">Urutkan ulang otomatis</button>
+
+                  <div>
+                    <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Semua foto kamu ({photoUrls.length})</p>
+                    <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(6.25rem, 1fr))" }}>
+                      {photoUrls.map((url, photoIndex) => {
+                        const usedIn = template.slots.map((_, slotIndex) => slotIndex).filter((slotIndex) => photoForSlot(slotIndex) === photoIndex);
+                        const armed = pending?.kind === "photo" && pending.index === photoIndex;
+                        return (
+                          <button
+                            key={`${url}-${photoIndex}`}
+                            type="button"
+                            onClick={() => tapPhoto(photoIndex)}
+                            aria-pressed={armed}
+                            className={`relative overflow-hidden rounded-2xl border-2 text-left transition active:scale-[0.97] ${armed ? "border-accent shadow-lg ring-4 ring-accent/30" : pending?.kind === "slot" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 hover:border-fg/30"}`}
+                          >
+                            <img src={url} alt={`Foto ${photoIndex + 1}`} className="aspect-[4/5] w-full object-cover" style={{ filter: filterCss, transform: outputMirrored ? "scaleX(-1)" : undefined }} />
+                            <span className="absolute left-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-xs font-bold text-white">Foto {photoIndex + 1}</span>
+                            <span className={`absolute inset-x-0 bottom-0 px-2 py-1 text-center text-[0.7rem] font-bold ${usedIn.length ? "bg-accent text-on-accent" : "bg-black/65 text-white/80"}`}>
+                              {usedIn.length ? `Di Kotak ${usedIn.map((n) => n + 1).join(", ")}` : "Belum dipakai"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Kotak di frame ({template.slots.length})</p>
+                    <div className="flex flex-wrap gap-2">
+                      {template.slots.map((_, slotIndex) => {
+                        const photo = photoForSlot(slotIndex);
+                        const armed = pending?.kind === "slot" && pending.index === slotIndex;
+                        return (
+                          <button
+                            key={slotIndex}
+                            type="button"
+                            onClick={() => tapSlot(slotIndex)}
+                            aria-pressed={armed}
+                            className={`flex items-center gap-2 rounded-2xl border-2 p-1.5 pr-3 text-left transition active:scale-[0.97] ${armed ? "border-accent bg-accent/10 ring-4 ring-accent/30" : pending?.kind === "photo" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}
+                          >
+                            {photo !== null ? <img src={photoUrls[photo]} alt="" className="h-11 w-11 rounded-xl object-cover" style={{ transform: outputMirrored ? "scaleX(-1)" : undefined }} /> : <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-fg/10 text-muted">–</span>}
+                            <span className="text-xs font-bold leading-tight">Kotak {slotIndex + 1}<span className="block font-medium text-muted">{photo !== null ? `Foto ${photo + 1}` : "Kosong"}</span></span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={() => { setTemplatePhotoMap({}); setPending(null); }} className="k-btn self-start !min-h-0 !py-2.5 !text-sm">
+                    <Icon name="refresh" className="h-4 w-4" />
+                    Urutkan ulang otomatis
+                  </button>
                 </div>
               )}
 

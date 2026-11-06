@@ -365,8 +365,8 @@ export const api = {
     gifVideoEnabled: boolean;
     kioskCount: number;
   }>("/config/plan-features"),
-  updateKioskFlow: (body: { order: string[]; enabled: Record<string, boolean> }) =>
-    request<{ ok: boolean; kioskFlow: { order: string[]; enabled: Record<string, boolean> } }>("/config/kiosk-flow", { method: "PATCH", body: JSON.stringify(body) }),
+  updateKioskFlow: (body: { order: string[]; enabled: Record<string, boolean>; mode?: "standard" | "single"; singlePackageId?: string | null }) =>
+    request<{ ok: boolean; kioskFlow: { order: string[]; enabled: Record<string, boolean>; mode?: "standard" | "single"; singlePackageId?: string | null } }>("/config/kiosk-flow", { method: "PATCH", body: JSON.stringify(body) }),
   getScreenLayout: (screenKey: string, orientation: ScreenOrientation) =>
     request<{ elements: LayoutElement[]; updatedAt: string | null }>(`/config/screen-layout?screenKey=${screenKey}&orientation=${orientation}`),
   updateScreenLayout: (screenKey: string, orientation: ScreenOrientation, elements: LayoutElement[]) =>
@@ -404,7 +404,7 @@ export const api = {
   getPublicConfig: (sessionId?: string) => request<{ baseUrl: string; brandName?: string; tagline?: string; logoUrl?: string | null; contactWhatsapp?: string | null; socialInstagram?: string | null; socialTiktok?: string | null; socialFacebook?: string | null; websiteUrl?: string | null; address?: string | null; accentColor?: string | null }>(`/config/public${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`),
   updateGalleryProfile: (body: Record<string, unknown>) => request<any>("/config/gallery-profile", { method: "PATCH", body: JSON.stringify(body) }),
   getPackages: () => request<any[]>("/packages"),
-  createSession: (body: { packageId?: string; orientation: string; selectedExtras?: { id: string; name: string; price: number }[] }) =>
+  createSession: (body: { packageId?: string; orientation: string; selectedExtras?: { id: string; name: string; price: number; qty?: number }[]; printQty?: number }) =>
     request<any>("/sessions", { method: "POST", body: JSON.stringify(body) }),
   patchSession: (id: string, body: Record<string, unknown>) =>
     request<any>(`/sessions/${id}`, { method: "PATCH", body: JSON.stringify(body) }),

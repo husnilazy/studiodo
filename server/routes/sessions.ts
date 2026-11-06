@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { db } from "../db/client.js";
-import { packages, sessions } from "../db/schema.js";
+import { packages, sessions, tenantSettings } from "../db/schema.js";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { saveUploadedFile, getStorageDriver } from "../storage.js";
 import {
@@ -65,7 +65,7 @@ const mediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 // POST /api/sessions — mulai sesi baru (setelah pilih paket + orientasi)
 sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
-  const { packageId, orientation, selectedExtras = [] } = req.body;
+  const { packageId, orientation, selectedExtras = [], printQty = 0 } = req.body;
   const [pkg] = packageId
     ? await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.tenantId, tenantId)))
     : [];
@@ -73,7 +73,20 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
   const requestedExtraIds = new Set(
     Array.isArray(selectedExtras) ? selectedExtras.map((extra: { id?: string }) => String(extra?.id ?? "")) : [],
   );
-  const canonicalExtras = configuredExtras.filter((extra) => requestedExtraIds.has(extra.id));
+  const canonicalExtras: { id: string; name: string; price: number; qty?: number }[] = configuredExtras.filter((extra) => requestedExtraIds.has(extra.id));
+  // Extra print copies chosen up front: priced by the tenant's own "tambah print" setting, never by the client — the quantity is
+  // clamped to the configured maximum and added as one synthetic line so the payment screen, the receipt and the total all agree.
+  const wantedPrints = Math.max(0, Math.floor(Number(printQty) || 0));
+  if (pkg && wantedPrints > 0) {
+    const [printing] = await db
+      .select({ enabled: tenantSettings.additionalPrintEnabled, label: tenantSettings.additionalPrintLabel, price: tenantSettings.additionalPrintPrice, max: tenantSettings.additionalPrintMax })
+      .from(tenantSettings)
+      .where(eq(tenantSettings.tenantId, tenantId));
+    if (printing && printing.enabled) {
+      const qty = Math.min(wantedPrints, printing.max ?? 5);
+      canonicalExtras.push({ id: "print-qty", name: `${printing.label || "Tambah print"} ×${qty}`, price: qty * Number(printing.price), qty });
+    }
+  }
   const totalAmount = pkg ? Number(pkg.price) + canonicalExtras.reduce((sum, extra) => sum + Number(extra.price), 0) : undefined;
   const [row] = await db
     .insert(sessions)

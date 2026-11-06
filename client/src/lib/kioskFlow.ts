@@ -44,6 +44,9 @@ export const ORDER_CONSTRAINTS: [KioskStepKey, KioskStepKey][] = [
 export interface KioskFlowConfig {
   order: string[];
   enabled: Record<string, boolean>;
+  /** "single": no package list — the kiosk sells `singlePackageId` at its own price and only asks how many prints. */
+  mode?: "standard" | "single";
+  singlePackageId?: string | null;
 }
 
 export function validateFlowOrder(config: KioskFlowConfig): { ok: true } | { ok: false; error: string } {
@@ -75,7 +78,34 @@ export function validateFlowOrder(config: KioskFlowConfig): { ok: true } | { ok:
 export const DEFAULT_KIOSK_FLOW: KioskFlowConfig = {
   order: [...KIOSK_STEP_KEYS],
   enabled: { tutorial: false, orientation: true, frame: true, preview: true },
+  mode: "standard",
+  singlePackageId: null,
 };
+
+// Ready-made step modes the admin can pick with one tap (then fine-tune below). Every preset only uses the same switches
+// the flow already has, so the server validation is unchanged; "single" additionally sells one fixed package.
+export interface FlowPreset {
+  id: string;
+  label: string;
+  description: string;
+  steps: string;
+  enabled: Record<string, boolean>;
+  mode: "standard" | "single";
+}
+export const FLOW_PRESETS: FlowPreset[] = [
+  { id: "lengkap", label: "Lengkap", description: "Customer memilih paket, tampilan kamera, frame, lalu bisa edit foto. Cocok untuk booth dengan banyak pilihan paket.", steps: "Paket → Tampilan kamera → Bayar → Frame → Foto → Edit → Hasil", enabled: { tutorial: false, orientation: true, frame: true, preview: true }, mode: "standard" },
+  { id: "ringkas", label: "Ringkas", description: "Tetap memilih paket, tapi tanpa langkah tampilan kamera. Lebih cepat antre.", steps: "Paket → Bayar → Frame → Foto → Edit → Hasil", enabled: { tutorial: false, orientation: false, frame: true, preview: true }, mode: "standard" },
+  { id: "satu-harga", label: "Satu harga (langsung)", description: "Tanpa memilih paket: satu paket dengan harga tetap (mis. Rp 30.000). Customer hanya menambah jumlah print, total langsung terhitung.", steps: "Jumlah print → Bayar → Frame → Foto → Edit → Hasil", enabled: { tutorial: false, orientation: false, frame: true, preview: true }, mode: "single" },
+  { id: "kilat", label: "Kilat", description: "Satu harga dan paling singkat: tanpa frame pilihan dan tanpa edit. Bayar, foto, langsung hasil.", steps: "Jumlah print → Bayar → Foto → Hasil", enabled: { tutorial: false, orientation: false, frame: false, preview: false }, mode: "single" },
+];
+
+/** Which preset the current switches match (or null when the admin has customised beyond a preset). */
+export function matchPreset(flow: KioskFlowConfig): FlowPreset | null {
+  const mode = flow.mode ?? "standard";
+  const defaultOrder = KIOSK_STEP_KEYS.join(",");
+  if (flow.order.join(",") !== defaultOrder) return null;
+  return FLOW_PRESETS.find((preset) => preset.mode === mode && (["tutorial", "orientation", "frame", "preview"] as const).every((key) => (preset.enabled[key] !== false) === (flow.enabled[key] !== false))) ?? null;
+}
 
 function resolveStep(offset: 1 | -1, fromKey: KioskStepKey | "idle", flow: KioskFlowConfig): string {
   const order = flow.order.length === KIOSK_STEP_KEYS.length ? (flow.order as KioskStepKey[]) : KIOSK_STEP_KEYS;

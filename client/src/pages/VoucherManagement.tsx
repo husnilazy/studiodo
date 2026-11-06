@@ -131,7 +131,7 @@ export default function VoucherManagement() {
       ctx.fillStyle = "#111111";
       ctx.textAlign = "center";
       ctx.font = "bold 56px sans-serif";
-      ctx.fillText("STUDIODO", canvas.width / 2, 100);
+      ctx.fillText(config.brandName || "STUDIODO", canvas.width / 2, 100);
       ctx.font = "28px sans-serif";
       ctx.fillText("Invoice Pembayaran Cash", canvas.width / 2, 150);
       ctx.textAlign = "left";

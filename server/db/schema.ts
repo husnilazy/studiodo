@@ -497,7 +497,7 @@ export const sessions = pgTable("sessions", {
   orientation: text("orientation").notNull().default("portrait"), // 'portrait' | 'landscape'
   paymentMethod: text("payment_method").notNull().default("qris"), // 'qris' | 'voucher'
   paymentStatus: text("payment_status").notNull().default("pending"), // pending | success | expired | failed
-  selectedExtras: jsonb("selected_extras").$type<{ id: string; name: string; price: number }[]>().notNull().default([]),
+  selectedExtras: jsonb("selected_extras").$type<{ id: string; name: string; price: number; qty?: number }[]>().notNull().default([]),
   additionalPrintsPaid: integer("additional_prints_paid").notNull().default(0),
   additionalPrintsPending: integer("additional_prints_pending").notNull().default(0),
   paymentPurpose: text("payment_purpose").notNull().default("session"), // 'session' | 'additional_print'
@@ -712,7 +712,8 @@ export const tenantSettings = pgTable("tenant_settings", {
   // non-locked ones (packages/payment/capture/result are always on). Validated
   // server-side against server/lib/kioskFlowRules.ts before ever being saved —
   // this column is never trusted as pre-validated just because it's present.
-  kioskFlow: jsonb("kiosk_flow").$type<{ order: string[]; enabled: Record<string, boolean> }>(),
+  // `mode`: "single" = no package list; the kiosk auto-uses `singlePackageId` and only asks how many prints (one-price booths).
+  kioskFlow: jsonb("kiosk_flow").$type<{ order: string[]; enabled: Record<string, boolean>; mode?: "standard" | "single"; singlePackageId?: string | null }>(),
   // Frame categories (Kelola Frame → "+ Kategori baru…") — was client-only
   // localStorage (frameCategoryStore.ts), so a category made on the admin's
   // browser never existed on a separate kiosk device; frames tagged with it

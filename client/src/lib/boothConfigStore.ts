@@ -341,7 +341,7 @@ function mergeConfig(config?: Partial<BoothConfig>): BoothConfig {
     // discarding it wholesale rather than mixing it with defaults, which could
     // silently produce an invalid order the validator would never have allowed.
     kioskFlow: config?.kioskFlow && Array.isArray(config.kioskFlow.order) && config.kioskFlow.order.length === DEFAULT_KIOSK_FLOW.order.length
-      ? { order: config.kioskFlow.order, enabled: { ...DEFAULT_KIOSK_FLOW.enabled, ...(config.kioskFlow.enabled ?? {}) } }
+      ? { order: config.kioskFlow.order, enabled: { ...DEFAULT_KIOSK_FLOW.enabled, ...(config.kioskFlow.enabled ?? {}) }, mode: config.kioskFlow.mode === "single" ? "single" as const : "standard" as const, singlePackageId: config.kioskFlow.singlePackageId ?? null }
       : DEFAULT_KIOSK_FLOW,
   };
 }

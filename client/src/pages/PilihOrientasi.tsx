@@ -71,7 +71,7 @@ export default function PilihOrientasi() {
               <div className="k-illus flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/15 to-fg/5">
                 <div className={`flex flex-col items-center gap-1 ${opt.sample}`}>
                   <Icon name="user" className="h-14 w-14 text-fg/70" strokeWidth={1.4} />
-                  <span className="rounded-md bg-fg px-2.5 py-0.5 font-display text-sm font-semibold text-canvas">STUDIODO</span>
+                  <span className="rounded-md bg-fg px-2.5 py-0.5 font-display text-sm font-semibold text-canvas">{config.brandName || "Brand"}</span>
                 </div>
               </div>
               <div>

@@ -6,7 +6,7 @@ import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { kioskKeys, sessions, tenantSettings, tenants } from "../db/schema.js";
+import { kioskKeys, packages, sessions, tenantSettings, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { resetStorageSettingsCache } from "../lib/storageConfig.js";
@@ -273,9 +273,21 @@ configRouter.patch("/kiosk-flow", requireAdminAuth, async (req, res) => {
   const result = validateFlowOrder({ order, enabled });
   if (!result.ok) return res.status(400).json({ error: result.error });
 
+  // "single" mode skips the package list and always sells one package, so that package must exist, belong to this tenant and be active.
+  const mode: "standard" | "single" = req.body?.mode === "single" ? "single" : "standard";
+  let singlePackageId: string | null = null;
+  if (mode === "single") {
+    const wanted = String(req.body?.singlePackageId ?? "");
+    const [pkg] = wanted ? await db.select({ id: packages.id, active: packages.active }).from(packages).where(and(eq(packages.id, wanted), eq(packages.tenantId, tenantId))) : [];
+    if (!pkg) return res.status(400).json({ error: "Pilih paket yang akan dijual untuk mode satu harga." });
+    if (pkg.active === false) return res.status(400).json({ error: "Paket yang dipilih sedang nonaktif. Aktifkan dulu atau pilih paket lain." });
+    singlePackageId = pkg.id;
+  }
+
+  const kioskFlow = { order, enabled, mode, singlePackageId };
   await ensureTenantSettingsRow(tenantId);
-  await db.update(tenantSettings).set({ kioskFlow: { order, enabled }, updatedAt: new Date() }).where(eq(tenantSettings.tenantId, tenantId));
-  res.json({ ok: true, kioskFlow: { order, enabled } });
+  await db.update(tenantSettings).set({ kioskFlow, updatedAt: new Date() }).where(eq(tenantSettings.tenantId, tenantId));
+  res.json({ ok: true, kioskFlow });
 });
 
 configRouter.patch("/gallery-profile", requireAdminAuth, async (req, res) => {

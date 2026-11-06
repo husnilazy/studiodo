@@ -204,6 +204,9 @@ export default function SesiFoto() {
     const { photoUrls: urls, currentSlot: slot } = useKioskSession.getState();
     return urls[slot] ? slot : null;
   });
+  // The customer picks "Otomatis" or "Manual" BEFORE the first shot, so the booth never starts countdowns by itself unannounced.
+  // A retake / returning to this screen with shots already taken keeps the earlier choice and skips the question.
+  const [modeChosen, setModeChosen] = useState(() => retakeTarget !== null || useKioskSession.getState().photoUrls.some(Boolean));
   const retakeTargetRef = useRef<number | null>(retakeTarget);
   retakeTargetRef.current = retakeTarget;
   // A retake after leaving this screen starts with no local clips, so re-merging would replace the earlier GIF/video with a partial one.
@@ -1129,6 +1132,7 @@ export default function SesiFoto() {
   }, [sessionComplete, eventTimerEnabled, remainingSeconds, selectedPackage?.hasVideo, selectedPackage?.hasGif, retakeTarget, retakeTick]);
 
   const startCountdown = () => {
+    setModeChosen(true);
     if (!previewReady || countdown !== null || (eventTimerEnabled && remainingSeconds <= 0) || (sessionComplete && retakeTargetRef.current === null) || captureLockRef.current) return;
     captureLockRef.current = true;
     setCaptureNotice(null);
@@ -1179,12 +1183,12 @@ export default function SesiFoto() {
   // right after a countdown ends where countdown is already null but the
   // previous capture() hasn't resolved yet, so this never double-fires.
   useEffect(() => {
-    if (!autoMode || isEditMode) return;
+    if (!autoMode || isEditMode || !modeChosen) return;
     if (!previewReady || (sessionComplete && retakeTarget === null) || countdown !== null || finishingEarly) return;
     const timer = window.setTimeout(() => startCountdown(), 2500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoMode, isEditMode, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
+  }, [autoMode, isEditMode, modeChosen, previewReady, sessionComplete, countdown, finishingEarly, currentSlot, retakeTarget]);
 
   const retake = (slot: number) => {
     if (countdown !== null || capturing || captureLockRef.current) return;
@@ -1452,6 +1456,29 @@ export default function SesiFoto() {
     </>
   );
 
+  // A small notice (not a step): tells the customer how shooting works and lets them pick with one tap. It does not block the
+  // screen; any tap on a choice — or on the shutter itself — closes it. The Otomatis/Manual switch at the top stays available.
+  const modeChooser = !modeChosen && !isEditMode ? (
+    <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[60] flex justify-center px-4 landscape:bottom-20" role="dialog" aria-label="Pilih cara mengambil foto">
+      <div className="pointer-events-auto w-full max-w-md rounded-3xl bg-white/95 p-4 text-center text-neutral-900 shadow-2xl ring-1 ring-black/10 backdrop-blur">
+        <p className="text-base font-semibold">Foto otomatis atau manual?</p>
+        <p className="mt-0.5 text-xs text-neutral-600">Otomatis: kamera menghitung mundur &amp; memotret sendiri. Manual: kamu tekan tombol kamera.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {([{ auto: true, title: "Otomatis" }, { auto: false, title: "Manual" }] as const).map((option) => (
+            <button
+              key={option.title}
+              type="button"
+              onClick={() => { setAutoMode(option.auto); setModeChosen(true); }}
+              className="rounded-2xl bg-accent px-4 py-3 text-base font-semibold text-on-accent transition active:scale-[0.97]"
+            >
+              {option.title}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const filterControl = (className: string) =>
     config.features.filters ? (
       <FilterControl filter={filter} onPick={(key) => setFilter(key as CameraFilter)} order={FILTER_ORDER} labels={FILTER_LABELS} css={FILTER_CSS} open={showFilters} setOpen={setShowFilters} className={className} />
@@ -1485,6 +1512,7 @@ export default function SesiFoto() {
     return (
       <ScreenLayoutBoundary screenKey="capture">
         <div className="kinetic-page kinetic-page-session force-dark relative h-full min-h-0 w-full overflow-hidden bg-black">
+          {modeChooser}
           <div ref={previewContainerRef} className="absolute inset-0">
             <motion.div animate={{ scale: flash ? 1.03 : 1 }} transition={{ duration: flash ? 0.18 : 0.4 }} className="relative h-full w-full overflow-hidden">
               {liveSurface("cover")}
@@ -1526,6 +1554,7 @@ export default function SesiFoto() {
   return (
     <ScreenLayoutBoundary screenKey="capture">
     <div className="kinetic-page kinetic-page-session relative flex h-full min-h-0 w-full flex-col overflow-hidden px-3 pb-3 pt-[4.25rem] sm:px-6 lg:px-8 landscape:pt-14">
+      {modeChooser}
       <StepProgress current="capture" />
       <header className="relative z-10 mx-auto flex w-full max-w-[1800px] shrink-0 flex-wrap items-center justify-between gap-2">
         <Positionable id="heading" type="text" label="Judul">

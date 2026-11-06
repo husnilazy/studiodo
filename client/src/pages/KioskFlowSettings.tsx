@@ -6,6 +6,8 @@ import {
   STEP_DEFS,
   LOCKED_STEPS,
   DEFAULT_KIOSK_FLOW,
+  FLOW_PRESETS,
+  matchPreset,
   validateFlowOrder,
   type KioskStepKey,
   type KioskFlowConfig,
@@ -25,6 +27,9 @@ export default function KioskFlowSettings() {
   const socialPopupOn = useBoothConfig((s) => Boolean(s.config.features.socialConsentPopup));
   const [order, setOrder] = useState<KioskStepKey[]>(DEFAULT_KIOSK_FLOW.order as KioskStepKey[]);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(DEFAULT_KIOSK_FLOW.enabled);
+  const [mode, setMode] = useState<"standard" | "single">("standard");
+  const [singlePackageId, setSinglePackageId] = useState<string | null>(null);
+  const [packageList, setPackageList] = useState<{ id: string; name: string; price: string | number; photoCount: number; active?: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -37,9 +42,25 @@ export default function KioskFlowSettings() {
       if (isValidStoredFlow(stored)) {
         setOrder(stored.order as KioskStepKey[]);
         setEnabled({ ...DEFAULT_KIOSK_FLOW.enabled, ...stored.enabled });
+        setMode(stored.mode === "single" ? "single" : "standard");
+        setSinglePackageId(stored.singlePackageId ?? null);
       }
     }).finally(() => setLoading(false));
+    api.getPackagesAll().then((list) => setPackageList(list ?? [])).catch(() => setPackageList([]));
   }, []);
+
+  const activePackages = packageList.filter((pkg) => pkg.active !== false);
+  const currentPreset = matchPreset({ order, enabled, mode });
+  const applyPreset = (id: string) => {
+    const preset = FLOW_PRESETS.find((item) => item.id === id);
+    if (!preset) return;
+    setOrder(DEFAULT_KIOSK_FLOW.order as KioskStepKey[]);
+    setEnabled({ ...DEFAULT_KIOSK_FLOW.enabled, ...preset.enabled });
+    setMode(preset.mode);
+    if (preset.mode === "single" && !singlePackageId && activePackages[0]) setSinglePackageId(activePackages[0].id);
+    setMessage("");
+  };
+  const singleMissing = mode === "single" && !singlePackageId;
 
   const validation = validateFlowOrder({ order, enabled });
 
@@ -59,11 +80,11 @@ export default function KioskFlowSettings() {
   };
 
   const save = async () => {
-    if (!validation.ok) return;
+    if (!validation.ok || singleMissing) return;
     setSaving(true);
     setMessage("");
     try {
-      const result = await api.updateKioskFlow({ order, enabled });
+      const result = await api.updateKioskFlow({ order, enabled, mode, singlePackageId: mode === "single" ? singlePackageId : null });
       if (!result) throw new Error("Gagal menyimpan");
       // The admin dashboard and the live kiosk share this same in-memory store —
       // without this, the change only takes effect after a full page reload
@@ -80,6 +101,7 @@ export default function KioskFlowSettings() {
   const resetDefault = () => {
     setOrder(DEFAULT_KIOSK_FLOW.order as KioskStepKey[]);
     setEnabled(DEFAULT_KIOSK_FLOW.enabled);
+    setMode("standard");
   };
 
   if (loading) return null;
@@ -93,6 +115,42 @@ export default function KioskFlowSettings() {
         Step bertanda "Wajib" tidak bisa dimatikan atau dilepas dari urutan relatifnya karena dibutuhkan datanya
         oleh step lain (mis. Pembayaran butuh paket sudah dipilih).
       </p>
+
+      <div className="mt-6">
+        <p className="text-sm font-semibold">Mode alur</p>
+        <p className="text-xs text-fg/40">Pilih satu gaya alur dengan sekali ketuk, lalu sesuaikan detailnya di bawah bila perlu. Jangan lupa tekan Simpan.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {FLOW_PRESETS.map((preset) => {
+            const active = currentPreset?.id === preset.id;
+            return (
+              <button key={preset.id} type="button" onClick={() => applyPreset(preset.id)} aria-pressed={active} className={`rounded-2xl border p-4 text-left transition ${active ? "border-accent bg-accent/10 shadow-md" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold">{preset.label}</p>
+                  {active && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Dipakai</span>}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-fg/55">{preset.description}</p>
+                <p className="mt-2 text-[11px] font-medium text-accent">{preset.steps}</p>
+              </button>
+            );
+          })}
+        </div>
+        {!currentPreset && <p className="mt-2 text-xs text-amber-500">Alur sekarang sudah disesuaikan sendiri (tidak sama persis dengan salah satu mode di atas).</p>}
+
+        {mode === "single" && (
+          <div className="mt-4 rounded-2xl border border-accent/30 bg-accent/5 p-4">
+            <p className="text-sm font-semibold">Paket yang dijual (satu harga)</p>
+            <p className="mt-0.5 text-xs text-fg/50">Customer tidak memilih paket. Kiosk langsung memakai paket ini, lalu customer hanya menambah jumlah print. Harga per lembar tambahan diatur di Printer → Additional print.</p>
+            <select value={singlePackageId ?? ""} onChange={(e) => setSinglePackageId(e.target.value || null)} className="mt-3 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2.5 text-sm">
+              <option value="">— Pilih paket —</option>
+              {activePackages.map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>{pkg.name} — Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto</option>
+              ))}
+            </select>
+            {activePackages.length === 0 && <p className="mt-2 text-xs text-amber-500">Belum ada paket aktif. Buat dulu di Keuangan → Paket (mis. "Paket 30rb").</p>}
+            {singleMissing && activePackages.length > 0 && <p className="mt-2 text-xs text-amber-500">Pilih paket dulu sebelum menyimpan.</p>}
+          </div>
+        )}
+      </div>
 
       <div className="mt-6 flex items-center justify-between rounded-xl border border-fg/10 bg-fg/5 px-4 py-3">
         <div>
@@ -184,7 +242,7 @@ export default function KioskFlowSettings() {
         <button
           type="button"
           onClick={save}
-          disabled={saving || !validation.ok}
+          disabled={saving || !validation.ok || singleMissing}
           className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saving ? "Menyimpan…" : "Simpan"}

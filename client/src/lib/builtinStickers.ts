@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { PhotoSticker } from "./sessionStore";
 import type { Sticker } from "./stickerStore";
 
@@ -48,7 +49,41 @@ function makeCanvas(w: number, h: number) {
   return { canvas, ctx };
 }
 
-function emojiToDataUrl(char: string) {
+// Emoji are drawn from the Microsoft Fluent Emoji 3D set (MIT licence, bundled in src/assets/emoji) so every device — Windows,
+// Android or iOS-less kiosk PCs — shows the same glossy, Apple-like pictures instead of whatever the OS font happens to be.
+// Each image is a lazy chunk inlined as a data URL (works offline, and a file:// page can still draw it onto a canvas for printing).
+const EMOJI_LOADERS = import.meta.glob("../assets/emoji/*.webp", { query: "?inline", import: "default" }) as Record<string, () => Promise<string>>;
+const emojiKey = (char: string) => Array.from(char, (c) => c.codePointAt(0)!.toString(16)).filter((c) => c !== "fe0f").join("-");
+const emojiLoading = new Set<string>();
+let emojiVersion = 0;
+const emojiListeners = new Set<() => void>();
+
+/** Re-render hook source: bumps each time another emoji image finishes loading (see useEmojiVersion). */
+export const subscribeEmoji = (listener: () => void) => { emojiListeners.add(listener); return () => { emojiListeners.delete(listener); }; };
+export const getEmojiVersion = () => emojiVersion;
+
+function loadEmoji(id: string, char: string) {
+  if (emojiLoading.has(id)) return;
+  const loader = EMOJI_LOADERS[`../assets/emoji/${emojiKey(char)}.webp`];
+  if (!loader) return;
+  emojiLoading.add(id);
+  loader().then((url) => {
+    cache.set(id, url);
+    emojiVersion++;
+    emojiListeners.forEach((listener) => listener());
+  }).catch(() => emojiLoading.delete(id));
+}
+
+/** Load every placed emoji before the final render, so a print never goes out with a system-font stand-in. */
+export async function preloadEmojiStickers(ids: string[]) {
+  await Promise.all(ids.filter((id) => id.startsWith("emoji:") && !cache.has(id)).map(async (id) => {
+    const loader = EMOJI_LOADERS[`../assets/emoji/${emojiKey(id.slice(6))}.webp`];
+    if (loader) cache.set(id, await loader());
+  }));
+}
+
+// Fallback only while the Fluent image is still loading (or for an emoji outside the bundled set): the system emoji font.
+function emojiFontToDataUrl(char: string) {
   const SIZE = 256;
   const { canvas, ctx } = makeCanvas(SIZE, SIZE);
   ctx.textAlign = "center";
@@ -204,8 +239,14 @@ export function resolveStickerDataUrl(id: string, library: Sticker[]): string | 
   const hit = cache.get(id);
   if (hit) return hit;
   let url: string | null = null;
-  if (id.startsWith("emoji:")) url = emojiToDataUrl(id.slice(6));
-  else if (id.startsWith("text:")) {
+  if (id.startsWith("emoji:")) {
+    const char = id.slice(6);
+    if (EMOJI_LOADERS[`../assets/emoji/${emojiKey(char)}.webp`]) {
+      loadEmoji(id, char);
+      return emojiFontToDataUrl(char); // temporary stand-in, not cached; the real image replaces it as soon as it has loaded
+    }
+    url = emojiFontToDataUrl(char);
+  } else if (id.startsWith("text:")) {
     const [label, color] = id.slice(5).split("|");
     url = textBadgeToDataUrl(label, color ?? "pink");
   } else if (id.startsWith("shape:")) {
@@ -228,3 +269,6 @@ export function buildStickerAssets(placed: PhotoSticker[], library: Sticker[]): 
   }
   return out;
 }
+
+/** Subscribes a component to emoji-image loading so previews swap the stand-in for the real picture. */
+export const useEmojiVersion = () => useSyncExternalStore(subscribeEmoji, getEmojiVersion);
