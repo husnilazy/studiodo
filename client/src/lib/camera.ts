@@ -199,6 +199,26 @@ export async function checkTetherBridge(bridgeUrl: string): Promise<TetherBridge
   }
 }
 
+export interface CameraDiagnosis {
+  digicamProcessRunning: boolean;
+  portOpen: boolean;
+  webserverAnswers: boolean;
+  cameraConnected: boolean | null;
+  canonUtilityRunning: boolean;
+  digicamUrl: string;
+}
+
+/** Asks the digiCamControl bridge why no camera is found. null = the bridge itself is not running / too old to answer. */
+export async function diagnoseTetherCamera(bridgeUrl = "http://127.0.0.1:5510"): Promise<CameraDiagnosis | null> {
+  try {
+    const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/diagnose`, { signal: AbortSignal.timeout(9000) });
+    if (!response.ok) return null;
+    return (await response.json()) as CameraDiagnosis;
+  } catch {
+    return null;
+  }
+}
+
 export interface DetectedCamera {
   url: string;
   /** Human readable, e.g. "Canon EOS 1300D (Canon SDK)". */

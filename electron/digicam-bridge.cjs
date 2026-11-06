@@ -35,6 +35,7 @@ const http = require("http");
 const net = require("net");
 const crypto = require("crypto");
 const { URL } = require("url");
+const { execFile } = require("child_process");
 
 const DIGICAM_URL = (process.env.DIGICAM_URL || "http://127.0.0.1:5513").replace(/\/$/, "");
 const BRIDGE_PORT = Number(process.env.DIGICAM_BRIDGE_PORT || 5510);
@@ -196,6 +197,46 @@ async function setCameraProperties(values) {
     }
   }
   return results;
+}
+
+// ---- diagnosis: WHY is no camera found? -----------------------------------------------------------------------------
+// "No camera detected" has several very different causes (digiCamControl not open, its web server switched off — the default —,
+// the camera not seen by digiCamControl, or EOS Utility holding it). Telling them apart lets the admin screen say exactly what to do.
+function processRunning(imageName) {
+  return new Promise((resolve) => {
+    if (process.platform !== "win32") return resolve(false);
+    execFile("tasklist", ["/FI", `IMAGENAME eq ${imageName}`, "/NH"], { windowsHide: true, timeout: 4000 }, (error, stdout) => {
+      resolve(!error && String(stdout).toLowerCase().includes(imageName.toLowerCase()));
+    });
+  });
+}
+
+function tcpOpen(host, port, timeoutMs) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (value) => { socket.destroy(); resolve(value); };
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => done(true));
+    socket.on("timeout", () => done(false));
+    socket.on("error", () => done(false));
+  });
+}
+
+async function diagnoseDigicam() {
+  const target = new URL(DIGICAM_URL);
+  const [digicamProcessRunning, canonUtilityRunning, portOpen] = await Promise.all([
+    processRunning("CameraControl.exe"),
+    Promise.all(["EOS Utility 3.exe", "EOS Utility 2.exe", "EOS Utility.exe", "EOSUtility.exe"].map(processRunning)).then((list) => list.some(Boolean)),
+    tcpOpen(target.hostname, Number(target.port) || 80, 1500),
+  ]);
+  const webserverAnswers = portOpen ? await checkDigicamReachable() : false;
+  let cameraConnected = null;
+  let camerasRaw = "";
+  if (webserverAnswers) {
+    cameraConnected = await checkCameraConnected();
+    try { camerasRaw = (await digicamSlc("list", "cameras", "", 2500)).slice(0, 200); } catch { camerasRaw = ""; }
+  }
+  return { digicamUrl: DIGICAM_URL, digicamProcessRunning, portOpen, webserverAnswers, cameraConnected, camerasRaw, canonUtilityRunning };
 }
 
 async function checkDigicamReachable() {
@@ -509,6 +550,19 @@ function startDigicamBridge(options = {}) {
         "Access-Control-Allow-Headers": "Content-Type",
       });
       res.end();
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/diagnose") {
+      diagnoseDigicam()
+        .then((result) => {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(result));
+        })
+        .catch((error) => {
+          res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Diagnosis gagal" }));
+        });
       return;
     }
 

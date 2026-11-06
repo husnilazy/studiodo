@@ -4,6 +4,21 @@ const path = require("path");
 
 let bridgeProcess = null;
 let lastSpawnError = null;
+// Why the native bridge is (not) running. Its output used to be thrown away (stdio "ignore"), so a bridge that died the moment it
+// started — typically a missing .NET runtime or DLL on a fresh PC — looked exactly like "no camera detected" with no clue anywhere.
+let lastExit = null; // { code, signal, afterMs }
+let skippedReason = null;
+let startedAt = 0;
+const recentOutput = [];
+const rememberOutput = (chunk) => {
+  for (const line of String(chunk).split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text) continue;
+    recentOutput.push(text.slice(0, 300));
+    if (recentOutput.length > 25) recentOutput.shift();
+    console.log(`[canon-bridge] ${text.slice(0, 300)}`);
+  }
+};
 
 // Bridge native (Canon EDSDK + Sony) — kontrak HTTP sama dengan digicam-bridge.cjs
 // tapi port berbeda supaya keduanya bisa jalan berdampingan; pilih mana yang dipakai
@@ -32,27 +47,37 @@ function isProcessRunning(imageName) {
 }
 
 function startCanonBridge() {
+  skippedReason = null;
   if (process.env.CANON_BRIDGE_ENABLED === "false") {
-    return { available: false, reason: "Bridge native dimatikan (CANON_BRIDGE_ENABLED=false)" };
+    skippedReason = "Bridge native dimatikan (CANON_BRIDGE_ENABLED=false)";
+    return { available: false, reason: skippedReason };
   }
   if (process.platform === "win32" && process.env.CANON_BRIDGE_ENABLED !== "true" && isProcessRunning("CameraControl.exe")) {
-    return { available: false, reason: "digiCamControl sedang berjalan dan memegang kamera" };
+    skippedReason = "digiCamControl sedang berjalan dan memegang kamera";
+    return { available: false, reason: skippedReason };
   }
   const executable = getBridgePath();
   if (!executable || !fs.existsSync(executable)) {
-    return { available: false, reason: "Canon bridge executable belum dipasang" };
+    skippedReason = "Canon bridge executable belum dipasang";
+    return { available: false, reason: skippedReason };
   }
   if (bridgeProcess && !bridgeProcess.killed) {
     return { available: true, executable, alreadyRunning: true };
   }
 
   lastSpawnError = null;
+  lastExit = null;
+  startedAt = Date.now();
   bridgeProcess = spawn(executable, ["--port", String(NATIVE_BRIDGE_PORT)], {
     cwd: path.dirname(executable),
     windowsHide: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  bridgeProcess.once("exit", () => {
+  bridgeProcess.stdout?.on("data", rememberOutput);
+  bridgeProcess.stderr?.on("data", rememberOutput);
+  bridgeProcess.once("exit", (code, signal) => {
+    lastExit = { code, signal, afterMs: Date.now() - startedAt };
+    console.error(`[canon-bridge] berhenti: kode=${code} sinyal=${signal} setelah ${lastExit.afterMs} ms`);
     bridgeProcess = null;
   });
   // Without this, a spawn failure (missing DLL dependency, permission
@@ -83,6 +108,10 @@ function getCanonBridgeStatus() {
     executable: executable ?? null,
     running: Boolean(bridgeProcess && !bridgeProcess.killed),
     lastError: lastSpawnError,
+    skippedReason,
+    lastExit,
+    recentOutput: recentOutput.slice(-8),
+    port: NATIVE_BRIDGE_PORT,
   };
 }
 

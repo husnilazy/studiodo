@@ -57,7 +57,16 @@ export interface StudiodoBridgeAPI {
   quitApp: () => Promise<{ ok: boolean }>;
   restartApp: () => Promise<{ ok: boolean }>;
   openAdmin: () => Promise<{ ok: boolean }>;
-  canonBridgeStatus: () => Promise<{ configured: boolean }>;
+  canonBridgeStatus: () => Promise<{
+    configured: boolean;
+    executable?: string | null;
+    running?: boolean;
+    lastError?: string | null;
+    skippedReason?: string | null;
+    lastExit?: { code: number | null; signal: string | null; afterMs: number } | null;
+    recentOutput?: string[];
+    port?: number;
+  }>;
   digicamBridgeStatus: () => Promise<StudiodoDigicamBridgeStatus>;
   restartDigicamBridge: () => Promise<{ ok: boolean; error?: string }>;
   listPrinters: () => Promise<{ ok: boolean; printers: StudiodoPrinterInfo[]; error?: string }>;

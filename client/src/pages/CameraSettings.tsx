@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
-import { checkTetherBridge, detectTetherCameras, startTetherLiveView, stopTetherLiveView, type DetectedCamera, type TetherBridgeHealth } from "@/lib/camera";
+import { checkTetherBridge, detectTetherCameras, diagnoseTetherCamera, type CameraDiagnosis, startTetherLiveView, stopTetherLiveView, type DetectedCamera, type TetherBridgeHealth } from "@/lib/camera";
 import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
@@ -123,10 +123,25 @@ export default function CameraSettings() {
   // camera but another one does, switch to it automatically.
   const [detected, setDetected] = useState<DetectedCamera[]>([]);
   const [detecting, setDetecting] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<CameraDiagnosis | null | undefined>(undefined);
+  const [native, setNative] = useState<{ status: Awaited<ReturnType<NonNullable<typeof window.studiodo>["canonBridgeStatus"]>> | null; health: TetherBridgeHealth } | null>(null);
   const detectNow = async (autoPick: boolean) => {
     setDetecting(true);
     const found = await detectTetherCameras();
     setDetected(found);
+    // Nothing found: find out WHY, so the screen can name the exact thing to fix instead of a generic hint.
+    if (found.length === 0) {
+      const [digicamDiagnosis, nativeStatus, nativeHealth] = await Promise.all([
+        diagnoseTetherCamera(),
+        window.studiodo?.canonBridgeStatus?.().catch(() => null) ?? Promise.resolve(null),
+        checkTetherBridge("http://127.0.0.1:5514"),
+      ]);
+      setDiagnosis(digicamDiagnosis);
+      setNative({ status: nativeStatus, health: nativeHealth });
+    } else {
+      setDiagnosis(undefined);
+      setNative(null);
+    }
     setDetecting(false);
     if (autoPick && found.length > 0 && !found.some((camera) => camera.url === config.tetherBridgeUrl)) {
       const pick = found[0];
@@ -167,7 +182,45 @@ export default function CameraSettings() {
           <button type="button" onClick={() => void detectNow(true)} className="rounded-lg border border-fg/15 px-3 py-1.5 text-xs text-fg/60 hover:text-fg">{detecting ? "Mencari..." : "Cari kamera"}</button>
         </div>
         {detected.length === 0 ? (
-          <p className="mt-3 text-sm text-fg/50">Belum ada kamera terdeteksi. Sambungkan kamera lewat USB, nyalakan, dan tutup EOS Utility / Imaging Edge. Pencarian diulang otomatis tiap beberapa detik; webcam tetap bisa dipakai lewat Mode kamera = Webcam.</p>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-fg/50">Belum ada kamera terdeteksi. Pencarian diulang otomatis tiap beberapa detik; webcam tetap bisa dipakai lewat Mode kamera = Webcam.</p>
+            {native && (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
+                <p className="font-semibold">Kenapa kamera tidak terdeteksi langsung (SDK Canon/Sony)?</p>
+                <ol className="mt-2 list-decimal space-y-2 pl-5 text-fg/70">
+                  {native.status && !native.status.configured && <li><b>Komponen kamera bawaan tidak ada di aplikasi ini.</b> Pasang ulang STUDIODO dari installer terbaru.</li>}
+                  {native.status?.skippedReason && <li><b>Tidak dijalankan:</b> {native.status.skippedReason}. Tutup digiCamControl lalu buka ulang aplikasi STUDIODO.</li>}
+                  {native.status?.configured && !native.status.running && !native.status.skippedReason && !native.health.ok && (
+                    <li>
+                      <b>Penghubung kamera berhenti sendiri{native.status.lastExit ? ` (kode ${native.status.lastExit.code ?? "?"} setelah ${native.status.lastExit.afterMs} ms)` : ""}.</b>{" "}
+                      {native.status.lastError ? `Penyebab: ${native.status.lastError}. ` : ""}
+                      Biasanya karena komponen Windows belum lengkap. Pasang <i>Microsoft Visual C++ Redistributable 2015-2022 (x64)</i>, lalu buka ulang STUDIODO.
+                      {native.status.recentOutput && native.status.recentOutput.length > 0 && <span className="mt-1 block break-words font-mono text-[0.7rem] text-fg/50">{native.status.recentOutput.join(" | ")}</span>}
+                    </li>
+                  )}
+                  {native.status?.running && !native.health.ok && <li><b>Penghubung kamera berjalan tetapi tidak menjawab</b> di port {native.status.port ?? 5514}. Mungkin port dipakai program lain, atau antivirus/firewall memblokirnya. Buka ulang STUDIODO.</li>}
+                  {native.health.ok && (native.health.engine === "none" || native.health.cameraConnected === false) && (
+                    <li><b>Penghubung kamera aktif, tetapi SDK belum melihat kamera.</b> Nyalakan kamera, matikan <i>Auto Power Off</i>, sambungkan USB langsung ke PC (bukan lewat hub), tutup EOS Utility / digiCamControl / Windows Photos, lalu cabut-colok kabel USB. Kamera yang muncul di File Explorer tidak otomatis terbaca SDK; pastikan model kamera didukung Canon EDSDK.</li>
+                  )}
+                  {native.health.ok && native.health.state === "asleep" && <li><b>Kamera tertidur.</b> Tekan setengah tombol rana atau nyalakan ulang kamera.</li>}
+                </ol>
+              </div>
+            )}
+            {diagnosis !== undefined && diagnosis !== null && diagnosis.digicamProcessRunning && (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
+                <p className="font-semibold">digiCamControl terdeteksi berjalan</p>
+                <ol className="mt-2 list-decimal space-y-2 pl-5 text-fg/70">
+                  {diagnosis && diagnosis.digicamProcessRunning && !diagnosis.webserverAnswers && <li><b>Webserver digiCamControl belum aktif</b> (bawaannya mati, ini penyebab paling umum). Di digiCamControl: menu <i>File → Settings → Webserver</i>, centang <i>Use web server</i> (port 5513), klik OK, lalu tutup dan buka ulang digiCamControl.</li>}
+                  {diagnosis && diagnosis.webserverAnswers && diagnosis.cameraConnected === false && <li><b>digiCamControl berjalan tetapi belum melihat kamera.</b> Cek apakah kamera muncul di daftar kamera digiCamControl. Cabut-colok kabel USB, pastikan kamera menyala, dan matikan Auto Power Off di kamera.</li>}
+                  {diagnosis && diagnosis.canonUtilityRunning && <li><b>EOS Utility sedang berjalan</b> dan bisa menahan kamera. Tutup EOS Utility.</li>}
+                  {diagnosis && diagnosis.webserverAnswers && diagnosis.cameraConnected === null && <li>digiCamControl menjawab tetapi tidak jelas apakah kamera terpasang. Klik <i>Cari kamera</i> lagi setelah kamera menyala penuh.</li>}
+                </ol>
+                {diagnosis && (
+                  <p className="mt-3 text-xs text-fg/45">Status: digiCamControl {diagnosis.digicamProcessRunning ? "berjalan" : "tidak berjalan"} · webserver {diagnosis.webserverAnswers ? "aktif" : "tidak menjawab"} · kamera {diagnosis.cameraConnected === true ? "terlihat" : diagnosis.cameraConnected === false ? "tidak terlihat" : "belum diketahui"}.</p>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <ul className="mt-3 space-y-2">
             {detected.map((camera) => {

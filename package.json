@@ -47,15 +47,11 @@
         "from": "native/canon-bridge",
         "to": "canon-bridge",
         "filter": [
-          "canon-bridge.exe",
-          "canon-bridge.dll",
-          "EDSDK.dll",
-          "EdsImage.dll",
-          "sony_core.dll",
-          "Cr_Core.dll",
-          "monitor_protocol*.dll",
-          "CrAdapter/*.dll",
-          "*.json"
+          "**/*",
+          "!*.pdb",
+          "!*.lib",
+          "!*.exp",
+          "!README.txt"
         ]
       }
     ],
