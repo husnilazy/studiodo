@@ -15,6 +15,7 @@ import WithdrawalPanel from "@/components/WithdrawalPanel";
 import AdminPlaceholder from "./AdminPlaceholder";
 import CrmPanel from "@/components/CrmPanel";
 import LiveMonitorPanel from "@/components/LiveMonitorPanel";
+import ReadinessCard from "@/components/ReadinessCard";
 import GalleryProfile from "./GalleryProfile";
 import KioskKeys from "./KioskKeys";
 import KioskFlowSettings from "./KioskFlowSettings";
@@ -806,6 +807,15 @@ export default function AdminDashboard() {
     await window.studiodo.printImage({ dataUrl, copies: 1 });
   };
 
+  // Where each "Kesiapan booth" step sends the tenant: "kiosk:keys", "finance:gateway", "section:control" or "href:/admin/frames".
+  const goToReadinessTarget = (target: string) => {
+    const [kind, value] = target.split(":");
+    if (kind === "kiosk") { setSection("kiosk"); setKioskSubtab(value as KioskSubtab); }
+    else if (kind === "finance") { setSection("finance"); setFinanceSubtab(value as FinanceSubtab); }
+    else if (kind === "section") setSection(value as Section);
+    else if (kind === "href") window.location.hash = `#${target.slice("href:".length)}`;
+  };
+
   const currentSection = sections.find((item) => item.id === section)!;
   // Database-style sections fill the screen and scroll inside their own panel instead of making the whole page long.
   const fitSection = section === "media" || section === "crm" || section === "finance" || section === "kiosk" || section === "control" || section === "traffic";
@@ -905,7 +915,12 @@ export default function AdminDashboard() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
             >
-          {section === "monitor" && <LiveMonitorPanel />}
+          {section === "monitor" && (
+            <>
+              <ReadinessCard onGo={goToReadinessTarget} />
+              <LiveMonitorPanel />
+            </>
+          )}
           {section === "control" && <AdminPlaceholder />}
           {section === "gallery" && <GalleryProfile />}
           {section === "kiosk" && (

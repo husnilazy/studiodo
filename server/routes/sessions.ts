@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { packages, sessions, tenantSettings } from "../db/schema.js";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { saveUploadedFile, getStorageDriver } from "../storage.js";
+import { boothPackagePrice, loadBoothSettings } from "../lib/boothSettings.js";
 import {
   uploadSessionPhoto,
   uploadSessionStrip,
@@ -87,7 +88,14 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
       canonicalExtras.push({ id: "print-qty", name: `${printing.label || "Tambah print"} ×${qty}`, price: qty * Number(printing.price), qty });
     }
   }
-  const totalAmount = pkg ? Number(pkg.price) + canonicalExtras.reduce((sum, extra) => sum + Number(extra.price), 0) : undefined;
+  // The booth's own price for this package (or "not offered here"): decided on the server, never taken from the kiosk.
+  let packagePrice = pkg ? Number(pkg.price) : 0;
+  if (pkg) {
+    const boothPrice = boothPackagePrice(pkg, (await loadBoothSettings(req.kioskKeyId)).packageOverrides);
+    if (boothPrice === null) return res.status(400).json({ error: "Paket ini tidak tersedia di booth ini." });
+    packagePrice = boothPrice;
+  }
+  const totalAmount = pkg ? packagePrice + canonicalExtras.reduce((sum, extra) => sum + Number(extra.price), 0) : undefined;
   const [row] = await db
     .insert(sessions)
     .values({

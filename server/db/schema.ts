@@ -1072,6 +1072,16 @@ export const supportCases = pgTable("support_cases", {
   resolvedAt: timestamp("resolved_at"),
 }, (table) => [index("support_cases_tenant_idx").on(table.tenantId, table.createdAt), index("support_cases_status_idx").on(table.status, table.createdAt)]);
 
+// Per-booth settings (one row per kiosk key): a tenant with several booths can price, theme and offer packages differently per booth.
+// Anything not overridden follows the tenant's main settings (lib/boothSettings.ts).
+export const boothSettings = pgTable("booth_settings", {
+  kioskKeyId: uuid("kiosk_key_id").primaryKey().references(() => kioskKeys.id, { onDelete: "cascade" }),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  overrides: jsonb("overrides").$type<Record<string, string>>().notNull().default({}), // whitelisted look & text keys
+  packageOverrides: jsonb("package_overrides").$type<Record<string, { price?: number; active?: boolean }>>().notNull().default({}), // packageId -> booth price / hidden
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("booth_settings_tenant_idx").on(table.tenantId)]);
+
 // Append-only history of a case: created, status/priority changes, internal notes, replies.
 export const supportCaseEvents = pgTable("support_case_events", {
   id: uuid("id").primaryKey().defaultRandom(),

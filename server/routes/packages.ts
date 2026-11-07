@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { saveUploadedFile } from "../storage.js";
+import { applyPackageOverrides, loadBoothSettings } from "../lib/boothSettings.js";
 import { getKeyPlanFeatures, getTenantPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 
 export const packagesRouter = Router();
@@ -41,7 +42,10 @@ packagesRouter.get("/", requireKioskAuth, async (req, res) => {
   // (a Starter booth never offers them, even when the package was set up while the tenant also had a PRO booth). The package
   // itself is untouched, so upgrading the booth brings the options straight back.
   const { gifVideoEnabled } = await getKeyPlanFeatures(req.kioskKeyId!);
-  res.json(gifVideoEnabled ? rows : rows.map((row) => ({ ...row, hasGif: false, hasVideo: false, hasStopMotion: false })));
+  // This booth's own prices / hidden packages (Admin -> Booth -> Pengaturan booth); the same numbers are enforced when the session starts.
+  const booth = await loadBoothSettings(req.kioskKeyId);
+  const offered = applyPackageOverrides(rows, booth.packageOverrides);
+  res.json(gifVideoEnabled ? offered : offered.map((row) => ({ ...row, hasGif: false, hasVideo: false, hasStopMotion: false })));
 });
 
 // GET /api/packages/all — admin panel (includes inactive)

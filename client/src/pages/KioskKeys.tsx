@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type BoothSummary } from "@/lib/api";
+import BoothSettingsModal from "@/components/BoothSettingsModal";
 import { sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 
@@ -74,6 +75,10 @@ function DiagnosticsSummary({ diagnostics }: { diagnostics?: KioskDiagnostics })
 }
 
 export default function KioskKeys() {
+  const [boothSummary, setBoothSummary] = useState<Record<string, BoothSummary>>({});
+  const [editingBooth, setEditingBooth] = useState<string | null>(null);
+  const loadBoothSummary = () => api.getBooths().then((rows) => setBoothSummary(Object.fromEntries((rows ?? []).map((b) => [b.id, b])))).catch(() => undefined);
+  useEffect(() => { void loadBoothSummary(); }, []);
   const [keys, setKeys] = useState<KioskKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState("");
@@ -311,6 +316,24 @@ export default function KioskKeys() {
                 </div>
               )}
 
+              {!key.revokedAt && (() => {
+                const b = boothSummary[key.id];
+                const chips = [
+                  b?.customPrices ? `${b.customPrices} harga khusus` : null,
+                  b?.hiddenPackages ? `${b.hiddenPackages} paket disembunyikan` : null,
+                  b?.customLook ? "tampilan khusus" : null,
+                ].filter(Boolean);
+                return (
+                  <button type="button" onClick={() => setEditingBooth(key.id)} className="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 px-3 py-2.5 text-left transition hover:bg-accent/10">
+                    <span>
+                      <span className="block text-sm font-semibold">Pengaturan booth</span>
+                      <span className="block text-[11px] text-fg/55">{chips.length ? chips.join(" · ") : "Harga paket dan tampilan khusus untuk booth ini (opsional)"}</span>
+                    </span>
+                    <span aria-hidden className="text-accent">›</span>
+                  </button>
+                );
+              })()}
+
               {(revealed[key.id] || revealError[key.id]) && (
                 <div className="mt-3 rounded-xl bg-fg/5 p-3">
                   {revealed[key.id] ? (
@@ -346,6 +369,8 @@ export default function KioskKeys() {
           );
         })}
       </div>
+
+      {editingBooth && <BoothSettingsModal boothId={editingBooth} onClose={() => setEditingBooth(null)} onSaved={() => { void loadBoothSummary(); api.getKioskKeys().then((rows) => setKeys(rows ?? [])).catch(() => undefined); }} />}
 
       {visibleCount < keys.length && (
         <button type="button" onClick={() => setVisibleCount((count) => count + KIOSK_KEYS_PAGE_SIZE)} className="w-full rounded-xl border border-fg/15 py-2.5 text-sm text-fg/60 hover:border-accent hover:text-fg">

@@ -485,6 +485,12 @@ export const api = {
   getAdminOverview: () => request<any>("/sessions/admin/overview"),
   getNotifications: (limit = 20) => request<{ items: AdminNotification[]; unread: number }>(`/portal/notifications?limit=${limit}`),
   markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
+  getReadiness: () => request<{ checks: ReadinessCheck[]; ready: boolean; done: number; total: number }>("/config/readiness"),
+  // Per-booth settings (one kiosk key = one booth)
+  getBooths: () => request<BoothSummary[]>("/booths"),
+  getBooth: (id: string) => request<BoothDetail>(`/booths/${id}`),
+  saveBooth: (id: string, body: { label?: string; overrides: Record<string, string>; packageOverrides: Record<string, { price?: number; active?: boolean }> }) =>
+    request<{ ok: boolean }>(`/booths/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   // Help chat with the STUDIODO team ("Bantuan")
   getSupport: () => request<SupportChat>("/portal/support"),
   sendSupport: (body: string, attachments: SupportAttachment[] = []) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body, attachments }) }),
@@ -560,6 +566,14 @@ export const api = {
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
 
+export interface ReadinessCheck { id: string; title: string; status: "ok" | "warn" | "error"; message: string; action?: { label: string; target: string } }
+export interface BoothSummary { id: string; label: string | null; lastUsedAt: string | null; appVersion: string | null; customPrices: number; hiddenPackages: number; customLook: number }
+export interface BoothDetail {
+  booth: { id: string; label: string | null };
+  overrides: Record<string, string>;
+  packageOverrides: Record<string, { price?: number; active?: boolean }>;
+  packages: { id: string; name: string; price: number; active: boolean; photoCount: number }[];
+}
 export interface SupportAttachment { url: string; name: string }
 export interface SupportCaseSummary { id: string; caseNo: number; title: string; category: string; status: "new" | "investigating" | "waiting" | "resolved" | "wontfix"; createdAt: string; updatedAt: string }
 export interface SupportChat {

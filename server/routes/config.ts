@@ -5,14 +5,16 @@ import crypto from "node:crypto";
 import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { loadPlatformDoku } from "../lib/platformDoku.js";
+import { loadBoothSettings } from "../lib/boothSettings.js";
 import { getEffectivePolicy, unsettledAmount } from "../lib/qrisBalance.js";
 import { isUsable, loadGateway } from "../lib/gateways.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { kioskKeys, packages, sessions, tenantSettings, tenants } from "../db/schema.js";
+import { frameOverlays, kioskKeys, packages, sessions, templates, tenantSettings, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
-import { resetStorageSettingsCache } from "../lib/storageConfig.js";
+import { getStorageSettings, resetStorageSettingsCache } from "../lib/storageConfig.js";
+import { getKeyLock } from "../lib/license.js";
 import { resetR2Client } from "../storage.js";
 import { resetDriveClient } from "../lib/gdrive.js";
 import { validateFlowOrder } from "../lib/kioskFlowRules.js";
@@ -158,7 +160,9 @@ configRouter.get("/tenant", requireAnyAuth, async (req, res) => {
     kioskFlow: tenantSettings.kioskFlow,
     kioskConfig: tenantSettings.kioskConfig,
   }).from(tenantSettings).where(eq(tenantSettings.tenantId, req.tenantId!));
-  res.json(config ?? {});
+  // A kiosk also gets what is special about ITS booth (look / text overrides); the dashboard sees the tenant's main settings.
+  const boothOverrides = req.kioskKeyId ? (await loadBoothSettings(req.kioskKeyId)).overrides : {};
+  res.json({ ...(config ?? {}), boothOverrides });
 });
 
 // --- Kiosk design config (customizer) ---------------------------------------------------------------------
@@ -501,6 +505,85 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
     actorType: "tenant_admin",
   });
   res.json({ ok: true });
+});
+
+
+// --- "Kesiapan booth": one plain-language checklist so a tenant sees what is still missing (storage, payment, packages, frames, booths,
+// subscription) instead of discovering it from a failed upload or a customer who cannot pay. Read-only; each item says what to do.
+type Readiness = { id: string; title: string; status: "ok" | "warn" | "error"; message: string; action?: { label: string; target: string } };
+
+configRouter.get("/readiness", requireAdminAuth, async (req, res) => {
+  const tenantId = req.tenantId!;
+  const [storage, settingsRow, tenantRow, pkgCount, frameCount, overlayCount, keys] = await Promise.all([
+    getStorageSettings(tenantId),
+    db.select({ xendit: tenantSettings.xenditSecretKey, provider: tenantSettings.paymentProvider, dokuId: tenantSettings.dokuClientId, dokuSecret: tenantSettings.dokuSecretKeyEnc, cash: tenantSettings.cashPaymentEnabled }).from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).then((r) => r[0]),
+    db.select({ settlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId)).then((r) => r[0]),
+    db.select({ n: sql<number>`count(*)::int` }).from(packages).where(and(eq(packages.tenantId, tenantId), eq(packages.active, true))).then((r) => r[0]?.n ?? 0),
+    db.select({ n: sql<number>`count(*)::int` }).from(templates).where(and(eq(templates.tenantId, tenantId), eq(templates.active, true), sql`${templates.category} not in ('__custom', '__stopmotion')`)).then((r) => r[0]?.n ?? 0),
+    db.select({ n: sql<number>`count(*)::int` }).from(frameOverlays).where(and(eq(frameOverlays.tenantId, tenantId), eq(frameOverlays.active, true))).then((r) => r[0]?.n ?? 0),
+    db.select({ id: kioskKeys.id, label: kioskKeys.label, boundDeviceId: kioskKeys.boundDeviceId, lastUsedAt: kioskKeys.lastUsedAt }).from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt))),
+  ]);
+  const checks: Readiness[] = [];
+
+  // 1. Storage
+  const r2Complete = Boolean(storage.r2Bucket && storage.r2AccessKeyId && storage.r2SecretAccessKey && storage.r2PublicBaseUrl && (storage.r2Endpoint || storage.r2AccountId));
+  if (storage.driver === "r2") {
+    checks.push(r2Complete
+      ? { id: "storage", title: "Penyimpanan foto", status: "ok", message: "Foto, video, dan frame disimpan di cloud." }
+      : { id: "storage", title: "Penyimpanan foto", status: "error", message: "Penyimpanan cloud belum lengkap, jadi frame dan foto belum bisa diunggah. Hubungi STUDIODO, atau lengkapi di Pengaturan → Storage.", action: { label: "Buka pengaturan storage", target: "section:control" } });
+  } else if (storage.driver === "gdrive") {
+    checks.push(storage.gdriveFolderId && storage.gdriveServiceAccountJson
+      ? { id: "storage", title: "Penyimpanan foto", status: "ok", message: "Foto disimpan di Google Drive kamu." }
+      : { id: "storage", title: "Penyimpanan foto", status: "error", message: "Google Drive belum lengkap (folder atau akun layanan kosong).", action: { label: "Buka pengaturan storage", target: "section:control" } });
+  } else {
+    checks.push(process.env.VERCEL
+      ? { id: "storage", title: "Penyimpanan foto", status: "error", message: "Server ini tidak punya tempat simpan lokal, jadi unggahan akan gagal. Hubungi STUDIODO untuk mengaktifkan penyimpanan cloud." }
+      : { id: "storage", title: "Penyimpanan foto", status: "warn", message: "Foto hanya disimpan di komputer server. Aktifkan penyimpanan cloud supaya aman dan bisa dibuka dari mana saja." });
+  }
+
+  // 2. Payment
+  if (tenantRow?.settlement === "platform") {
+    const doku = await loadPlatformDoku();
+    const ready = Boolean(doku?.production) || isUsable(await loadGateway("xendit"));
+    checks.push(ready
+      ? { id: "payment", title: "Pembayaran QRIS", status: "ok", message: "QRIS diterima lewat akun STUDIODO. Hasilnya menjadi saldo kamu di Finance → Saldo & Penarikan." }
+      : { id: "payment", title: "Pembayaran QRIS", status: "error", message: "Akun pembayaran STUDIODO belum aktif, jadi QRIS belum bisa dipakai. Hubungi STUDIODO." });
+  } else {
+    const xenditOk = Boolean(settingsRow?.xendit);
+    const dokuOk = Boolean(settingsRow?.dokuId && settingsRow?.dokuSecret);
+    const configured = settingsRow?.provider === "doku" ? dokuOk : xenditOk;
+    checks.push(configured
+      ? { id: "payment", title: "Pembayaran QRIS", status: "ok", message: `QRIS memakai akun ${settingsRow?.provider === "doku" ? "DOKU" : "Xendit"} milikmu.` }
+      : { id: "payment", title: "Pembayaran QRIS", status: settingsRow?.cash ? "warn" : "error", message: "QRIS belum diatur. Pilih \"Akun STUDIODO\" (tanpa perlu akun gateway) atau isi akun gateway kamu sendiri.", action: { label: "Atur pembayaran", target: "finance:gateway" } });
+  }
+
+  // 3. Packages
+  checks.push(pkgCount > 0
+    ? { id: "packages", title: "Paket foto", status: "ok", message: `${pkgCount} paket aktif dijual di kiosk.` }
+    : { id: "packages", title: "Paket foto", status: "error", message: "Belum ada paket aktif. Customer tidak punya yang bisa dibeli.", action: { label: "Buat paket", target: "finance:packages" } });
+
+  // 4. Frames
+  const frames = frameCount + overlayCount;
+  checks.push(frames > 0
+    ? { id: "frames", title: "Frame", status: "ok", message: `${frames} frame aktif untuk dipilih customer.` }
+    : { id: "frames", title: "Frame", status: "error", message: "Belum ada frame aktif. Customer tidak bisa memilih frame.", action: { label: "Kelola frame", target: "href:/admin/frames" } });
+
+  // 5. Booths
+  const online = keys.filter((k) => k.lastUsedAt && Date.now() - k.lastUsedAt.getTime() < 15 * 60_000).length;
+  if (keys.length === 0) checks.push({ id: "booths", title: "Booth", status: "error", message: "Belum ada booth. Buat kiosk key lalu pasang ke komputer booth.", action: { label: "Buat kiosk key", target: "kiosk:keys" } });
+  else if (!keys.some((k) => k.boundDeviceId)) checks.push({ id: "booths", title: "Booth", status: "warn", message: `${keys.length} key sudah dibuat, tapi belum ada yang dipasang di komputer booth. Buka aplikasi kiosk lalu masukkan key.`, action: { label: "Lihat kiosk key", target: "kiosk:keys" } });
+  else checks.push({ id: "booths", title: "Booth", status: online > 0 ? "ok" : "warn", message: online > 0 ? `${online} dari ${keys.length} booth sedang online.` : `${keys.length} booth terdaftar, tapi belum ada yang online. Pastikan aplikasi kiosk menyala dan terhubung internet.`, action: online > 0 ? undefined : { label: "Lihat booth", target: "kiosk:keys" } });
+
+  // 6. Subscription
+  if (keys.length > 0) {
+    const locks = await Promise.all(keys.slice(0, 25).map((k) => getKeyLock(k.id).catch(() => ({ locked: false }))));
+    const locked = locks.filter((l) => l.locked).length;
+    checks.push(locked === 0
+      ? { id: "license", title: "Langganan", status: "ok", message: "Semua booth berlangganan aktif." }
+      : { id: "license", title: "Langganan", status: "error", message: `${locked} booth terkunci karena belum berlangganan atau masa berlakunya habis. Kiosknya tidak bisa dipakai customer.`, action: { label: "Lihat booth", target: "kiosk:keys" } });
+  }
+
+  res.json({ checks, ready: checks.every((c) => c.status !== "error"), done: checks.filter((c) => c.status === "ok").length, total: checks.length });
 });
 
 // POST /api/config/payment/test { provider?: 'xendit' | 'doku' } — checks the SAVED credentials against the gateway so a

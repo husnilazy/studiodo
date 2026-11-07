@@ -378,6 +378,8 @@ const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "soc
 
 // True while WE are writing server data into the store, so that write is not mistaken for an admin edit and pushed back.
 let applyingRemote = false;
+// Keys this booth overrides for itself. They are shown here but must never be pushed back as the tenant's main settings.
+let boothOverriddenKeys = new Set<string>();
 
 export type ConfigSyncState = { status: "idle" | "saving" | "saved" | "error"; message?: string };
 export const useConfigSync = create<ConfigSyncState>(() => ({ status: "idle" }));
@@ -405,6 +407,10 @@ export async function syncBoothConfigFromServer(): Promise<{ hadServerConfig: bo
     }
   }
   if (remote.kioskFlow) patch.kioskFlow = remote.kioskFlow;
+  // What is special about THIS booth (Admin -> Kiosk -> Pengaturan booth) wins over the tenant's main settings on this device.
+  const booth = remote.boothOverrides && typeof remote.boothOverrides === "object" ? (remote.boothOverrides as Record<string, unknown>) : {};
+  boothOverriddenKeys = new Set(Object.keys(booth));
+  for (const [key, value] of Object.entries(booth)) if (typeof value === "string" && value !== "") patch[key] = value;
 
   applyingRemote = true;
   try {
@@ -425,7 +431,7 @@ export async function pushConfigNow(): Promise<boolean> {
   const config = useBoothConfig.getState().config as unknown as Record<string, unknown>;
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig)) body[key] = value;
+    if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig) && !boothOverriddenKeys.has(key)) body[key] = value;
   }
   useConfigSync.setState({ status: "saving", message: undefined });
   try {

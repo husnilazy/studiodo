@@ -365,6 +365,13 @@
       "when": 1794053503612,
       "tag": "0051_support_cases_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794055777121,
+      "tag": "0052_booth_settings",
+      "breakpoints": true
     }
   ]
 }
