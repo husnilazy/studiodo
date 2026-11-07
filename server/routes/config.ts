@@ -4,6 +4,9 @@ import { createDokuQris, testDoku, type DokuCfg } from "../lib/doku.js";
 import crypto from "node:crypto";
 import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
+import { loadPlatformDoku } from "../lib/platformDoku.js";
+import { getEffectivePolicy, unsettledAmount } from "../lib/qrisBalance.js";
+import { isUsable, loadGateway } from "../lib/gateways.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { kioskKeys, packages, sessions, tenantSettings, tenants } from "../db/schema.js";
@@ -332,6 +335,15 @@ function xenditKeyProblem(key: string): string | null {
   return null;
 }
 
+// Can STUDIODO's own account take this tenant's kiosk payments right now? Production DOKU (the account that really moves money),
+// or the platform Xendit gateway as the fallback. A sandbox DOKU account is not "ready": its payments are simulated and never credit a wallet.
+async function platformCollectionReady(): Promise<{ ready: boolean; via: "doku" | "xendit" | null }> {
+  const doku = await loadPlatformDoku();
+  if (doku?.production) return { ready: true, via: "doku" };
+  if (isUsable(await loadGateway("xendit"))) return { ready: true, via: "xendit" };
+  return { ready: false, via: null };
+}
+
 configRouter.get("/payment", requireAnyAuth, async (req, res) => {
   const [config] = await db
     .select({
@@ -366,6 +378,17 @@ configRouter.get("/payment", requireAnyAuth, async (req, res) => {
     qrisEnabled: config?.qrisEnabled ?? true,
     // When STUDIODO collects the QRIS money itself (platform settlement) the tenant needs no gateway keys of its own.
     qrisSettlement: tenant?.qrisSettlement === "platform" ? "platform" : "direct",
+    // What the tenant needs to know to choose "terima lewat STUDIODO": is it available, and on what terms.
+    platform: await (async () => {
+      const [state, terms] = await Promise.all([platformCollectionReady(), getEffectivePolicy(req.tenantId!)]);
+      return {
+        ready: state.ready,
+        feePercent: terms.policy.feePercent ?? terms.rules.feePercent,
+        holdDays: terms.policy.holdDays,
+        minWithdrawal: Math.max(terms.policy.minAmount ?? 0, terms.rules.minAmount),
+        flatFee: terms.policy.flatFee ?? terms.rules.flatFee,
+      };
+    })(),
     paymentProvider: config?.paymentProvider === "doku" ? "doku" : "xendit",
     dokuClientId: config?.dokuClientId ?? "",
     hasDokuSecret: Boolean(config?.dokuSecretKeyEnc),
@@ -440,6 +463,31 @@ configRouter.patch("/payment", requireAdminAuth, async (req, res) => {
   if (typeof body.qrisEnabled === "boolean") values.qrisEnabled = body.qrisEnabled;
   if (typeof body.cashPaymentEnabled === "boolean") values.cashPaymentEnabled = body.cashPaymentEnabled;
 
+  // Where the kiosk QRIS money lands: 'platform' = STUDIODO's account (default, no gateway account needed; paid out from the balance),
+  // 'direct' = the tenant's own Xendit/DOKU. Same rules as the superadmin switch: the balance starts from the moment of the switch,
+  // and leaving 'platform' is refused while STUDIODO still owes the tenant money (it would be stranded).
+  let settlementChanged = false;
+  if (body.qrisSettlement === "platform" || body.qrisSettlement === "direct") {
+    const [current] = await db.select({ qrisSettlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId));
+    const target = body.qrisSettlement;
+    if (current && current.qrisSettlement !== target) {
+      if (target === "platform") {
+        if (!(await platformCollectionReady()).ready) return res.status(409).json({ error: "Penerimaan lewat akun STUDIODO belum aktif untuk saat ini. Gunakan akun gateway milikmu, atau hubungi STUDIODO." });
+      } else {
+        const owed = await unsettledAmount(tenantId);
+        if (owed > 0) return res.status(409).json({ error: `Kamu masih punya saldo QRIS Rp ${Math.round(owed).toLocaleString("id-ID")} di STUDIODO (termasuk yang masih ditahan). Tarik dulu semuanya di menu Saldo & Penarikan sebelum pindah ke akun gateway sendiri.` });
+      }
+      await db.update(tenants).set({ qrisSettlement: target, qrisPlatformSince: target === "platform" ? new Date() : null }).where(eq(tenants.id, tenantId));
+      logEvent({
+        tenantId, category: "billing", action: "payment_settlement.changed",
+        message: target === "platform" ? "Tenant memilih menerima pembayaran QRIS lewat akun STUDIODO." : "Tenant pindah ke akun gateway sendiri untuk pembayaran QRIS.",
+        actorType: "tenant_admin",
+      });
+      settlementChanged = true;
+    }
+  }
+
+  if (Object.keys(values).length === 0 && settlementChanged) return res.json({ ok: true });
   if (Object.keys(values).length === 0) {
     return res.status(400).json({ error: "Tidak ada perubahan pembayaran yang dikirim." });
   }

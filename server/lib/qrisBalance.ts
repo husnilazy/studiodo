@@ -108,6 +108,12 @@ export async function computeQrisBalance(tenantId: string, dbx: Dbx = db): Promi
   };
 }
 
+/** Money the platform still owes a tenant: everything credited (incl. funds still on hold and adjustments) minus payouts paid or requested. */
+export async function unsettledAmount(tenantId: string, dbx: Dbx = db): Promise<number> {
+  const b = await computeQrisBalance(tenantId, dbx);
+  return Math.max(0, Math.round((b.netIncome - b.withdrawn - b.pending) * 100) / 100);
+}
+
 /**
  * Credits a QRIS payment that STUDIODO's gateway received for a platform-settled tenant. Safe to call twice for the same
  * session + `ref` (a webhook delivered again): the second call does nothing. Tenants that receive QRIS on their own account are skipped.

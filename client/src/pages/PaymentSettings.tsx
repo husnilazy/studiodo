@@ -29,7 +29,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
   const [paymentConfig, setPaymentConfig] = useState({ secretKey: "", webhookToken: "" });
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; hasDokuSnapKey?: boolean }>({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false, paymentProvider: "xendit", dokuClientId: "", hasDokuSecret: false, dokuEnvironment: "sandbox" });
+  const [paymentStatus, setPaymentStatus] = useState<{ hasSecretKey: boolean; hasWebhookToken: boolean; demoMode: boolean; cashPaymentEnabled: boolean; paymentProvider: "xendit" | "doku"; dokuClientId: string; hasDokuSecret: boolean; dokuEnvironment: "sandbox" | "production"; dokuQrisMode?: "checkout" | "snap"; dokuMerchantId?: string; dokuTerminalId?: string; dokuPostalCode?: string; hasDokuSnapKey?: boolean; qrisSettlement?: "direct" | "platform"; platform?: { ready: boolean; feePercent: number; holdDays: number; minWithdrawal: number; flatFee: number } }>({ hasSecretKey: false, hasWebhookToken: false, demoMode: false, cashPaymentEnabled: false, paymentProvider: "xendit", dokuClientId: "", hasDokuSecret: false, dokuEnvironment: "sandbox" });
   const [dokuDraft, setDokuDraft] = useState({ clientId: "", secretKey: "" });
   const [dokuSaved, setDokuSaved] = useState(false);
   const [snapDraft, setSnapDraft] = useState({ merchantId: "", terminalId: "", postalCode: "", privateKey: "" });
@@ -92,6 +92,24 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
       }));
     } catch (error) {
       pushToast({ type: "error", title: "Gagal menyimpan pengaturan Xendit", sub: error instanceof Error ? error.message : "Coba lagi." });
+    }
+  };
+
+  const viaPlatform = paymentStatus.qrisSettlement === "platform";
+  const [settlementSaving, setSettlementSaving] = useState(false);
+  const [settlementError, setSettlementError] = useState<string | null>(null);
+  const chooseSettlement = async (qrisSettlement: "direct" | "platform") => {
+    if (qrisSettlement === (paymentStatus.qrisSettlement ?? "direct") || settlementSaving) return;
+    setSettlementSaving(true);
+    setSettlementError(null);
+    try {
+      await api.updatePaymentConfig({ qrisSettlement });
+      setPaymentStatus((state) => ({ ...state, qrisSettlement }));
+      pushToast({ type: "success", title: qrisSettlement === "platform" ? "QRIS kini diterima lewat akun STUDIODO" : "QRIS kini diterima di akun gateway kamu sendiri" });
+    } catch (error) {
+      setSettlementError(error instanceof Error ? error.message : "Gagal mengubah penerima pembayaran.");
+    } finally {
+      setSettlementSaving(false);
     }
   };
 
@@ -464,6 +482,41 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
 
       {showGateway && (
       <section className={sectionClass}>
+        <h2 className="font-display text-xl font-semibold">Siapa yang menerima uang QRIS?</h2>
+        <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Pilih ke mana uang pembayaran QRIS dari kiosk masuk. Hanya satu yang aktif.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {([
+            { id: "platform", name: "Akun STUDIODO (default)", desc: "Tanpa perlu akun Xendit/DOKU sendiri. Uang QRIS masuk ke akun STUDIODO dan menjadi saldo kamu di menu Saldo & Penarikan, lalu kamu tarik ke rekening." },
+            { id: "direct", name: "Akun gateway saya sendiri", desc: "Pakai Xendit atau DOKU milikmu. Uang langsung masuk ke akun gateway kamu; STUDIODO tidak menahan dana." },
+          ] as const).map((option) => {
+            const active = (paymentStatus.qrisSettlement ?? "direct") === option.id;
+            const unavailable = option.id === "platform" && !active && paymentStatus.platform?.ready === false;
+            return (
+              <button key={option.id} type="button" onClick={() => chooseSettlement(option.id)} disabled={settlementSaving || unavailable} className={`rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-accent bg-accent/10" : "border-fg/15 hover:border-fg/35"}`}>
+                <p className="flex items-center justify-between font-semibold">{option.name}{active && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase">Aktif</span>}</p>
+                <p className="mt-1 text-xs text-fg/55">{option.desc}</p>
+                {unavailable && <p className="mt-2 text-xs text-amber-300">Belum tersedia saat ini. Hubungi STUDIODO.</p>}
+              </button>
+            );
+          })}
+        </div>
+        {settlementError && <p role="alert" className="mt-3 text-sm text-red-300">{settlementError}</p>}
+        {viaPlatform && (
+          <div className="mt-4 rounded-2xl border border-accent/30 bg-accent/5 p-4 text-sm text-fg/75">
+            <p className="font-semibold text-fg">QRIS kiosk kamu masuk ke akun STUDIODO</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-fg/65">
+              <li>Setiap pembayaran QRIS yang berhasil otomatis menjadi saldo kamu (setelah dipotong biaya {paymentStatus.platform?.feePercent ?? 0.7}%).</li>
+              <li>Dana ditahan {paymentStatus.platform?.holdDays ?? 0} hari sebelum bisa ditarik; penarikan minimal Rp {(paymentStatus.platform?.minWithdrawal ?? 50000).toLocaleString("id-ID")}.</li>
+              <li>Lihat saldo dan ajukan penarikan di tab <strong>Saldo &amp; Penarikan</strong>.</li>
+              <li>Akun Xendit/DOKU milikmu sendiri <strong>tidak dipakai</strong> selama pilihan ini aktif. Pembayaran tunai dan voucher tidak terpengaruh.</li>
+            </ul>
+          </div>
+        )}
+      </section>
+      )}
+
+      {showGateway && !viaPlatform && (
+      <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Platform pembayaran kiosk</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Pilih gateway yang dipakai kiosk saat customer membayar. Hanya satu yang aktif pada satu waktu.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -477,7 +530,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
       </section>
       )}
 
-      {showGateway && paymentStatus.paymentProvider === "doku" && (
+      {showGateway && !viaPlatform && paymentStatus.paymentProvider === "doku" && (
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Pembayaran DOKU</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Client ID & Secret Key ada di DOKU Back Office → Integration → API Keys. Secret Key disimpan terenkripsi dan tidak pernah dikirim kembali.</p>
@@ -547,7 +600,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
       </section>
       )}
 
-      {showGateway && paymentStatus.paymentProvider === "xendit" && (
+      {showGateway && !viaPlatform && paymentStatus.paymentProvider === "xendit" && (
       <section className={sectionClass}>
         <h2 className="font-display text-xl font-semibold">Pembayaran QRIS Xendit</h2>
         <p className="mt-1 text-sm text-[var(--kiosk-muted)]">

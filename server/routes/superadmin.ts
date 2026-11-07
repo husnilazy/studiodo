@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, billingOrders, kioskKeys, packages, platformEvents, platformSettings, plans, sessions, superadmins, tenantApplications, tenantPayments, tenants, tenantSettings, templates, withdrawals } from "../db/schema.js";
-import { computeQrisBalance } from "../lib/qrisBalance.js";
+import { computeQrisBalance, unsettledAmount } from "../lib/qrisBalance.js";
 import { hashPassword, verifyPassword } from "../lib/passwordHash.js";
 import { signAdminToken, signSuperadminToken } from "../lib/jwt.js";
 import { sessionVersion } from "../lib/sessionGuard.js";
@@ -362,9 +362,10 @@ superadminRouter.patch("/tenants/:id", async (req, res) => {
     if (!current) return res.status(404).json({ error: "Tenant tidak ditemukan" });
     if (mode !== current.qrisSettlement) {
       if (mode === "direct") {
-        const balance = await computeQrisBalance(req.params.id);
-        if (balance.available > 0 || balance.pending > 0) {
-          return res.status(409).json({ error: `Masih ada saldo QRIS Rp ${(balance.available + balance.pending).toLocaleString("id-ID")} yang belum dibayarkan ke tenant. Selesaikan penarikannya dulu.` });
+        // The FULL amount owed counts, including money still inside the hold period: switching away would strand it.
+        const owed = await unsettledAmount(req.params.id);
+        if (owed > 0) {
+          return res.status(409).json({ error: `Masih ada saldo QRIS Rp ${Math.round(owed).toLocaleString("id-ID")} yang belum dibayarkan ke tenant (termasuk dana yang masih ditahan). Selesaikan penarikannya dulu.` });
         }
       }
       patch.qrisSettlement = mode;
