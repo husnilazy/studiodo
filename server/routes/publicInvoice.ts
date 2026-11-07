@@ -54,9 +54,9 @@ async function payView(order: Order) {
   const ins = (order.paymentInstruction ?? null) as PayInstruction | null;
   let instruction: Record<string, unknown> | null = null;
   if (ins && order.status === "pending") {
-    const { qrString, midOrderId: _mid, ...rest } = ins;
+    const { qrString, qrImage, midOrderId: _mid, ...rest } = ins;
     void _mid;
-    let qr: string | null = null;
+    let qr: string | null = qrImage ?? null;
     if (qrString) {
       const svg = await QRCode.toString(qrString, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
       qr = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
@@ -66,11 +66,14 @@ async function payView(order: Order) {
   return {
     orderId: order.orderId, plan: order.planName, boothCount: invoice.boothCount, periodDays: order.periodDays, amount: Math.round(Number(order.amount)),
     status: order.status, dueAt: dueAt.toISOString(), provider: order.provider,
-    methods: PAY_METHODS.map(({ id, label, hint, kind }) => ({ id, label, hint, kind })),
+    methods: PAY_METHODS.filter((m) => !isUnavailable(m.id)).map(({ id, label, hint, kind }) => ({ id, label, hint, kind })),
     instruction,
   };
 }
 
+// Methods Midtrans refused as "not activated" are hidden for a while, so tenants only see what works on STUDIODO's merchant account.
+const unavailable = new Map<string, number>();
+const isUnavailable = (id: string) => (unavailable.get(id) ?? 0) > Date.now();
 const NOT_FOUND = { error: "Tautan pembayaran tidak ditemukan atau tidak valid" };
 const attempts = new Map<string, { n: number; at: number }>();
 const tooMany = (orderId: string) => {
@@ -128,7 +131,11 @@ publicInvoiceRouter.post("/billing/pay/:orderId/charge", async (req, res) => {
     res.json(await payView(updated));
   } catch (e) {
     logEvent({ tenantId: order.tenantId, level: "warning", category: "billing", action: "pay.charge_failed", message: `${order.orderId} (${method}): ${e instanceof Error ? e.message : String(e)}`.slice(0, 280), actorType: "system" });
-    res.status(502).json({ error: e instanceof Error ? e.message : "Gagal membuat pembayaran" });
+    const msg = e instanceof Error ? e.message : "";
+    const notActive = /not activated|not enabled|channel/i.test(msg);
+    if (notActive) unavailable.set(method, Date.now() + 30 * 60_000);
+    // 422, not 5xx: Cloudflare swaps a 5xx body for its own error page, and the tenant must see this message.
+    res.status(422).json({ error: notActive ? "Metode ini belum tersedia. Silakan pilih cara bayar lain." : "Gagal membuat pembayaran dengan metode ini. Coba metode lain." });
   }
 });
 
@@ -153,7 +160,7 @@ publicInvoiceRouter.post("/billing/pay/:orderId/other", async (req, res) => {
     if (prev?.midOrderId) void cancelCharge(cfg, prev.midOrderId);
     res.json({ url: snap.redirectUrl });
   } catch (e) {
-    res.status(502).json({ error: e instanceof Error ? e.message : "Gagal membuka halaman pembayaran" });
+    res.status(422).json({ error: "Gagal membuka halaman pembayaran. Coba lagi atau pilih cara bayar lain." });
   }
 });
 

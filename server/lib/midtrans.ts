@@ -68,6 +68,7 @@ export type PayInstruction = {
   midOrderId: string; // the order_id Midtrans knows this charge by (a suffix on our order id, new for every method switch)
   expiresAt: string | null;
   qrString?: string;
+  qrImage?: string; // data URL, for GoPay-QRIS charges that return a picture instead of the QR text
   bank?: string;
   vaNumber?: string;
   billerCode?: string;
@@ -81,7 +82,7 @@ export const baseOrderId = (midOrderId: string) => midOrderId.replace(/^(SDO-[A-
 
 type ChargeBody = {
   status_code?: string; status_message?: string; expiry_time?: string;
-  qr_string?: string;
+  qr_string?: string; actions?: { name?: string; url?: string }[];
   va_numbers?: { bank?: string; va_number?: string }[]; permata_va_number?: string;
   biller_code?: string; bill_key?: string;
   payment_code?: string; store?: string;
@@ -96,32 +97,48 @@ export async function chargeMethod(
   method: PayMethodId,
   input: { midOrderId: string; grossAmount: number; itemName: string; customerEmail: string; customerName: string },
 ): Promise<PayInstruction> {
-  const spec =
+  const post = async (spec: Record<string, unknown>) => {
+    const res = await fetch(`${coreBase(cfg)}/v2/charge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: basicAuth(cfg) },
+      body: JSON.stringify({
+        ...spec,
+        transaction_details: { order_id: input.midOrderId, gross_amount: input.grossAmount },
+        item_details: [{ id: input.midOrderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
+        customer_details: { first_name: input.customerName.slice(0, 50), email: input.customerEmail },
+        custom_expiry: { expiry_duration: 24, unit: "hour" },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    return { res, b: (await res.json().catch(() => ({}))) as ChargeBody };
+  };
+  const spec: Record<string, unknown> =
     method === "qris" ? { payment_type: "qris", qris: { acquirer: "gopay" } }
     : method === "mandiri" ? { payment_type: "echannel", echannel: { bill_info1: "Pembayaran:", bill_info2: "Langganan STUDIODO" } }
     : method === "alfamart" || method === "indomaret" ? { payment_type: "cstore", cstore: { store: method, message: "Langganan STUDIODO" } }
     : { payment_type: "bank_transfer", bank_transfer: { bank: method } };
-  const res = await fetch(`${coreBase(cfg)}/v2/charge`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: basicAuth(cfg) },
-    body: JSON.stringify({
-      ...spec,
-      transaction_details: { order_id: input.midOrderId, gross_amount: input.grossAmount },
-      item_details: [{ id: input.midOrderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
-      customer_details: { first_name: input.customerName.slice(0, 50), email: input.customerEmail },
-      custom_expiry: { expiry_duration: 24, unit: "hour" },
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  const b = (await res.json().catch(() => ({}))) as ChargeBody;
+  let { res, b } = await post(spec);
+  // Many accounts only have "GoPay QRIS" switched on (what Snap shows as one QR for every e-wallet): when plain QRIS is refused, try that.
+  if (method === "qris" && Number(b.status_code ?? res.status) !== 201 && /not activated/i.test(String(b.status_message ?? ""))) {
+    ({ res, b } = await post({ payment_type: "gopay", gopay: { enable_callback: false } }));
+  }
   const code = Number(b.status_code ?? res.status);
   if (code !== 201 && code !== 200) throw new Error(b.status_message || `Midtrans menolak metode ini (HTTP ${res.status}, kode ${code})`);
   // expiry_time comes as "YYYY-MM-DD HH:mm:ss" in WIB (UTC+7).
   const exp = b.expiry_time ? new Date(b.expiry_time.replace(" ", "T") + "+07:00") : null;
   const out: PayInstruction = { method, midOrderId: input.midOrderId, expiresAt: exp && !Number.isNaN(exp.getTime()) ? exp.toISOString() : null };
   if (method === "qris") {
-    if (!b.qr_string) throw new Error("Midtrans tidak mengirim kode QRIS");
-    out.qrString = b.qr_string;
+    if (b.qr_string) {
+      out.qrString = b.qr_string;
+    } else {
+      // GoPay charges answer with a link to the QR picture instead of its text: fetch it so the page can show it without leaving STUDIODO.
+      const link = b.actions?.find((a) => a.name === "generate-qr-code")?.url;
+      if (!link || !/^https:\/\/api\.(sandbox\.)?midtrans\.com\//.test(link)) throw new Error("Midtrans tidak mengirim kode QRIS");
+      const img = await fetch(link, { signal: AbortSignal.timeout(15_000) });
+      const type = img.headers.get("content-type") ?? "";
+      if (!img.ok || !type.startsWith("image/")) throw new Error("Gambar kode QRIS dari Midtrans tidak dapat diambil");
+      out.qrImage = `data:${type};base64,${Buffer.from(await img.arrayBuffer()).toString("base64")}`;
+    }
   } else if (method === "mandiri") {
     if (!b.biller_code || !b.bill_key) throw new Error("Midtrans tidak mengirim kode Mandiri Bill");
     out.billerCode = b.biller_code;

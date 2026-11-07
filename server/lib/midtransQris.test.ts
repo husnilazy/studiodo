@@ -20,6 +20,20 @@ describe("chargeMethod", () => {
     expect(sent.transaction_details).toEqual({ order_id: "SDO-TEST-1-AB12", gross_amount: 449000 });
   });
 
+  it("QRIS not activated: retries as a GoPay charge and fetches the QR picture", async () => {
+    const f = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.endsWith("/v2/charge") && f.mock.calls.length === 1) return new Response(JSON.stringify({ status_code: "402", status_message: "Payment channel is not activated." }), { status: 200 });
+      if (u.endsWith("/v2/charge")) return new Response(JSON.stringify({ status_code: "201", actions: [{ name: "generate-qr-code", url: "https://api.sandbox.midtrans.com/v2/gopay/abc/qr-code" }] }), { status: 200 });
+      return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200, headers: { "content-type": "image/png" } });
+    });
+    vi.stubGlobal("fetch", f);
+    const out = await chargeMethod(cfg, "qris", input);
+    expect(out.qrImage).toBe("data:image/png;base64,iVBORw==");
+    const second = JSON.parse(String((f.mock.calls[1] as unknown as [string, RequestInit])[1].body));
+    expect(second.payment_type).toBe("gopay");
+  });
+
   it("virtual account: asks for the chosen bank and reads the VA number", async () => {
     const f = reply({ status_code: "201", va_numbers: [{ bank: "bca", va_number: "812345678901" }] });
     vi.stubGlobal("fetch", f);
