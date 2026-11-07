@@ -46,37 +46,104 @@ export async function createSnapTransaction(
   return { token: body.token, redirectUrl: body.redirect_url };
 }
 
-export type QrisCharge = { qrString: string; expiresAt: Date | null };
+// --- STUDIODO's own payment page: the tenant picks a method there and each one is charged through the Core API ---
+
+export type PayMethodId = "qris" | "bca" | "bni" | "bri" | "permata" | "cimb" | "mandiri" | "alfamart" | "indomaret";
+export const PAY_METHODS: { id: PayMethodId; label: string; hint: string; kind: "qris" | "va" | "bill" | "store" }[] = [
+  { id: "qris", label: "QRIS", hint: "GoPay, OVO, DANA, ShopeePay, LinkAja, dan m-banking", kind: "qris" },
+  { id: "bca", label: "BCA Virtual Account", hint: "Transfer lewat ATM, m-BCA, atau KlikBCA", kind: "va" },
+  { id: "bni", label: "BNI Virtual Account", hint: "Transfer lewat ATM atau mobile banking BNI", kind: "va" },
+  { id: "bri", label: "BRI Virtual Account", hint: "Transfer lewat ATM, BRImo, atau internet banking", kind: "va" },
+  { id: "permata", label: "Permata Virtual Account", hint: "Transfer lewat ATM atau PermataMobile", kind: "va" },
+  { id: "cimb", label: "CIMB Niaga Virtual Account", hint: "Transfer lewat ATM atau OCTO Mobile", kind: "va" },
+  { id: "mandiri", label: "Mandiri Bill", hint: "Bayar lewat ATM atau Livin' by Mandiri", kind: "bill" },
+  { id: "alfamart", label: "Alfamart", hint: "Bayar tunai di kasir dengan kode pembayaran", kind: "store" },
+  { id: "indomaret", label: "Indomaret", hint: "Bayar tunai di kasir dengan kode pembayaran", kind: "store" },
+];
+export const isPayMethod = (v: unknown): v is PayMethodId => PAY_METHODS.some((m) => m.id === v);
+
+/** What the tenant needs to complete a payment, shown on the pay page. Only the fields that apply to the method are set. */
+export type PayInstruction = {
+  method: PayMethodId;
+  midOrderId: string; // the order_id Midtrans knows this charge by (a suffix on our order id, new for every method switch)
+  expiresAt: string | null;
+  qrString?: string;
+  bank?: string;
+  vaNumber?: string;
+  billerCode?: string;
+  billKey?: string;
+  paymentCode?: string;
+  store?: string;
+};
+
+/** Our order id with the per-charge suffix removed ("SDO-AB-CD-2F" → "SDO-AB-CD"). Notifications carry the charge's id. */
+export const baseOrderId = (midOrderId: string) => midOrderId.replace(/^(SDO-[A-Z0-9]+-[A-Z0-9]+)-[A-Z0-9]{1,4}$/, "$1");
+
+type ChargeBody = {
+  status_code?: string; status_message?: string; expiry_time?: string;
+  qr_string?: string;
+  va_numbers?: { bank?: string; va_number?: string }[]; permata_va_number?: string;
+  biller_code?: string; bill_key?: string;
+  payment_code?: string; store?: string;
+};
 
 /**
- * Charges a dynamic QRIS through the Core API, so STUDIODO can draw its own payment page (QR, amount, countdown) instead of
- * sending the tenant to Midtrans' Snap page. Throws when Midtrans refuses (e.g. QRIS is not enabled on the merchant account);
- * the caller then falls back to Snap, so a tenant is never left without a way to pay.
+ * Charges one payment method through the Core API. Throws when Midtrans refuses (e.g. the channel is not activated on the
+ * merchant account); the pay page shows the message and the tenant can pick another method.
  */
-export async function chargeQris(
+export async function chargeMethod(
   cfg: MidtransCfg,
-  input: { orderId: string; grossAmount: number; itemName: string; customerEmail: string; customerName: string },
-): Promise<QrisCharge> {
+  method: PayMethodId,
+  input: { midOrderId: string; grossAmount: number; itemName: string; customerEmail: string; customerName: string },
+): Promise<PayInstruction> {
+  const spec =
+    method === "qris" ? { payment_type: "qris", qris: { acquirer: "gopay" } }
+    : method === "mandiri" ? { payment_type: "echannel", echannel: { bill_info1: "Pembayaran:", bill_info2: "Langganan STUDIODO" } }
+    : method === "alfamart" || method === "indomaret" ? { payment_type: "cstore", cstore: { store: method, message: "Langganan STUDIODO" } }
+    : { payment_type: "bank_transfer", bank_transfer: { bank: method } };
   const res = await fetch(`${coreBase(cfg)}/v2/charge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: basicAuth(cfg) },
     body: JSON.stringify({
-      payment_type: "qris",
-      qris: { acquirer: "gopay" },
-      transaction_details: { order_id: input.orderId, gross_amount: input.grossAmount },
-      item_details: [{ id: input.orderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
+      ...spec,
+      transaction_details: { order_id: input.midOrderId, gross_amount: input.grossAmount },
+      item_details: [{ id: input.midOrderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
       customer_details: { first_name: input.customerName.slice(0, 50), email: input.customerEmail },
       custom_expiry: { expiry_duration: 24, unit: "hour" },
     }),
     signal: AbortSignal.timeout(20_000),
   });
-  const body = (await res.json().catch(() => ({}))) as { status_code?: string; status_message?: string; qr_string?: string; expiry_time?: string };
-  const code = Number(body.status_code ?? res.status);
-  if (code !== 201 && code !== 200) throw new Error(body.status_message || `Midtrans menolak QRIS (HTTP ${res.status}, kode ${code})`);
-  if (!body.qr_string) throw new Error("Midtrans tidak mengirim kode QRIS");
+  const b = (await res.json().catch(() => ({}))) as ChargeBody;
+  const code = Number(b.status_code ?? res.status);
+  if (code !== 201 && code !== 200) throw new Error(b.status_message || `Midtrans menolak metode ini (HTTP ${res.status}, kode ${code})`);
   // expiry_time comes as "YYYY-MM-DD HH:mm:ss" in WIB (UTC+7).
-  const expiresAt = body.expiry_time ? new Date(body.expiry_time.replace(" ", "T") + "+07:00") : null;
-  return { qrString: body.qr_string, expiresAt: expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null };
+  const exp = b.expiry_time ? new Date(b.expiry_time.replace(" ", "T") + "+07:00") : null;
+  const out: PayInstruction = { method, midOrderId: input.midOrderId, expiresAt: exp && !Number.isNaN(exp.getTime()) ? exp.toISOString() : null };
+  if (method === "qris") {
+    if (!b.qr_string) throw new Error("Midtrans tidak mengirim kode QRIS");
+    out.qrString = b.qr_string;
+  } else if (method === "mandiri") {
+    if (!b.biller_code || !b.bill_key) throw new Error("Midtrans tidak mengirim kode Mandiri Bill");
+    out.billerCode = b.biller_code;
+    out.billKey = b.bill_key;
+  } else if (method === "alfamart" || method === "indomaret") {
+    if (!b.payment_code) throw new Error("Midtrans tidak mengirim kode pembayaran");
+    out.paymentCode = b.payment_code;
+    out.store = b.store ?? method;
+  } else {
+    const va = b.permata_va_number ?? b.va_numbers?.[0]?.va_number;
+    if (!va) throw new Error("Midtrans tidak mengirim nomor Virtual Account");
+    out.bank = method;
+    out.vaNumber = va;
+  }
+  return out;
+}
+
+/** Best effort: closes a charge the tenant abandoned when they switch method, so it cannot be paid later by mistake. */
+export async function cancelCharge(cfg: MidtransCfg, midOrderId: string): Promise<void> {
+  try {
+    await fetch(`${coreBase(cfg)}/v2/${encodeURIComponent(midOrderId)}/cancel`, { method: "POST", headers: { Accept: "application/json", Authorization: basicAuth(cfg) }, signal: AbortSignal.timeout(10_000) });
+  } catch { /* the charge simply expires by itself */ }
 }
 
 /**

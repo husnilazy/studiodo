@@ -1,5 +1,5 @@
 {
-  "id": "6f204184-592a-4149-8726-44fd0e241c57",
+  "id": "6b68ebb9-19bc-4e35-a82c-46d0732a1555",
   "prevId": "d8e88076-06e2-47be-8303-a31ab8b8db13",
   "version": "7",
   "dialect": "postgresql",
@@ -430,9 +430,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "qr_string": {
-          "name": "qr_string",
-          "type": "text",
+        "payment_instruction": {
+          "name": "payment_instruction",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

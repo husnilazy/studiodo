@@ -140,7 +140,8 @@ export async function reconcileOrder(order: Order): Promise<{ status: Order["sta
   let paidAmount: number | null = null;
   let paymentType: string | null = null;
   if (order.provider === "midtrans") {
-    const status = await fetchMidtransStatus({ serverKey: cfg.secretKey, production: cfg.environment === "production" }, order.orderId);
+    // The charge the tenant picked on the pay page has its own id (kept in providerRef); orders from the Snap era use the order id itself.
+    const status = await fetchMidtransStatus({ serverKey: cfg.secretKey, production: cfg.environment === "production" }, order.providerRef ?? order.orderId);
     if (!status) return { status: order.status, result: "waiting" };
     outcome = outcomeFromNotification(status);
     paidAmount = Number(status.gross_amount);

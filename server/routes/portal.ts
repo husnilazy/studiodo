@@ -11,7 +11,7 @@ import { MAX_BOOTHS_PER_ORDER, quoteBooths, readVolumeTiers } from "../lib/booth
 import { logEvent } from "../lib/platformEvents.js";
 import { signAdminToken } from "../lib/jwt.js";
 import { revokeSessions, sessionVersion } from "../lib/sessionGuard.js";
-import { chargeQris, createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
+import { baseOrderId, createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
 import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
 import { reconcileOrder, sendInvoiceEmail, settleOrder } from "../lib/billing.js";
@@ -306,28 +306,15 @@ portalRouter.post("/billing/checkout", async (req, res) => {
 
   for (const gw of gateways) {
     // A fresh order id per attempt: a gateway that failed mid-way may already have recorded the previous one.
-    let orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    const orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
     try {
       let redirectUrl: string;
       let snapToken: string | null = null;
-      let qrString: string | null = null;
       let providerRef: string | null = null;
       if (gw.provider === "midtrans") {
-        const mcfg = { serverKey: gw.secretKey!, production: gw.environment === "production" };
-        // STUDIODO's own payment page (QRIS): charge through the Core API and draw the QR ourselves. If Midtrans refuses
-        // (QRIS not enabled on the account, API down), fall back to the hosted Snap page so the tenant can still pay.
-        try {
-          const qris = await chargeQris(mcfg, { orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name });
-          qrString = qris.qrString;
-          redirectUrl = `${portalBaseUrl()}/bayar/${encodeURIComponent(orderId)}?t=${encodeURIComponent(invoiceToken(orderId))}`;
-        } catch (qe) {
-          logEvent({ tenantId, level: "warning", category: "billing", action: "checkout.qris_fallback", message: `QRIS langsung via Midtrans gagal, memakai halaman Snap: ${qe instanceof Error ? qe.message : String(qe)}`.slice(0, 280), actorType: "tenant_admin", actorLabel: admin.email });
-          const snapOrderId = `${orderId}-S`;
-          const snap = await createSnapTransaction(mcfg, { orderId: snapOrderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl, unfinishUrl, errorUrl });
-          orderId = snapOrderId;
-          redirectUrl = snap.redirectUrl;
-          snapToken = snap.token;
-        }
+        // STUDIODO's own payment page: nothing is charged yet. The tenant picks a method there (QRIS, virtual account, store, ...)
+        // and that method is charged through the Core API (routes/publicInvoice.ts); the hosted Snap page stays as "other methods".
+        redirectUrl = `${portalBaseUrl()}/bayar/${encodeURIComponent(orderId)}?t=${encodeURIComponent(invoiceToken(orderId))}`;
       } else {
         const invoice = await createXenditInvoice({ secretKey: gw.secretKey! }, { orderId, amount, description: `STUDIODO — ${itemName}`, customerEmail: admin.email, finishUrl });
         redirectUrl = invoice.redirectUrl;
@@ -336,7 +323,7 @@ portalRouter.post("/billing/checkout", async (req, res) => {
       const [created] = await db.insert(billingOrders).values({
         orderId, provider: gw.provider, providerRef, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
         items, boothCount: items.length, discountPercent: quote.discountPercent,
-        snapToken, redirectUrl, qrString,
+        snapToken, redirectUrl,
       }).returning({ id: billingOrders.id });
       void sendInvoiceEmail(created.id); // the invoice lands in the registered inbox right away, with a pay link
       logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, ${items.length} booth, Rp ${amount.toLocaleString("id-ID")}${quote.discountPercent > 0 ? ` (diskon ${quote.discountPercent}%)` : ""}`, actorType: "tenant_admin", actorLabel: admin.email });
@@ -400,8 +387,14 @@ billingWebhookRouter.post("/midtrans/notification", async (req, res) => {
     return res.status(403).json({ error: "Signature tidak valid" });
   }
 
-  const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, String(n.order_id)));
+  // A charge made on the pay page carries our order id plus a suffix; look the order up by the base id.
+  const [order] = await db.select().from(billingOrders).where(eq(billingOrders.orderId, baseOrderId(String(n.order_id))));
   if (!order || order.provider !== "midtrans") return ackUnknownOrder(res, "midtrans", n.order_id);
+  // Only the charge the tenant is currently paying counts: a method they switched away from is cancelled, and that cancel notice must not fail the order.
+  if (order.providerRef && String(n.order_id) !== order.providerRef) {
+    void noteWebhook("midtrans", `charge lama diabaikan (${String(n.order_id).slice(0, 40)})`).catch(() => undefined);
+    return res.json({ ok: true });
+  }
 
   // The signature covers gross_amount, but also confirm it matches what we charged — never
   // extend a subscription because a differently-priced payment happened to carry a valid order id.

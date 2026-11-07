@@ -1,0 +1,1 @@
+ALTER TABLE "billing_orders" ADD COLUMN "payment_instruction" jsonb;

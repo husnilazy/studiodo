@@ -1,1 +1,0 @@
-ALTER TABLE "billing_orders" ADD COLUMN "qr_string" text;
