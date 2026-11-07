@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { admins, tenants, withdrawals } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
@@ -66,6 +66,10 @@ withdrawalsRouter.delete("/:id", async (req, res) => {
   const [row] = await db.select().from(withdrawals).where(eq(withdrawals.id, String(req.params.id)));
   if (!row || row.tenantId !== tenantId) return res.status(404).json({ error: "Permintaan tidak ditemukan" });
   if (row.status !== "pending") return res.status(409).json({ error: "Permintaan ini sudah diproses, tidak bisa dibatalkan." });
-  await db.update(withdrawals).set({ status: "rejected", adminNote: "Dibatalkan oleh tenant", processedAt: new Date() }).where(eq(withdrawals.id, row.id));
+  // Compare-and-set: if a superadmin moved it to processing/paid between the read above and this write, nothing changes. Without the
+  // status guard a payout already sent could be flipped to "rejected", which hands the money back to the balance (double spend).
+  const cancelled = await db.update(withdrawals).set({ status: "rejected", adminNote: "Dibatalkan oleh tenant", processedAt: new Date() })
+    .where(and(eq(withdrawals.id, row.id), eq(withdrawals.status, "pending"))).returning({ id: withdrawals.id });
+  if (cancelled.length === 0) return res.status(409).json({ error: "Permintaan ini sudah diproses, tidak bisa dibatalkan." });
   res.json({ ok: true });
 });

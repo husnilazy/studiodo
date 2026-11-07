@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { db } from "../db/client.js";
 import { tenantSettings, tenants, sessions, templates, vouchers, voucherRedemptions } from "../db/schema.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 import { loadGateway } from "../lib/gateways.js";
@@ -167,9 +167,16 @@ async function completeAdditionalPrintPayment(tenantId: string, sessionId: strin
 // Marks a session (or its extra-print charge) as paid after a gateway confirmed it. The session must belong to this tenant,
 // and an underpaid amount is ignored (a leaked webhook token/secret shouldn't be enough to mark an underpaid session as paid).
 // Only enforced when the payload carried a parseable amount: silently rejecting a genuine payment over a missed field would hurt real customers.
-async function settlePayment(tenantId: string, sessionId: string, paidAmount: number, method: string, label: string) {
+// `forAdditional` is set by webhooks that learn WHICH invoice was paid from the payload (an extra-print invoice carries "-additional-"):
+// a re-delivered notification for the first payment must never complete a later extra-print charge, and vice versa. Callers that
+// asked the gateway about the session's CURRENT invoice themselves (status polling) leave it undefined.
+async function settlePayment(tenantId: string, sessionId: string, paidAmount: number, method: string, label: string, forAdditional?: boolean) {
   const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending, additionalPrintsPaid: sessions.additionalPrintsPaid }).from(sessions).where(eq(sessions.id, sessionId));
   if (session?.tenantId !== tenantId) return;
+  if (forAdditional !== undefined && forAdditional !== (session.paymentPurpose === "additional_print")) {
+    console.warn(`[${label}] Notifikasi ${forAdditional ? "cetak tambahan" : "pembayaran sesi"} tidak cocok dengan status sesi ${sessionId}, diabaikan (kemungkinan kiriman ulang).`);
+    return;
+  }
   if (session.paymentPurpose === "additional_print") {
     const expected = session.additionalPrintsPending * (await getPrintingConfig(tenantId)).price;
     if (Number.isFinite(paidAmount) && paidAmount < expected) {
@@ -184,7 +191,11 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
     if (Number.isFinite(paidAmount) && paidAmount < expected) {
       console.warn(`[${label}] Jumlah dibayar (${paidAmount}) kurang dari total sesi (${expected}) untuk sesi ${sessionId}, diabaikan.`);
     } else {
-      await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      // Only the call that actually flips the session to paid credits the wallet / expires siblings: a notification delivered twice,
+      // or arriving after a voucher already paid the session, finds it settled and does nothing (so it can never credit money twice).
+      const flipped = await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId), ne(sessions.paymentStatus, "success"))).returning({ id: sessions.id });
+      if (flipped.length === 0) return;
       if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, "session");
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
@@ -244,7 +255,7 @@ paymentRouter.post("/qris", requireKioskAuth, requireActiveSubscription, async (
     });
   }
   if (!xendit.secretKey) {
-    return res.status(503).json({ error: "Xendit Secret Key belum dikonfigurasi" });
+    return res.status(503).json({ error: "Pembayaran QRIS belum diatur untuk booth ini. Hubungi admin booth / STUDIODO." });
   }
 
   try {
@@ -308,7 +319,7 @@ paymentRouter.post("/additional-print", requireKioskAuth, requireActiveSubscript
   }
   if (!xendit.secretKey) {
     await db.update(sessions).set({ additionalPrintsPending: 0, paymentPurpose: "session", paymentStatus: "success" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
-    return res.status(503).json({ error: "Xendit Secret Key belum dikonfigurasi" });
+    return res.status(503).json({ error: "Pembayaran QRIS belum diatur untuk booth ini. Hubungi admin booth / STUDIODO." });
   }
   try {
     const invoice = await createXenditQrisInvoice(tenantId, `${sessionId}-additional-${Date.now()}`, amount, xendit.secretKey);
@@ -497,7 +508,7 @@ paymentRouter.post("/webhook/xendit/:tenantId", async (req, res) => {
   // so an unparseable amount falls back to trusting the token check alone.
   const paidAmount = Number(event?.amount ?? event?.data?.amount ?? NaN);
   if (sessionId && ["SUCCEEDED", "COMPLETED", "PAID", "SETTLED"].includes(status)) {
-    await settlePayment(tenantId, sessionId, paidAmount, "qris", "xendit-webhook");
+    await settlePayment(tenantId, sessionId, paidAmount, "qris", "xendit-webhook", String(externalId ?? "").includes("-additional-"));
   }
   res.status(200).end();
 });
@@ -516,7 +527,7 @@ paymentRouter.post("/webhook/doku/:tenantId", async (req, res) => {
   const invoice = String(event?.order?.invoice_number ?? "");
   const sessionId = invoice.split(/-(?:additional|q)-/)[0];
   if (sessionId && status === "SUCCESS") {
-    await settlePayment(tenantId, sessionId, Number(event?.order?.amount ?? NaN), "doku", "doku-webhook");
+    await settlePayment(tenantId, sessionId, Number(event?.order?.amount ?? NaN), "doku", "doku-webhook", invoice.includes("-additional-"));
   }
   res.status(200).json({ ok: true });
 });

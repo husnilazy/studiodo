@@ -1107,7 +1107,10 @@ superadminRouter.patch("/withdrawals/:id", async (req, res) => {
   const patch: Partial<typeof withdrawals.$inferInsert> = { status: next, processedBy: email, processedAt: next === "processing" ? null : new Date() };
   if (adminNote !== undefined) patch.adminNote = adminNote;
   if (transferReference !== undefined) patch.transferReference = transferReference;
-  const [row] = await db.update(withdrawals).set(patch).where(eq(withdrawals.id, current.id)).returning();
+  // Compare-and-set on the status read above: two admins clicking at once (or the tenant cancelling) cannot both win, so a request
+  // can never go paid -> rejected (which would give the paid-out money back to the balance) or be paid twice.
+  const [row] = await db.update(withdrawals).set(patch).where(and(eq(withdrawals.id, current.id), eq(withdrawals.status, current.status))).returning();
+  if (!row) return res.status(409).json({ error: "Status permintaan ini baru saja berubah. Muat ulang daftar lalu coba lagi." });
 
   const label = next === "paid" ? "dibayar" : next === "rejected" ? "ditolak" : "diproses";
   logEvent({
@@ -1131,7 +1134,9 @@ superadminRouter.post("/withdrawals/:id/approve", async (req, res) => {
   if (current.approvedBy) return res.status(409).json({ error: `Sudah disetujui oleh ${current.approvedBy}.` });
   const email = await currentSuperadminEmail(req);
   if (current.processedBy && current.processedBy === email) return res.status(403).json({ error: "Orang yang memproses tidak boleh menyetujui permintaannya sendiri.", code: "same_person" });
-  const [row] = await db.update(withdrawals).set({ approvedBy: email, approvedAt: new Date() }).where(eq(withdrawals.id, current.id)).returning();
+  const [row] = await db.update(withdrawals).set({ approvedBy: email, approvedAt: new Date() })
+    .where(and(eq(withdrawals.id, current.id), sql`${withdrawals.approvedBy} is null`, inArray(withdrawals.status, ["pending", "processing"]))).returning();
+  if (!row) return res.status(409).json({ error: "Permintaan ini baru saja berubah atau sudah disetujui. Muat ulang daftar." });
   logEvent({
     tenantId: current.tenantId,
     category: "billing",
