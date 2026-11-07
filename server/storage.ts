@@ -31,9 +31,18 @@ export function cleanPrefix(value?: string | null) {
   return String(value ?? "").replace(/^\/+|\/+$/g, "");
 }
 
+// Only these file types are ever stored, whatever name or MIME type the client claims. Anything else (.html, .svg, .js …) is stored under
+// the caller's fallback extension and served as that type, so an uploaded web page or SVG can never run as a page of this site.
+const SAFE_TYPES: Record<string, string> = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+  ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
+};
+
 export function getExtension(filename: string, fallback: string) {
-  const ext = path.extname(filename);
-  return ext || fallback;
+  const ext = path.extname(filename).toLowerCase();
+  if (ext in SAFE_TYPES) return ext;
+  const safeFallback = fallback.toLowerCase();
+  return safeFallback in SAFE_TYPES ? safeFallback : ".jpg";
 }
 
 function buildR2Client(tenantId: string, settings: StorageSettings) {
@@ -58,9 +67,16 @@ function buildR2Client(tenantId: string, settings: StorageSettings) {
   return client;
 }
 
+// Active-content types are refused outright (with a message the tenant can act on) instead of being silently stored under a wrong name.
+const ACTIVE_CONTENT = /svg|html|xml|javascript|ecmascript|^text\//i;
+
 export async function saveUploadedFile(tenantId: string, file: UploadedFileInput, folder: string, fallbackExtension = ".jpg") {
+  if (file.mimetype && ACTIVE_CONTENT.test(file.mimetype.split(";")[0].trim())) {
+    throw new Error("Format file tidak didukung. Gunakan PNG, JPG, WebP, GIF, MP4, atau WebM (SVG dan HTML tidak diizinkan).");
+  }
   const safeFolder = cleanPrefix(folder);
-  const filename = `${nanoid(12)}${getExtension(file.originalname, fallbackExtension)}`;
+  const extension = getExtension(file.originalname, fallbackExtension);
+  const filename = `${nanoid(12)}${extension}`;
   const settings = await getStorageSettings(tenantId);
 
   if (settings.driver === "r2") {
@@ -76,7 +92,7 @@ export async function saveUploadedFile(tenantId: string, file: UploadedFileInput
         Bucket: settings.r2Bucket!,
         Key: key,
         Body: file.buffer,
-        ContentType: file.mimetype,
+        ContentType: SAFE_TYPES[extension], // from the validated extension, never the client's claimed MIME type
       }),
     );
     const baseUrl = String(settings.r2PublicBaseUrl).replace(/\/$/, "");

@@ -85,7 +85,13 @@ app.use((req, res, next) => {
   const large = LARGE_JSON_PREFIXES.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`));
   (large ? largeJson : smallJson)(req, res, next);
 });
-app.use("/storage", express.static(path.join(process.cwd(), "storage")));
+// Tenant-uploaded files live on this origin when storage is local. Even though uploads are restricted to image/video types (storage.ts),
+// belt and braces: a sandboxed CSP makes the browser treat anything opened directly as an inert document with no script access.
+app.use("/storage", (_req, res, next) => {
+  res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; img-src * data:; media-src *; style-src 'unsafe-inline'");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+}, express.static(path.join(process.cwd(), "storage"), { dotfiles: "deny", index: false }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "studiodo-server" }));
 

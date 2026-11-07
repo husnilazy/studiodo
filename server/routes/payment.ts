@@ -12,6 +12,7 @@ import { createDokuCheckout, createDokuQris, dokuInvoicePaid, queryDokuQris, ver
 import { decryptSecret, readStoredSecret } from "../lib/secretBox.js";
 import { loadPlatformDoku } from "../lib/platformDoku.js";
 import { creditPlatformPayment } from "../lib/qrisBalance.js";
+import { makeRateLimiter } from "../lib/clientIp.js";
 
 export const paymentRouter = Router();
 
@@ -356,7 +357,14 @@ paymentRouter.post("/additional-print", requireKioskAuth, requireActiveSubscript
 // price and never touches sessions.totalAmount directly — completeAdditionalPrintPayment
 // (below) is the one place that adds the print charge onto the session's
 // running total, identically to the QRIS path above.
-paymentRouter.post("/additional-print/voucher", requireKioskAuth, requireActiveSubscription, async (req, res) => {
+// Voucher codes are short, so guessing them must be slow: at most 20 attempts per booth key per 10 minutes (a real customer needs one or two).
+const voucherAttempts = makeRateLimiter(20, 10 * 60_000);
+const limitVoucherGuesses: import("express").RequestHandler = (req, res, next) => {
+  if (voucherAttempts(String(req.kioskKeyId ?? req.ip))) return res.status(429).json({ error: "Terlalu banyak percobaan kode voucher. Tunggu beberapa menit lalu coba lagi." });
+  next();
+};
+
+paymentRouter.post("/additional-print/voucher", requireKioskAuth, limitVoucherGuesses, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
   const sessionId = String(req.body.sessionId ?? "");
   const code = String(req.body.code ?? "");
@@ -445,7 +453,7 @@ async function applyVoucherFrame(tenantId: string, sessionId: string, frameId: s
   return { id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, outputPreset: t.outputPreset };
 }
 
-paymentRouter.post("/voucher", requireKioskAuth, requireActiveSubscription, async (req, res) => {
+paymentRouter.post("/voucher", requireKioskAuth, limitVoucherGuesses, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
   const { sessionId, code } = req.body as { sessionId: string; code: string };
   if (!sessionId || !String(code ?? "").trim()) return res.status(400).json({ error: "sessionId dan code wajib diisi" });
