@@ -33,15 +33,22 @@ function normalizeDriver(value: unknown): StorageDriver {
   return "local";
 }
 
+const hasOwnR2 = (s: StorageSettings) => Boolean(s.r2Bucket && s.r2AccessKeyId && s.r2SecretAccessKey && s.r2PublicBaseUrl && (s.r2Endpoint || s.r2AccountId));
+
+function platformR2(): Pick<StorageSettings, "r2AccountId" | "r2Endpoint" | "r2Bucket" | "r2AccessKeyId" | "r2SecretAccessKey" | "r2PublicBaseUrl" | "r2Prefix"> | null {
+  const e = process.env;
+  if (!e.R2_BUCKET || !e.R2_ACCESS_KEY_ID || !e.R2_SECRET_ACCESS_KEY || !e.R2_PUBLIC_BASE_URL || !(e.R2_ACCOUNT_ID || e.R2_ENDPOINT)) return null;
+  return {
+    r2AccountId: e.R2_ACCOUNT_ID ?? null, r2Endpoint: e.R2_ENDPOINT ?? null, r2Bucket: e.R2_BUCKET, r2AccessKeyId: e.R2_ACCESS_KEY_ID,
+    r2SecretAccessKey: e.R2_SECRET_ACCESS_KEY, r2PublicBaseUrl: e.R2_PUBLIC_BASE_URL, r2Prefix: e.R2_PREFIX ?? null,
+  };
+}
+
 /**
- * tenant_settings is the only source of storage CREDENTIALS — unlike a
- * single-tenant install, falling back to a shared process.env credential
- * here would mean every tenant without its own R2/Drive config silently
- * writes into the same bucket/folder as every other such tenant, mixing
- * (and for Drive, effectively exposing) their customers' photos to one
- * another. Only STORAGE_DRIVER (a preference, not a secret) has an env
- * fallback; a tenant with no credentials configured for that driver just
- * gets a clear "belum lengkap" error instead of silently sharing storage.
+ * Credentials come from tenant_settings. Only a tenant with NO R2 of its own (and driver r2) falls back to STUDIODO's shared
+ * bucket from the R2_* env vars; the tenantId is part of every object key, so tenants stay apart by path. Google Drive never
+ * falls back to a shared account (that would expose one tenant's photos to another), and neither does an explicit 'local'.
+ * Set the R2_* vars (and STORAGE_DRIVER=r2) on every deployment that serves tenants, Vercel included.
  */
 export async function getStorageSettings(tenantId: string): Promise<StorageSettings> {
   const cached = cache.get(tenantId);
@@ -61,6 +68,13 @@ export async function getStorageSettings(tenantId: string): Promise<StorageSetti
     gdriveServiceAccountJson: row?.gdriveServiceAccountJson ?? null,
     gdriveFolderId: row?.gdriveFolderId ?? null,
   };
+  // A tenant that never set up its own R2 (most new tenants: they cannot be expected to open a Cloudflare account) uses
+  // STUDIODO's shared bucket from the R2_* env vars. Files stay apart by key — saveUploadedFile / createPresignedUpload always
+  // put the tenantId in the path. A tenant that deliberately chose 'local' or 'gdrive' is left alone.
+  if (settings.driver === "r2" && !hasOwnR2(settings)) {
+    const platform = platformR2();
+    if (platform) Object.assign(settings, platform);
+  }
   cache.set(tenantId, { settings, expiresAt: Date.now() + CACHE_TTL_MS });
   return settings;
 }
