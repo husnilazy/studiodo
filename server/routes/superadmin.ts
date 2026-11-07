@@ -993,6 +993,10 @@ superadminRouter.patch("/settings", async (req, res) => {
     if (!Number.isFinite(days) || days < 0) return res.status(400).json({ error: "defaultTrialDays tidak valid" });
     patch.defaultTrialDays = days;
   }
+  if (req.body?.signupMode !== undefined) {
+    if (req.body.signupMode !== "application" && req.body.signupMode !== "instant") return res.status(400).json({ error: "signupMode harus 'application' atau 'instant'" });
+    patch.signupMode = req.body.signupMode;
+  }
   if (req.body?.renewalWhatsapp !== undefined) patch.renewalWhatsapp = String(req.body.renewalWhatsapp).trim() || null;
   if (req.body?.renewalCheckoutUrl !== undefined) patch.renewalCheckoutUrl = String(req.body.renewalCheckoutUrl).trim() || null;
   if (req.body?.gracePeriodDays !== undefined) {

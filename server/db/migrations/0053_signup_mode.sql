@@ -1,0 +1,1 @@
+ALTER TABLE "platform_settings" ADD COLUMN "signup_mode" text DEFAULT 'application' NOT NULL;

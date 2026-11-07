@@ -490,6 +490,7 @@ function PlatformSettingsPanel() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [draft, setDraft] = useState({ defaultTrialDays: "7", renewalWhatsapp: "", renewalCheckoutUrl: "", gracePeriodDays: "3", qrisFeePercent: "0.7", withdrawalMinAmount: "50000", withdrawalFlatFee: "0" });
   const [tiers, setTiers] = useState<{ minBooths: string; percent: string }[]>([]);
+  const [signupSaving, setSignupSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -536,7 +537,36 @@ function PlatformSettingsPanel() {
 
   if (!settings) return null;
 
+  const signupMode = settings.signupMode === "instant" ? "instant" : "application";
+  const chooseSignupMode = async (mode: "application" | "instant") => {
+    if (mode === signupMode || signupSaving) return;
+    setSignupSaving(true);
+    try {
+      const result = await superadminApi.updateSettings({ signupMode: mode });
+      if (result) setSettings(result);
+      pushToast({ type: "success", title: mode === "instant" ? "Pendaftaran langsung dibuka" : "Pendaftaran lewat pengajuan" });
+    } catch (err) { pushToast({ type: "error", title: err instanceof Error ? err.message : "Gagal menyimpan" }); } finally { setSignupSaving(false); }
+  };
+
   return (
+    <>
+    <section className="mb-5 rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
+      <p className="text-xs uppercase tracking-[.16em] text-accent">PENDAFTARAN TENANT</p>
+      <h2 className="mt-2 font-display text-xl font-semibold">Cara calon tenant mendaftar di website</h2>
+      <p className="mt-1 text-sm text-fg/45">Berlaku untuk tombol &ldquo;Coba Gratis&rdquo; dan &ldquo;Pilih Paket&rdquo; di halaman harga. Bisa diganti kapan saja.</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {([
+          { id: "instant", name: "Langsung aktif (disarankan untuk jualan cepat)", desc: "Calon tenant mengisi form + password, akun dan key trial langsung jadi, lalu masuk ke dashboard. Yang memilih paket berbayar langsung diarahkan ke pembayaran. Anda tetap dapat notifikasi pendaftar baru dan datanya masuk ke CRM." },
+          { id: "application", name: "Lewat pengajuan (ditinjau tim)", desc: "Calon tenant hanya mengirim form. Tim meninjau dulu di menu Aplikasi Tenant, lalu mengaktifkan akunnya. Lebih terkontrol, tapi lebih lambat." },
+        ] as const).map((o) => (
+          <button key={o.id} type="button" onClick={() => void chooseSignupMode(o.id)} disabled={signupSaving} className={`rounded-2xl border p-4 text-left transition disabled:opacity-60 ${signupMode === o.id ? "border-accent bg-accent/10" : "border-fg/15 hover:border-fg/35"}`}>
+            <p className="flex items-center justify-between font-semibold">{o.name}{signupMode === o.id && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Aktif</span>}</p>
+            <p className="mt-1 text-xs text-fg/55">{o.desc}</p>
+          </button>
+        ))}
+      </div>
+      {signupMode === "instant" && <p className="mt-3 text-xs text-fg/45">Pengaman yang aktif: batas 5 pendaftaran per jaringan per jam, 3 per email per hari, kolom jebakan untuk bot, dan verifikasi email dikirim ke pendaftar. Trial memakai lama &ldquo;Trial default&rdquo; di bawah.</p>}
+    </section>
     <section className="rounded-[2rem] border border-fg/10 bg-fg/[0.045] p-6">
       <p className="text-xs uppercase tracking-[.16em] text-accent">PENGATURAN PLATFORM</p>
       <h2 className="mt-2 font-display text-xl font-semibold">Default trial & kontak renewal</h2>
@@ -604,6 +634,7 @@ function PlatformSettingsPanel() {
         {message && <span className="text-sm text-fg/50">{message}</span>}
       </div>
     </section>
+    </>
   );
 }
 

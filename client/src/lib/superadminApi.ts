@@ -264,6 +264,8 @@ export interface SendNotificationInput { tenantId: string | null; title: string;
 
 export interface PlatformSettings {
   id: string;
+  /** 'instant' = the website creates the account on the spot; 'application' = a visitor submits a form the team reviews. */
+  signupMode?: "application" | "instant";
   defaultTrialDays: number;
   renewalWhatsapp: string | null;
   renewalCheckoutUrl: string | null;
@@ -588,7 +590,7 @@ export const superadminApi = {
     request<SuperadminTenant>(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   extendTenant: (id: string, days: number, keyIds?: string[]) => request<SuperadminTenant>(`/tenants/${id}/extend`, { method: "POST", body: JSON.stringify({ days, keyIds }) }),
   getSettings: () => request<PlatformSettings>("/settings"),
-  updateSettings: (body: { defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number; volumeDiscounts?: VolumeTier[] }) =>
+  updateSettings: (body: { signupMode?: "application" | "instant"; defaultTrialDays?: number; renewalWhatsapp?: string; renewalCheckoutUrl?: string; gracePeriodDays?: number; qrisFeePercent?: number; withdrawalMinAmount?: number; withdrawalFlatFee?: number; volumeDiscounts?: VolumeTier[] }) =>
     request<PlatformSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   getWithdrawals: (status = "open") => request<WithdrawalAdminList>(`/withdrawals?status=${status}`),
   approveWithdrawal: (id: string) => request<WithdrawalAdminRow>(`/withdrawals/${id}/approve`, { method: "POST" }),

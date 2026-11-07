@@ -228,6 +228,9 @@ export const superadmins = pgTable("superadmins", {
 // the tenant-facing "Perpanjang" (renew) button should point.
 export const platformSettings = pgTable("platform_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // How new tenants get an account: 'application' (a visitor submits a form, the team reviews it) or 'instant' (the account, trial key and
+  // login are created on the spot). Switched in Superadmin -> Pengaturan; see routes/instantSignup.ts.
+  signupMode: text("signup_mode").notNull().default("application"),
   // STUDIODO's own DOKU account for kiosk sales of platform-settled tenants (see lib/platformDoku.ts). Secrets are encrypted.
   dokuClientId: text("doku_client_id"),
   dokuSecretKeyEnc: text("doku_secret_key_enc"),
