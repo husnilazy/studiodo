@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { superadminApi, type AlertSummary } from "@/lib/superadminApi";
+import { playChime } from "@/lib/notifySound";
+import { pushToast } from "@/lib/toastStore";
 
 // Polls the alert summary for the Superadmin dashboard (menu badges) and pops a desktop notification for every NEW alert.
 // Inside the Superadmin Electron app the notification goes through its preload bridge (window.studiodoSuperadmin); in a plain
@@ -29,7 +31,11 @@ export function useAdminAlerts(enabled: boolean, intervalMs = 30_000) {
       if (sum.unread > 0) {
         const list = await superadminApi.getAlerts({ unread: true, limit: 5 });
         const fresh = (list?.items ?? []).filter((a) => new Date(a.createdAt).getTime() > seenAt.current).reverse();
-        for (const a of fresh) desktopNotify(a.title, a.body ?? "");
+        for (const a of fresh) {
+          desktopNotify(a.title, a.body ?? "");
+          pushToast({ type: "info", title: a.title, sub: a.body ?? undefined }, 8000);
+        }
+        if (fresh.length) playChime();
         if (fresh.length) seenAt.current = Math.max(...fresh.map((a) => new Date(a.createdAt).getTime()));
       }
     } catch { /* offline or logged out: the next tick retries */ }

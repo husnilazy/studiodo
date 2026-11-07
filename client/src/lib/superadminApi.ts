@@ -112,6 +112,7 @@ function request<T>(path: string, options?: RequestInit): Promise<T | undefined>
     getCache.clear();
     return rawRequest<T>(path, options);
   }
+  if (/^\/(support|alerts)(\/|\?|$)/.test(path)) return rawRequest<T>(path, options); // live data: always fresh
   const key = `${superadminToken ?? ""}|${path}`;
   const hit = getCache.get(key);
   if (hit && Date.now() - hit.at < GET_TTL_MS) return hit.promise as Promise<T | undefined>;
@@ -133,7 +134,7 @@ async function rawRequest<T>(path: string, options?: RequestInit): Promise<T | u
     // Cache-Control gap, same fix.
     cache: "no-store",
     headers: {
-      "Content-Type": "application/json",
+      ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {}),
       ...(options?.headers ?? {}),
     },
@@ -504,7 +505,15 @@ export interface TwoFactorStatus { enabled: boolean; enabledAt: string | null; r
 
 // ---- Bantuan tenant & Pusat Notifikasi ----
 export interface SupportThread { id: string; tenantId: string; status: "open" | "resolved"; lastSender: "tenant" | "admin" | null; lastBody: string | null; lastMessageAt: string; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; unread: number; needsReply: boolean }
-export interface SupportMessage { id: string; sender: "tenant" | "admin"; author: string | null; body: string; createdAt: string }
+export interface SupportAttachment { url: string; name: string }
+export interface SupportMessage { id: string; sender: "tenant" | "admin"; author: string | null; body: string; attachments?: SupportAttachment[]; caseId?: string | null; createdAt: string }
+export type CaseStatus = "new" | "investigating" | "waiting" | "resolved" | "wontfix";
+export type CasePriority = "low" | "normal" | "high" | "urgent";
+export interface SupportCase {
+  id: string; caseNo: number; tenantId: string; threadId: string | null; category: string; title: string; description: string; status: CaseStatus; priority: CasePriority;
+  context: Record<string, string>; reportedBy: string | null; resolutionNote: string | null; createdAt: string; updatedAt: string; resolvedAt: string | null; tenantName: string;
+}
+export interface SupportCaseEvent { id: string; kind: string; actor: string | null; detail: string | null; createdAt: string }
 export interface AdminAlert { id: string; kind: string; severity: "info" | "success" | "warning" | "critical"; title: string; body: string | null; link: string | null; tenantId: string | null; tenantName: string | null; readAt: string | null; waSentAt: string | null; waError: string | null; createdAt: string }
 export interface AlertSummary { unread: number; critical: number; followUp: { key: string; label: string; count: number; link: string; tone: "warn" | "bad" | "info" }[]; followUpTotal: number }
 export interface AlertSettings { number: string; gateway: boolean; kinds: { kind: string; label: string; severity: string; inApp: boolean; whatsapp: boolean }[] }
@@ -717,7 +726,17 @@ export const superadminApi = {
   // Bantuan tenant
   getSupportThreads: () => request<{ threads: SupportThread[]; needsReply: number; unread: number }>("/support/threads"),
   getSupportThread: (id: string) => request<{ thread: { id: string; tenantId: string; status: "open" | "resolved"; tenantName: string; ownerName: string | null; ownerWhatsapp: string | null; plan: string }; messages: SupportMessage[] }>(`/support/threads/${id}`),
-  replySupport: (id: string, body: string) => request<SupportMessage>(`/support/threads/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) }),
+  replySupport: (id: string, body: string, attachments: SupportAttachment[] = [], caseId?: string) =>
+    request<SupportMessage>(`/support/threads/${id}/reply`, { method: "POST", body: JSON.stringify({ body, attachments, caseId }) }),
+  uploadSupportImage: (threadId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<SupportAttachment>(`/support/threads/${threadId}/upload`, { method: "POST", body: form });
+  },
+  getSupportCases: (status = "open", category = "") => request<{ cases: SupportCase[]; open: number; total: number }>(`/support/cases?status=${encodeURIComponent(status)}${category ? `&category=${encodeURIComponent(category)}` : ""}`),
+  getSupportCase: (id: string) => request<{ case: SupportCase; events: SupportCaseEvent[]; messages: SupportMessage[] }>(`/support/cases/${id}`),
+  updateSupportCase: (id: string, body: { status?: CaseStatus; priority?: CasePriority; category?: string; note?: string; resolutionNote?: string }) =>
+    request<{ ok: boolean; unchanged?: boolean }>(`/support/cases/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   setSupportStatus: (id: string, status: "open" | "resolved") => request<{ id: string; status: string }>(`/support/threads/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   // Pusat Notifikasi
   getAlerts: (opts: { unread?: boolean; kind?: string; limit?: number } = {}) => request<{ items: AdminAlert[]; unread: number; critical: number }>(`/alerts?limit=${opts.limit ?? 60}${opts.unread ? "&unread=1" : ""}${opts.kind ? `&kind=${encodeURIComponent(opts.kind)}` : ""}`),

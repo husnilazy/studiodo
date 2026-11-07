@@ -201,7 +201,7 @@ async function requestUncached<T>(path: string, options?: RequestInit): Promise<
       cache: "no-store",
       signal: timeoutController.signal,
       headers: {
-        "Content-Type": "application/json",
+        ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
         ...kioskAuthHeaders(),
         ...(options?.headers ?? {}),
@@ -487,7 +487,14 @@ export const api = {
   markNotificationsRead: (body: { ids: string[] } | { all: true }) => request<{ unread: number }>("/portal/notifications/read", { method: "POST", body: JSON.stringify(body) }),
   // Help chat with the STUDIODO team ("Bantuan")
   getSupport: () => request<SupportChat>("/portal/support"),
-  sendSupport: (body: string) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body }) }),
+  sendSupport: (body: string, attachments: SupportAttachment[] = []) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body, attachments }) }),
+  uploadSupportImage: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<SupportAttachment>("/portal/support/upload", { method: "POST", body: form });
+  },
+  createSupportCase: (body: { category: string; title: string; description: string; attachments: SupportAttachment[]; context: Record<string, string> }) =>
+    request<{ caseNo: number; chat: SupportChat }>("/portal/support/cases", { method: "POST", body: JSON.stringify(body) }),
   readSupport: () => request<{ unread: number }>("/portal/support/read", { method: "POST" }),
   startQris: (sessionId: string) =>
     request<{ demo: boolean; qrString: string; invoiceId?: string; expiresInSeconds?: number; provider?: string; direct?: boolean }>("/payment/qris", { method: "POST", body: JSON.stringify({ sessionId }) }),
@@ -553,7 +560,16 @@ export const api = {
   deleteFrame: (id: string) => request<{ ok: boolean; id: string }>(`/frames/${id}`, { method: "DELETE" }),
 };
 
-export interface SupportChat { status: "open" | "resolved"; unread: number; messages: { id: string; sender: "tenant" | "admin"; body: string; createdAt: string }[] }
+export interface SupportAttachment { url: string; name: string }
+export interface SupportCaseSummary { id: string; caseNo: number; title: string; category: string; status: "new" | "investigating" | "waiting" | "resolved" | "wontfix"; createdAt: string; updatedAt: string }
+export interface SupportChat {
+  status: "open" | "resolved";
+  unread: number;
+  messages: { id: string; sender: "tenant" | "admin"; body: string; attachments?: SupportAttachment[]; caseId?: string | null; createdAt: string }[];
+  /** International digits of the STUDIODO team's WhatsApp (wa.me format), when the platform has one set. */
+  whatsapp?: string | null;
+  cases?: SupportCaseSummary[];
+}
 
 export interface AdminNotification {
   id: string;

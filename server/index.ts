@@ -170,6 +170,10 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
   if (err?.code === "ECONNREFUSED") {
     console.error("[STUDIODO] Tidak bisa konek ke database Postgres. Pastikan DATABASE_URL benar dan Postgres bisa dijangkau.");
   }
+  if (err?.code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({ error: "File terlalu besar. Gunakan gambar yang lebih kecil (maksimal 4 MB)." });
+    return;
+  }
   if (err?.type === "entity.too.large") {
     res.status(413).json({ error: "Ukuran file terlalu besar untuk disimpan. Gunakan gambar dengan resolusi lebih kecil." });
     return;

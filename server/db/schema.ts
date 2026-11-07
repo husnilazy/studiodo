@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   unique,
   customType,
+  serial,
 } from "drizzle-orm/pg-core";
 
 // Postgres bytea <-> Node Buffer (drizzle has no built-in bytea column).
@@ -1044,8 +1045,42 @@ export const supportMessages = pgTable("support_messages", {
   sender: text("sender").notNull(), // 'tenant' | 'admin'
   author: text("author"), // tenant admin email / superadmin email
   body: text("body").notNull(),
+  // Screenshots sent with the message (only files this chat itself stored, see routes/supportAlerts.ts). Links are plain text in `body`.
+  attachments: jsonb("attachments").$type<{ url: string; name: string }[]>().notNull().default([]),
+  // Set when the message opened or belongs to a problem report (support_cases).
+  caseId: uuid("case_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("support_messages_thread_idx").on(table.threadId, table.createdAt)]);
+
+// A problem report ("Laporkan masalah" in the Bantuan chat): the documented record of bugs / issues, kept for product development.
+// Never deleted by tenants; every change is appended to support_case_events.
+export const supportCases = pgTable("support_cases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caseNo: serial("case_no").notNull(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  threadId: uuid("thread_id").references(() => supportThreads.id, { onDelete: "set null" }),
+  category: text("category").notNull(), // 'bug' | 'payment' | 'device' | 'billing' | 'feature' | 'other'
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  status: text("status").notNull().default("new"), // 'new' | 'investigating' | 'waiting' | 'resolved' | 'wontfix'
+  priority: text("priority").notNull().default("normal"), // 'low' | 'normal' | 'high' | 'urgent'
+  context: jsonb("context").$type<Record<string, string>>().notNull().default({}), // app version, page, browser, plan… captured automatically
+  reportedBy: text("reported_by"),
+  resolutionNote: text("resolution_note"), // what was done / learned, shown to the product team (not to the tenant)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+}, (table) => [index("support_cases_tenant_idx").on(table.tenantId, table.createdAt), index("support_cases_status_idx").on(table.status, table.createdAt)]);
+
+// Append-only history of a case: created, status/priority changes, internal notes, replies.
+export const supportCaseEvents = pgTable("support_case_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caseId: uuid("case_id").notNull().references(() => supportCases.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'created' | 'status' | 'priority' | 'category' | 'note' | 'reply'
+  actor: text("actor"),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("support_case_events_case_idx").on(table.caseId, table.createdAt)]);
 
 // Alerts for the platform team (new sign-up, payment, withdrawal, help message, errors…). Created by lib/adminAlerts.ts from platform events.
 export const adminNotifications = pgTable("admin_notifications", {

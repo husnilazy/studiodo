@@ -358,6 +358,13 @@
       "when": 1793880338520,
       "tag": "0050_digest_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794053503612,
+      "tag": "0051_support_cases_attachments",
+      "breakpoints": true
     }
   ]
 }

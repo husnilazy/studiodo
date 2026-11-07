@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { superadminApi, type SupportMessage, type SupportThread } from "@/lib/superadminApi";
+import { superadminApi, type SupportAttachment, type SupportMessage, type SupportThread } from "@/lib/superadminApi";
+import ChatBody from "@/components/ChatBody";
+import SupportCasesPanel from "@/components/SupportCasesPanel";
+import { imagesFrom, shrinkImage } from "@/lib/imageUpload";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import { errMessage, fieldClass, fmtDate } from "@/lib/leadUi";
@@ -17,17 +20,26 @@ export default function SupportInboxPanel({ onChanged }: { onChanged?: () => voi
   const [open, setOpen] = useState<Open | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"chat" | "cases">("chat");
+  const [files, setFiles] = useState<SupportAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const loadList = useCallback(async () => {
-    try { const r = await superadminApi.getSupportThreads(); setThreads(r?.threads ?? []); } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setLoading(false); }
+    try {
+      const r = await superadminApi.getSupportThreads();
+      setThreads(r?.threads ?? []);
+      // New messages chime + pop up from the dashboard-wide alert poll (lib/useAdminAlerts.ts), so it works from any section.
+    } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setLoading(false); }
   }, []);
   const loadThread = useCallback(async (id: string) => {
     try { const r = await superadminApi.getSupportThread(id); if (r) { setOpen(r); onChanged?.(); } } catch (err) { pushToast({ type: "error", title: errMessage(err) }); }
   }, [onChanged]);
 
-  useEffect(() => { void loadList(); const t = window.setInterval(() => { if (document.visibilityState === "visible") void loadList(); }, 30_000); return () => window.clearInterval(t); }, [loadList]);
+  useEffect(() => { void loadList(); const t = window.setInterval(() => { if (document.visibilityState === "visible") void loadList(); }, 15_000); return () => window.clearInterval(t); }, [loadList]);
   useEffect(() => {
+    setFiles([]);
     if (!selected) { setOpen(null); return; }
     void loadThread(selected);
     const t = window.setInterval(() => { if (document.visibilityState === "visible") void loadThread(selected); }, 15_000);
@@ -35,10 +47,22 @@ export default function SupportInboxPanel({ onChanged }: { onChanged?: () => voi
   }, [selected, loadThread]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [open?.messages.length]);
 
+  const addFiles = async (picked: File[]) => {
+    if (!selected || picked.length === 0) return;
+    const room = 4 - files.length;
+    if (room <= 0) return pushToast({ type: "error", title: "Maksimal 4 gambar per balasan" });
+    setUploading(true);
+    try {
+      for (const original of picked.slice(0, room)) {
+        const stored = await superadminApi.uploadSupportImage(selected, await shrinkImage(original));
+        if (stored) setFiles((prev) => [...prev, stored]);
+      }
+    } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setUploading(false); }
+  };
   const send = async () => {
-    if (!selected || !text.trim() || busy) return;
+    if (!selected || (!text.trim() && files.length === 0) || busy || uploading) return;
     setBusy(true);
-    try { await superadminApi.replySupport(selected, text); setText(""); await Promise.all([loadThread(selected), loadList()]); } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
+    try { await superadminApi.replySupport(selected, text, files); setText(""); setFiles([]); await Promise.all([loadThread(selected), loadList()]); } catch (err) { pushToast({ type: "error", title: errMessage(err) }); } finally { setBusy(false); }
   };
   const setStatus = async (status: "open" | "resolved") => {
     if (!selected) return;
@@ -59,7 +83,12 @@ export default function SupportInboxPanel({ onChanged }: { onChanged?: () => voi
           <p className="mt-1 text-sm text-fg/50">Pesan dari tombol Bantuan di dashboard tenant. Balasan Anda muncul di chat dan lonceng tenant.</p>
         </div>
       </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div className="mt-4 flex gap-2 text-xs font-semibold">
+        <button type="button" onClick={() => setTab("chat")} className={`rounded-full px-4 py-1.5 ${tab === "chat" ? "bg-fg text-canvas" : "border border-fg/15 text-fg/60"}`}>Percakapan</button>
+        <button type="button" onClick={() => setTab("cases")} className={`rounded-full px-4 py-1.5 ${tab === "cases" ? "bg-fg text-canvas" : "border border-fg/15 text-fg/60"}`}>Kasus &amp; bug</button>
+      </div>
+      {tab === "cases" && <div className="mt-4"><SupportCasesPanel onOpenThread={(id) => { setSelected(id); setTab("chat"); }} /></div>}
+      <div className={`mt-4 grid gap-4 lg:grid-cols-[320px_1fr] ${tab === "chat" ? "" : "hidden"}`}>
         <div className="rounded-2xl border border-fg/10 bg-surface">
           <div className="space-y-2 border-b border-fg/10 p-3">
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari tenant atau pesan…" className={fieldClass} />
@@ -105,16 +134,34 @@ export default function SupportInboxPanel({ onChanged }: { onChanged?: () => voi
                 {open.messages.map((m: SupportMessage) => (
                   <div key={m.id} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.sender === "admin" ? "bg-accent text-white" : "bg-fg/[0.07]"}`}>
-                      <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                      <ChatBody text={m.body} attachments={m.attachments} />
                       <p className={`mt-1 text-[10px] ${m.sender === "admin" ? "text-white/70" : "text-fg/40"}`}>{m.author ?? (m.sender === "admin" ? "Tim" : "Tenant")} · {fmtDate(m.createdAt)}</p>
                     </div>
                   </div>
                 ))}
                 <div ref={endRef} />
               </div>
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-3 pt-2">
+                  {files.map((f) => (
+                    <div key={f.url} className="relative">
+                      <img src={f.url} alt={f.name} className="h-14 w-14 rounded-lg object-cover" />
+                      <button type="button" aria-label="Hapus gambar" onClick={() => setFiles((prev) => prev.filter((x) => x.url !== f.url))} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-fg text-[10px] text-canvas">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
               <div className="flex items-end gap-2 border-t border-fg/10 p-3">
-                <textarea rows={2} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="Tulis balasan… (Enter kirim, Shift+Enter baris baru)" className={`${fieldClass} flex-1 resize-none`} />
-                <button type="button" disabled={!text.trim() || busy} onClick={() => void send()} className="h-11 rounded-xl bg-accent px-5 text-sm font-semibold text-white disabled:opacity-40">{busy ? "…" : "Balas"}</button>
+                <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading || files.length >= 4} aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-fg/15 text-lg disabled:opacity-40">{uploading ? "…" : "📎"}</button>
+                <textarea
+                  rows={2} value={text} maxLength={2000}
+                  onChange={(e) => setText(e.target.value)}
+                  onPaste={(e) => { const pics = imagesFrom(e.clipboardData); if (pics.length) { e.preventDefault(); void addFiles(pics); } }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+                  placeholder="Tulis balasan, tempel link / screenshot… (Enter kirim, Shift+Enter baris baru)" className={`${fieldClass} flex-1 resize-none`}
+                />
+                <button type="button" disabled={(!text.trim() && files.length === 0) || busy || uploading} onClick={() => void send()} className="h-11 rounded-xl bg-accent px-5 text-sm font-semibold text-white disabled:opacity-40">{busy ? "…" : "Balas"}</button>
               </div>
             </>
           )}
