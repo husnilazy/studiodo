@@ -11,11 +11,11 @@ import { MAX_BOOTHS_PER_ORDER, quoteBooths, readVolumeTiers } from "../lib/booth
 import { logEvent } from "../lib/platformEvents.js";
 import { signAdminToken } from "../lib/jwt.js";
 import { revokeSessions, sessionVersion } from "../lib/sessionGuard.js";
-import { createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
+import { chargeQris, createSnapTransaction, outcomeFromNotification, verifyNotificationSignature, type MidtransNotification } from "../lib/midtrans.js";
 import { createXenditInvoice, outcomeFromInvoice, verifyCallbackToken, type XenditInvoiceCallback } from "../lib/xenditBilling.js";
 import { loadGateway, noteWebhook, usableGateways } from "../lib/gateways.js";
 import { reconcileOrder, sendInvoiceEmail, settleOrder } from "../lib/billing.js";
-import { buildInvoice, invoiceUrl } from "../lib/invoice.js";
+import { buildInvoice, invoiceToken, invoiceUrl } from "../lib/invoice.js";
 import { portalBaseUrl } from "../lib/urls.js";
 import { deliver, passwordChangedMail } from "../lib/emails.js";
 import { TENANT_CATEGORIES, cleanPrefsPatch, getPrefs, setPrefs } from "../lib/emailPrefs.js";
@@ -306,17 +306,28 @@ portalRouter.post("/billing/checkout", async (req, res) => {
 
   for (const gw of gateways) {
     // A fresh order id per attempt: a gateway that failed mid-way may already have recorded the previous one.
-    const orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    let orderId = `SDO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
     try {
       let redirectUrl: string;
       let snapToken: string | null = null;
+      let qrString: string | null = null;
       let providerRef: string | null = null;
       if (gw.provider === "midtrans") {
-        const snap = await createSnapTransaction({ serverKey: gw.secretKey!, production: gw.environment === "production" }, {
-          orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl, unfinishUrl, errorUrl,
-        });
-        redirectUrl = snap.redirectUrl;
-        snapToken = snap.token;
+        const mcfg = { serverKey: gw.secretKey!, production: gw.environment === "production" };
+        // STUDIODO's own payment page (QRIS): charge through the Core API and draw the QR ourselves. If Midtrans refuses
+        // (QRIS not enabled on the account, API down), fall back to the hosted Snap page so the tenant can still pay.
+        try {
+          const qris = await chargeQris(mcfg, { orderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name });
+          qrString = qris.qrString;
+          redirectUrl = `${portalBaseUrl()}/bayar/${encodeURIComponent(orderId)}?t=${encodeURIComponent(invoiceToken(orderId))}`;
+        } catch (qe) {
+          logEvent({ tenantId, level: "warning", category: "billing", action: "checkout.qris_fallback", message: `QRIS langsung via Midtrans gagal, memakai halaman Snap: ${qe instanceof Error ? qe.message : String(qe)}`.slice(0, 280), actorType: "tenant_admin", actorLabel: admin.email });
+          const snapOrderId = `${orderId}-S`;
+          const snap = await createSnapTransaction(mcfg, { orderId: snapOrderId, grossAmount: amount, itemName, customerEmail: admin.email, customerName: tenant.name, finishUrl, unfinishUrl, errorUrl });
+          orderId = snapOrderId;
+          redirectUrl = snap.redirectUrl;
+          snapToken = snap.token;
+        }
       } else {
         const invoice = await createXenditInvoice({ secretKey: gw.secretKey! }, { orderId, amount, description: `STUDIODO — ${itemName}`, customerEmail: admin.email, finishUrl });
         redirectUrl = invoice.redirectUrl;
@@ -325,7 +336,7 @@ portalRouter.post("/billing/checkout", async (req, res) => {
       const [created] = await db.insert(billingOrders).values({
         orderId, provider: gw.provider, providerRef, tenantId, planId: plan.id, planName: plan.name, amount: String(amount), periodDays,
         items, boothCount: items.length, discountPercent: quote.discountPercent,
-        snapToken, redirectUrl,
+        snapToken, redirectUrl, qrString,
       }).returning({ id: billingOrders.id });
       void sendInvoiceEmail(created.id); // the invoice lands in the registered inbox right away, with a pay link
       logEvent({ tenantId, category: "billing", action: "checkout.created", message: `Checkout ${orderId} (${gw.provider}) dibuat: ${plan.name}, ${items.length} booth, Rp ${amount.toLocaleString("id-ID")}${quote.discountPercent > 0 ? ` (diskon ${quote.discountPercent}%)` : ""}`, actorType: "tenant_admin", actorLabel: admin.email });

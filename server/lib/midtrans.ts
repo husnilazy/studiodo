@@ -46,6 +46,39 @@ export async function createSnapTransaction(
   return { token: body.token, redirectUrl: body.redirect_url };
 }
 
+export type QrisCharge = { qrString: string; expiresAt: Date | null };
+
+/**
+ * Charges a dynamic QRIS through the Core API, so STUDIODO can draw its own payment page (QR, amount, countdown) instead of
+ * sending the tenant to Midtrans' Snap page. Throws when Midtrans refuses (e.g. QRIS is not enabled on the merchant account);
+ * the caller then falls back to Snap, so a tenant is never left without a way to pay.
+ */
+export async function chargeQris(
+  cfg: MidtransCfg,
+  input: { orderId: string; grossAmount: number; itemName: string; customerEmail: string; customerName: string },
+): Promise<QrisCharge> {
+  const res = await fetch(`${coreBase(cfg)}/v2/charge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: basicAuth(cfg) },
+    body: JSON.stringify({
+      payment_type: "qris",
+      qris: { acquirer: "gopay" },
+      transaction_details: { order_id: input.orderId, gross_amount: input.grossAmount },
+      item_details: [{ id: input.orderId, price: input.grossAmount, quantity: 1, name: input.itemName.slice(0, 50) }],
+      customer_details: { first_name: input.customerName.slice(0, 50), email: input.customerEmail },
+      custom_expiry: { expiry_duration: 24, unit: "hour" },
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as { status_code?: string; status_message?: string; qr_string?: string; expiry_time?: string };
+  const code = Number(body.status_code ?? res.status);
+  if (code !== 201 && code !== 200) throw new Error(body.status_message || `Midtrans menolak QRIS (HTTP ${res.status}, kode ${code})`);
+  if (!body.qr_string) throw new Error("Midtrans tidak mengirim kode QRIS");
+  // expiry_time comes as "YYYY-MM-DD HH:mm:ss" in WIB (UTC+7).
+  const expiresAt = body.expiry_time ? new Date(body.expiry_time.replace(" ", "T") + "+07:00") : null;
+  return { qrString: body.qr_string, expiresAt: expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null };
+}
+
 /**
  * Verifies the credentials without creating anything: asks for the status of an order that cannot exist.
  * Valid key → Midtrans answers 404 ("transaction doesn't exist"); wrong key or wrong environment → 401.

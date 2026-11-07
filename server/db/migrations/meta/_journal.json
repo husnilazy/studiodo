@@ -379,6 +379,13 @@
       "when": 1794060671833,
       "tag": "0053_signup_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794068965262,
+      "tag": "0054_billing_qr",
+      "breakpoints": true
     }
   ]
 }

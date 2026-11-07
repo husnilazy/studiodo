@@ -791,6 +791,7 @@ export const billingOrders = pgTable("billing_orders", {
   snapToken: text("snap_token"),
   redirectUrl: text("redirect_url"),
   paymentType: text("payment_type"), // as reported by Midtrans, e.g. 'qris' | 'bank_transfer'
+  qrString: text("qr_string"), // the QRIS payload for the custom pay page (Midtrans Core API charge); null for Snap/Xendit orders
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [index("billing_orders_tenant_id_idx").on(table.tenantId)]);
