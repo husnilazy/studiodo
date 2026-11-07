@@ -2,6 +2,7 @@ import { ts } from "./sqlDate.js";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { platformSettings, sessions, tenants, walletLedger, withdrawals } from "../db/schema.js";
+import { loadPlatformDoku } from "./platformDoku.js";
 import { checkWithdrawal, mergePolicy, startOfWibDay, windowStatus, type WindowStatus, type WithdrawalPolicy } from "./withdrawalPolicy.js";
 
 // The QRIS wallet of a platform-settled tenant (tenants.qrisSettlement = 'platform'): STUDIODO's gateway received the money,
@@ -140,13 +141,15 @@ export async function creditPlatformPayment(tenantId: string, sessionId: string,
 
 /** Successful QRIS sessions of platform-settled tenants that have no ledger credit yet (a missed webhook, an old install…). */
 export async function findUncreditedPayments(tenantId?: string, dbx: Dbx = db) {
+  // While STUDIODO's DOKU account is in sandbox its "payments" are simulated: never offer them for crediting (see creditWallet in routes/payment.ts).
+  const dokuIsReal = Boolean((await loadPlatformDoku())?.production);
   return dbx
     .select({ id: sessions.id, tenantId: sessions.tenantId, amount: sessions.totalAmount, createdAt: sessions.createdAt })
     .from(sessions)
     .innerJoin(tenants, eq(tenants.id, sessions.tenantId))
     .where(and(
       eq(tenants.qrisSettlement, "platform"),
-      inArray(sessions.paymentMethod, ["qris", "doku"]),
+      inArray(sessions.paymentMethod, dokuIsReal ? ["qris", "doku"] : ["qris"]),
       eq(sessions.paymentStatus, "success"),
       sql`${sessions.totalAmount} > 0`,
       sql`(${tenants.qrisPlatformSince} is null or ${sessions.createdAt} >= ${tenants.qrisPlatformSince})`,

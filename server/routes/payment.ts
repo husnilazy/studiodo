@@ -167,6 +167,21 @@ async function completeAdditionalPrintPayment(tenantId: string, sessionId: strin
 // Marks a session (or its extra-print charge) as paid after a gateway confirmed it. The session must belong to this tenant,
 // and an underpaid amount is ignored (a leaked webhook token/secret shouldn't be enough to mark an underpaid session as paid).
 // Only enforced when the payload carried a parseable amount: silently rejecting a genuine payment over a missed field would hurt real customers.
+// Credits the tenant's wallet for a gateway payment — except when STUDIODO's DOKU account is still in SANDBOX: those payments are
+// simulated (no real money moved), and crediting them would let a tenant withdraw real money against fake sales. The session still
+// completes, so sandbox testing works end to end; only the wallet stays untouched.
+async function creditWallet(tenantId: string, sessionId: string, amount: number, ref: string, method: string) {
+  if (method !== "qris" && method !== "doku") return;
+  if (method === "doku") {
+    const [owner] = await db.select({ settlement: tenants.qrisSettlement }).from(tenants).where(eq(tenants.id, tenantId));
+    if (owner?.settlement === "platform" && !(await loadPlatformDoku())?.production) {
+      console.warn(`[wallet] Pembayaran sesi ${sessionId} (Rp ${amount}) TIDAK dikreditkan: akun DOKU STUDIODO masih mode sandbox.`);
+      return;
+    }
+  }
+  await creditPlatformPayment(tenantId, sessionId, amount, ref);
+}
+
 // `forAdditional` is set by webhooks that learn WHICH invoice was paid from the payload (an extra-print invoice carries "-additional-"):
 // a re-delivered notification for the first payment must never complete a later extra-print charge, and vice versa. Callers that
 // asked the gateway about the session's CURRENT invoice themselves (status polling) leave it undefined.
@@ -184,7 +199,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
     } else {
       await completeAdditionalPrintPayment(tenantId, sessionId);
       // Only money the gateway really received is credited to a platform-settled tenant's wallet (a voucher-paid extra print is not).
-      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`);
+      await creditWallet(tenantId, sessionId, expected, `additional:${session.additionalPrintsPaid + session.additionalPrintsPending}`, method);
     }
   } else {
     const expected = Number(session.totalAmount ?? 0);
@@ -196,7 +211,7 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       const flipped = await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method })
         .where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId), ne(sessions.paymentStatus, "success"))).returning({ id: sessions.id });
       if (flipped.length === 0) return;
-      if (method === "qris" || method === "doku") await creditPlatformPayment(tenantId, sessionId, expected, "session");
+      await creditWallet(tenantId, sessionId, expected, "session", method);
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
   }
