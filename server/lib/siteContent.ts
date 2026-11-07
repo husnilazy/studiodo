@@ -106,6 +106,42 @@ export const SECTION_DEFS: SectionDef[] = [
     defaults: { caption: "Dipakai oleh bisnis photobooth seperti", logos: [] },
   },
   {
+    key: "integrations",
+    label: "Terintegrasi dengan",
+    description: "Kamera, gateway pembayaran, dan perangkat yang didukung. Logo bersifat opsional: pasang hanya logo merek yang Anda punya izin pakainya, dan jangan menulis \"resmi\" atau \"partner\" kecuali benar-benar ada perjanjiannya.",
+    fields: [
+      { key: "eyebrow", label: "Label kecil", type: "text", max: 40 },
+      { key: "title", label: "Judul", type: "text", max: 120 },
+      { key: "subtitle", label: "Sub-judul", type: "textarea", max: 240 },
+      {
+        key: "items", label: "Item", type: "list", itemLabel: "Item", maxItems: 12,
+        itemFields: [
+          { key: "group", label: "Kelompok", type: "select", options: [{ value: "kamera", label: "Kamera" }, { value: "pembayaran", label: "Pembayaran" }, { value: "cetak", label: "Cetak" }] },
+          { key: "name", label: "Nama", type: "text", max: 40 },
+          { key: "note", label: "Keterangan singkat", type: "text", max: 100 },
+          { key: "image", label: "Logo (opsional)", type: "image", hint: "PNG/SVG transparan, mendatar. Tanpa logo, nama tampil sebagai teks." },
+        ],
+      },
+      { key: "footnote", label: "Catatan kaki", type: "textarea", max: 240 },
+    ],
+    defaults: {
+      eyebrow: "Terintegrasi",
+      title: "Terhubung ke kamera, pembayaran, dan printer yang sudah Anda pakai.",
+      subtitle: "Tidak perlu mengganti perangkat. STUDIODO bekerja dengan kamera Canon EOS, QRIS dari gateway pilihan Anda, dan printer Windows apa pun.",
+      items: [
+        { group: "kamera", name: "Canon EOS", note: "ISO, shutter, aperture, dan white balance diatur dari dashboard. Diuji pada EOS 1300D.", image: "" },
+        { group: "kamera", name: "Webcam", note: "Langsung pakai, tanpa instal tambahan.", image: "" },
+        { group: "kamera", name: "DSLR dan mirrorless lain", note: "Lewat digiCamControl.", image: "" },
+        { group: "pembayaran", name: "QRIS", note: "Semua e-wallet dan m-banking.", image: "" },
+        { group: "pembayaran", name: "Xendit", note: "QRIS langsung di layar kiosk.", image: "" },
+        { group: "pembayaran", name: "DOKU", note: "QRIS langsung atau halaman bayar DOKU.", image: "" },
+        { group: "pembayaran", name: "Midtrans", note: "Pembayaran langganan STUDIODO.", image: "" },
+        { group: "cetak", name: "Printer Windows", note: "Printer apa pun yang punya driver Windows.", image: "" },
+      ],
+      footnote: "Nama dan logo merek adalah milik pemiliknya masing-masing dan hanya menunjukkan perangkat serta layanan yang didukung, bukan kerja sama resmi.",
+    },
+  },
+  {
     key: "features",
     label: "Fitur",
     description: "Kartu fitur. Kartu terakhir tampil dengan gaya gelap sebagai sorotan.",
