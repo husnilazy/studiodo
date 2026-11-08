@@ -312,12 +312,14 @@ export default function SesiFoto() {
       setRemainingSeconds(0);
       return;
     }
-    beginSessionTimer();
-    const timer = window.setInterval(() => {
+    beginSessionTimer(); // normally already started by the payment (markPaid); only starts here if this screen was reached without one
+    const tick = () => {
       const startedAt = useKioskSession.getState().sessionStartedAt;
       const elapsed = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
       setRemainingSeconds(Math.max(0, sessionTimerMinutes * 60 - elapsed));
-    }, 1000);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [beginSessionTimer, eventTimerEnabled, sessionTimerMinutes]);
 

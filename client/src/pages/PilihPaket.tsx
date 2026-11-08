@@ -10,6 +10,7 @@ import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { usePaidGuard } from "@/lib/usePaidGuard";
 import { resolvePackageLayout } from "@/lib/kioskStyles";
 
 const EVENT_PACKAGE_ID = "event-session";
@@ -207,6 +208,7 @@ function SinglePriceCard({ pkg, printOption, onChoose }: { pkg: Package; printOp
 
 export default function PilihPaket() {
   const [, navigate] = useLocation();
+  usePaidGuard();
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedPackage, setPackage, setSelectedExtras } = useKioskSession();

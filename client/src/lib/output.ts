@@ -1,5 +1,5 @@
 import type { LocalTemplate } from "./templateStore";
-import { composeFilterCss, type CameraFilter, type ColorCorrection, type PhotoSticker } from "./sessionStore";
+import { composeFilterCss, type CameraFilter, type ColorCorrection, type PhotoEdit, type PhotoSticker } from "./sessionStore";
 
 export function drawImageCover(
   ctx: CanvasRenderingContext2D,
@@ -9,12 +9,20 @@ export function drawImageCover(
   width: number,
   height: number,
   mirror = false,
+  /** The customer's own framing of this photo inside its slot: zoom >= 1, pan -1..1 across the spare picture area. */
+  edit?: Pick<PhotoEdit, "zoom" | "offsetX" | "offsetY">,
 ) {
-  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const zoom = Math.max(1, Math.min(4, edit?.zoom ?? 1));
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight) * zoom;
   const sourceWidth = width / scale;
   const sourceHeight = height / scale;
-  const sourceX = (image.naturalWidth - sourceWidth) / 2;
-  const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  const slackX = Math.max(0, image.naturalWidth - sourceWidth);
+  const slackY = Math.max(0, image.naturalHeight - sourceHeight);
+  // Panning right shows more of the picture's right side; in a mirrored output the picture is flipped, so the direction flips too.
+  const panX = Math.max(-1, Math.min(1, (edit?.offsetX ?? 0) * (mirror ? -1 : 1)));
+  const panY = Math.max(-1, Math.min(1, edit?.offsetY ?? 0));
+  const sourceX = slackX / 2 + (panX * slackX) / 2;
+  const sourceY = slackY / 2 + (panY * slackY) / 2;
   if (mirror) {
     // Flip only this photo within its own slot (translate to the slot's
     // right edge, then scale -1 so the draw happens "backwards" into it) —
@@ -50,6 +58,7 @@ export async function renderTemplate(
   photoMap: Record<number, number> = {},
   correction: ColorCorrection = { brightness: 100, contrast: 100, saturation: 100 },
   mirror = false,
+  photoEdits: Record<number, PhotoEdit> = {},
 ) {
   canvas.width = template.canvasWidth;
   canvas.height = template.canvasHeight;
@@ -60,10 +69,11 @@ export async function renderTemplate(
 
   const photoImages = await Promise.all(photos.map(loadImage));
   template.slots.forEach((slot, index) => {
-    const image = photoImages[photoMap[index] ?? index];
+    const photoIndex = photoMap[index] ?? index;
+    const image = photoImages[photoIndex];
     if (!image) return;
     ctx.filter = composeFilterCss(filter, correction);
-    drawImageCover(ctx, image, slot.x * canvas.width, slot.y * canvas.height, slot.w * canvas.width, slot.h * canvas.height, mirror);
+    drawImageCover(ctx, image, slot.x * canvas.width, slot.y * canvas.height, slot.w * canvas.width, slot.h * canvas.height, mirror, photoEdits[photoIndex]);
   });
   ctx.filter = "none";
 

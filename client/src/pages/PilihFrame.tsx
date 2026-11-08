@@ -37,6 +37,8 @@ export default function PilihFrame() {
   const [, navigate] = useLocation();
   const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
+  // Paid already: the steps before the payment are closed, so there is no "back" here (it used to land on the idle screen).
+  const paymentDone = useKioskSession((s) => s.paymentDone);
   // A custom-frame voucher already put the customer's own frame in the session: nothing to choose, go on.
   const lockedFrame = useKioskSession((s) => s.selectedTemplateData?.style === CUSTOM_FRAME_LOCK);
   useEffect(() => {
@@ -290,7 +292,7 @@ export default function PilihFrame() {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center justify-between gap-3 border-t border-fg/10 pt-4">
-                  <div className="[&_button]:!min-h-0 [&_button]:!gap-2 [&_button]:!px-[16px] [&_button]:!py-[10px] [&_button]:!text-[17px] [&_button]:whitespace-nowrap [&_svg]:!h-[18px] [&_svg]:!w-[18px]"><BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} /></div>
+                  <div className="[&_button]:!min-h-0 [&_button]:!gap-2 [&_button]:!px-[16px] [&_button]:!py-[10px] [&_button]:!text-[17px] [&_button]:whitespace-nowrap [&_svg]:!h-[18px] [&_svg]:!w-[18px]">{!paymentDone && <BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} />}</div>
                   <div className="flex items-center gap-2">
                     <Positionable id="no-frame-button" type="system-button" label="Lanjut tanpa frame">
                       <button type="button" onClick={() => choose(true)} className="k-btn k-btn-ghost !min-h-0 !px-[14px] !py-[10px] !text-[17px] whitespace-nowrap">Tanpa frame</button>
@@ -312,7 +314,7 @@ export default function PilihFrame() {
         {/* Action bar: always visible, so "what do I press now?" is never a question */}
         {!wide && <div className="glass-panel shrink-0 rounded-none border-x-0 border-b-0 px-6 py-4 md:px-10">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3">
-            <BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} />
+            {!paymentDone && <BackButton onClick={() => navigate(getPreviousRoute("frame", kioskFlow))} />}
             <p className="hidden min-w-0 flex-1 truncate text-center text-sm text-muted xl:block">
               {noFrameSelected ? "Tanpa frame" : selected ? <>Dipilih: <strong className="text-fg">{selected.name}</strong></> : "Belum ada frame dipilih"}
             </p>

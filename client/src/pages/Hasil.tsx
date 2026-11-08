@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
 import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
-import type { CameraFilter, PhotoSticker } from "@/lib/sessionStore";
+import type { CameraFilter, PhotoEdit, PhotoSticker } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import type { BoothConfig } from "@/lib/boothConfigStore";
 import { drawStickers, renderTemplate } from "@/lib/output";
@@ -90,12 +90,13 @@ async function renderPrintStrip(
   stripTemplate: BoothConfig["stripTemplate"],
   filter: CameraFilter,
   mirror: boolean,
+  photoEdits: Record<number, PhotoEdit> = {},
 ) {
   const sourceCanvas = document.createElement("canvas");
   if (template) {
-    await renderTemplate(photoUrls, template, sourceCanvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, mirror);
+    await renderTemplate(photoUrls, template, sourceCanvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, mirror, photoEdits);
   } else {
-    await renderPhotoStrip(photoUrls, sourceCanvas, { accentColor, stripLayout, stripTemplate, outputPreset: "4r", filter, mirror });
+    await renderPhotoStrip(photoUrls, sourceCanvas, { accentColor, stripLayout, stripTemplate, outputPreset: "4r", filter, mirror, photoEdits });
     await drawStickers(sourceCanvas, photoStickers, stickerAssets);
   }
 
@@ -115,7 +116,7 @@ async function renderPrintStrip(
 
 export default function Hasil() {
   const [, navigate] = useLocation();
-  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl, mediaPipeline } = useKioskSession();
+  const { photoUrls, sessionId, selectedTemplateId, selectedTemplateData, outputPreset, filter, colorCorrection, mediaUrls, mediaKinds, resetSession, photoEdits, templatePhotoMap, outputMirrored, selectedPackage, setMediaUrl, stopMotionUrl, setStopMotionUrl, mediaPipeline } = useKioskSession();
   const storedTemplate = useTemplateLibrary((state) => state.templates.find((item) => item.id === selectedTemplateId));
   const template = selectedTemplateData ?? storedTemplate;
   const { photoStickers } = useKioskSession();
@@ -295,9 +296,9 @@ export default function Hasil() {
     (async () => {
       const canvas = canvasRef.current!;
       if (template) {
-        await renderTemplate(photoUrls, template, canvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, outputMirrored);
+        await renderTemplate(photoUrls, template, canvas, photoStickers, stickerAssets, filter, templatePhotoMap, colorCorrection, outputMirrored, photoEdits);
       } else {
-        await renderPhotoStrip(photoUrls, canvas, { accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate, outputPreset, filter, mirror: outputMirrored });
+        await renderPhotoStrip(photoUrls, canvas, { accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate, outputPreset, filter, mirror: outputMirrored, photoEdits });
         await drawStickers(canvas, photoStickers, stickerAssets);
       }
       setStripDataUrl(canvas.toDataURL("image/jpeg", 0.95));
@@ -443,7 +444,7 @@ export default function Hasil() {
       if (window.studiodo?.printImage) {
         // Let the overlay paint before the heavy canvas render starts, otherwise it freezes on the old screen.
         await new Promise<void>((resolve) => window.setTimeout(resolve, 60));
-        const printDataUrl = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored);
+        const printDataUrl = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored, photoEdits);
         setPrintStage("sending");
         const result = await window.studiodo.printImage({
           dataUrl: printDataUrl,

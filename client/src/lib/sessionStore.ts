@@ -65,6 +65,8 @@ interface KioskSessionState {
   templatePhotoMap: Record<number, number>;
   selectedExtras: { id: string; name: string; price: number; qty?: number }[];
   sessionStartedAt: number | null;
+  /** True once the payment has cleared (QRIS, voucher, cash, free): from then on the customer cannot go back before the payment step. */
+  paymentDone: boolean;
   mediaUrl: string | null;
   mediaUrls: string[];
   /** What each entry of mediaUrls is, so screens never have to guess from the address. */
@@ -102,6 +104,7 @@ interface KioskSessionState {
   setSlotClipUrl: (slot: number, url: string) => void;
   setPhotoEdit: (slot: number, edit: PhotoEdit) => void;
   beginSessionTimer: () => void;
+  markPaid: () => void;
   setPhotoAtSlot: (slot: number, url: string) => void;
   setCurrentSlot: (slot: number) => void;
   incrementRetake: (slot: number) => boolean;
@@ -124,6 +127,7 @@ const initial = {
   templatePhotoMap: {},
   selectedExtras: [],
   sessionStartedAt: null,
+  paymentDone: false,
   mediaUrl: null,
   mediaUrls: [] as string[],
   mediaKinds: {} as Record<string, "gif" | "video">,
@@ -173,6 +177,8 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
       return { slotClipUrls };
     }),
   setPhotoEdit: (slot, edit) => set((state) => ({ photoEdits: { ...state.photoEdits, [slot]: edit } })),
+  // The payment clearing starts the session clock (payment -> frame -> photos -> editing share one time limit).
+  markPaid: () => set({ paymentDone: true, sessionStartedAt: Date.now() }),
   beginSessionTimer: () => set((state) => ({ sessionStartedAt: state.sessionStartedAt ?? Date.now() })),
   setPhotoAtSlot: (slot, url) =>
     set((s) => {

@@ -1,6 +1,6 @@
 import { drawImageCover, loadImage } from "./output";
 import { OUTPUT_PRESETS } from "./templateStore";
-import type { CameraFilter } from "./sessionStore";
+import type { CameraFilter, PhotoEdit } from "./sessionStore";
 import { FILTER_CSS } from "./sessionStore";
 import type { StripLayout, StripVisualTemplate } from "./boothConfigStore";
 
@@ -11,6 +11,8 @@ export interface StripRenderOptions {
   outputPreset: string;
   filter: CameraFilter;
   mirror?: boolean;
+  /** Zoom / pan the customer set per photo (keyed by photo number). */
+  photoEdits?: Record<number, PhotoEdit>;
 }
 
 interface Slot {
@@ -265,7 +267,7 @@ export async function renderPhotoStrip(photoUrls: string[], canvas: HTMLCanvasEl
       ctx.shadowBlur = 0;
     }
     ctx.filter = FILTER_CSS[options.filter] ?? "none";
-    drawImageCover(ctx, image, slot.x, slot.y, slot.w, slot.h, options.mirror);
+    drawImageCover(ctx, image, slot.x, slot.y, slot.w, slot.h, options.mirror, options.photoEdits?.[i]);
     ctx.filter = "none";
     paintSlotFrame(ctx, options.stripTemplate, slot, options.accentColor);
     ctx.restore();

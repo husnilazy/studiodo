@@ -124,6 +124,7 @@ export async function seedStage(stage: PreviewStage) {
     photoUrls: needsPhotos ? Array.from({ length: photoCount }, (_, i) => samplePhoto(i)) : [],
     currentSlot: 0,
     sessionStartedAt: null,
+    paymentDone: false,
   });
 }
 

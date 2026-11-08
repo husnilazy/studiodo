@@ -264,7 +264,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   countdownSeconds: 3,
   beepEnabled: true,
   autoCaptureEnabled: false,
-  sessionTimerMinutes: 5,
+  sessionTimerMinutes: 7,
   cameraMode: "webcam",
   tetherBridgeUrl: "http://127.0.0.1:5510",
   cameraPreset: {},

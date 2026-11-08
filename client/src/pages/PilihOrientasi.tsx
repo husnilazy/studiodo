@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useKioskSession } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
+import { usePaidGuard } from "@/lib/usePaidGuard";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import { BackButton, KioskPage, ScreenTitle } from "@/components/kiosk/KioskUI";
@@ -30,6 +31,7 @@ const OPTIONS = [
 
 export default function PilihOrientasi() {
   const [, navigate] = useLocation();
+  usePaidGuard();
   const setMirrorLiveView = useKioskSession((s) => s.setMirrorLiveView);
   const selectedPackage = useKioskSession((s) => s.selectedPackage);
   const config = useBoothConfig((s) => s.config);

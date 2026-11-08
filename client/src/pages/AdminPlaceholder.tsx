@@ -525,6 +525,15 @@ export default function AdminPlaceholder() {
                   <Slider label="Skala tampilan" value={config.uiScale ?? 100} min={85} max={125} step={5} onChange={(value) => set("uiScale", value)} />
                   <p className="mt-3 rounded-xl bg-fg/[0.04] px-3.5 py-2.5 text-xs text-fg/55">Lihat hasilnya langsung di pratinjau. Jika ada layar yang terlalu penuh, turunkan skala sedikit.</p>
                 </Card>
+                <Card title="Batas waktu sesi" description="Waktu tiap pelanggan, dihitung sejak pembayaran berhasil sampai selesai edit foto (pilih frame, sesi foto, dan edit). Habis waktu, foto yang sudah diambil dilanjutkan ke hasil supaya antrean tidak tertahan.">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input className={`${inputClass} !mt-0 w-28`} type="number" min={1} max={60} value={config.sessionTimerMinutes} onChange={(event) => set("sessionTimerMinutes", Math.max(1, Math.min(60, Math.round(Number(event.target.value) || 1))))} aria-label="Batas waktu sesi (menit)" />
+                    <span className="text-sm text-fg/60">menit per pelanggan</span>
+                    {[5, 7, 10, 15].map((minutes) => (
+                      <button key={minutes} type="button" onClick={() => set("sessionTimerMinutes", minutes)} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${config.sessionTimerMinutes === minutes ? "border-accent bg-accent/10 text-accent" : "border-fg/15 text-fg/65 hover:border-fg/35"}`}>{minutes}</button>
+                    ))}
+                  </div>
+                </Card>
                 <Card title="Animasi & keyboard">
                   <div className="space-y-4">
                     <Switch checked={config.animationsEnabled} onChange={(value) => set("animationsEnabled", value)} label="Animasi dan transisi" hint="Matikan bila komputer kiosk terasa berat." />

@@ -16,11 +16,13 @@ import { getNextRoute } from "@/lib/kioskFlow";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import Positionable from "@/components/Positionable";
 import ZoomableImageModal from "@/components/ZoomableImageModal";
+import SessionExpiredNotice from "@/components/kiosk/SessionExpiredNotice";
+import { formatClock, useSessionDeadline } from "@/lib/useSessionDeadline";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
 import { Spinner } from "@/components/kiosk/KioskUI";
 
-type Tab = "stiker" | "filter" | "warna" | "susunan" | "frame";
+type Tab = "stiker" | "filter" | "warna" | "susunan" | "ukuran" | "frame";
 const MAX_STICKERS = 30;
 const STICKER_BASE = 0.16; // fraction of the canvas short side at scale 1 — must match drawStickers() in lib/output.ts
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -127,7 +129,7 @@ export default function PreviewFoto() {
   const {
     photoUrls, orientation, selectedTemplateId, selectedTemplateData, setSelectedTemplateId, setSelectedTemplateData, filter, setFilter,
     colorCorrection, setColorCorrection, photoStickers, setPhotoStickers, templatePhotoMap, setTemplatePhotoMap, setCurrentSlot, incrementRetake, retakeCounts,
-    outputMirrored, setOutputMirrored, outputPreset,
+    outputMirrored, setOutputMirrored, outputPreset, photoEdits, setPhotoEdit,
   } = useKioskSession();
   const config = useBoothConfig((s) => s.config);
   const features = config.features;
@@ -154,6 +156,7 @@ export default function PreviewFoto() {
     const minimal = config.kioskStyle === "minimal";
     // Arranging comes first: it is the step customers get lost on (which photo goes in which box).
     if (template && photoUrls.length > 1) list.push({ key: "susunan", label: "Susunan foto", icon: "layers" });
+    if (photoUrls.length > 0) list.push({ key: "ukuran", label: "Zoom foto", icon: "zoom" });
     if (features.stickers && !minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.filters) list.push({ key: "filter", label: "Filter", icon: "palette" });
     if (features.stickers && minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
@@ -237,12 +240,12 @@ export default function PreviewFoto() {
     let cancelled = false;
     setRendering(true);
     (async () => {
-      if (template) await renderTemplate(photoUrls, template, canvas, [], {}, filter, templatePhotoMap, colorCorrection, outputMirrored);
-      else await renderPhotoStrip(photoUrls, canvas, { accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate, outputPreset, filter, mirror: outputMirrored });
+      if (template) await renderTemplate(photoUrls, template, canvas, [], {}, filter, templatePhotoMap, colorCorrection, outputMirrored, photoEdits);
+      else await renderPhotoStrip(photoUrls, canvas, { accentColor: config.accentColor, stripLayout: config.stripLayout, stripTemplate: config.stripTemplate, outputPreset, filter, mirror: outputMirrored, photoEdits });
       if (!cancelled) { setCanvasSize({ w: canvas.width, h: canvas.height }); setRendering(false); }
     })().catch((error) => { console.error("Preview gagal dirender", error); if (!cancelled) setRendering(false); });
     return () => { cancelled = true; };
-  }, [photoUrls, template, filter, templatePhotoMap, colorCorrection, outputMirrored, config.accentColor, config.stripLayout, config.stripTemplate, outputPreset]);
+  }, [photoUrls, template, filter, templatePhotoMap, colorCorrection, outputMirrored, photoEdits, config.accentColor, config.stripLayout, config.stripTemplate, outputPreset]);
 
   // Fit the canvas (and the sticker layer on top of it) into the preview area at its exact aspect ratio, so a
   // sticker dropped "in the corner" is in the corner of the real output.
@@ -307,6 +310,16 @@ export default function PreviewFoto() {
 
   const goNext = () => navigate(getNextRoute("preview", config.kioskFlow));
 
+  // One time limit runs from the payment to the end of editing, so nobody holds up the queue. Arriving after it already ran out
+  // (a long photo session) still leaves 45 s of editing.
+  const deadline = useSessionDeadline(45);
+
+  // Framing of the selected photo inside its box: zoom and pan (rendered into the preview, the result and the print).
+  const edit = photoEdits[selectedPhoto] ?? { zoom: 1, rotation: 0, offsetX: 0, offsetY: 0 };
+  const patchEdit = (patch: Partial<typeof edit>) => setPhotoEdit(selectedPhoto, { ...edit, ...patch });
+  const setZoom = (zoom: number) => patchEdit({ zoom: Math.max(1, Math.min(3, Math.round(zoom * 100) / 100)) });
+  const nudge = (dx: number, dy: number) => patchEdit({ offsetX: Math.max(-1, Math.min(1, edit.offsetX + dx)), offsetY: Math.max(-1, Math.min(1, edit.offsetY + dy)) });
+
   const retakesLeft = 3 - (retakeCounts[selectedPhoto] ?? 0);
   const filterCss = composeFilterCss(filter, colorCorrection);
 
@@ -322,12 +335,20 @@ export default function PreviewFoto() {
               <p className="mt-0.5 hidden text-sm text-muted sm:block">Atur foto ke kotak yang kamu mau, tambahkan stiker atau filter, lalu lanjut.</p>
             </div>
           </Positionable>
-          <Positionable id="next-button" type="system-button" label="Tombol Lanjut">
-            <button type="button" onClick={goNext} className="k-btn k-btn-accent shrink-0">
-              Selesai &amp; lanjut
-              <Icon name="arrow-right" className="h-5 w-5" />
-            </button>
-          </Positionable>
+          <div className="flex shrink-0 items-center gap-3">
+            {deadline.active && (
+              <span className={`k-chip !text-sm ${deadline.remainingSeconds <= 30 ? "!border-red-400/40 !bg-red-500/10 !text-red-500" : ""}`} aria-label="Sisa waktu sesi">
+                <Icon name="clock" className="h-4 w-4" />
+                {formatClock(deadline.remainingSeconds)}
+              </span>
+            )}
+            <Positionable id="next-button" type="system-button" label="Tombol Lanjut">
+              <button type="button" onClick={goNext} className="k-btn k-btn-accent shrink-0">
+                Selesai &amp; lanjut
+                <Icon name="arrow-right" className="h-5 w-5" />
+              </button>
+            </Positionable>
+          </div>
         </header>
 
         <div className="mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 grid-rows-[minmax(0,1.3fr)_minmax(0,1fr)] gap-3 px-4 pb-4 md:px-8 landscape:lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] landscape:lg:grid-rows-1">
@@ -470,6 +491,47 @@ export default function PreviewFoto() {
               )}
 
               {/* ---- Warna ---- */}
+              {/* ---- Zoom foto (make a photo bigger or smaller inside its box, and move it) ---- */}
+              {activeTab === "ukuran" && (
+                <div className="flex flex-col gap-4 p-1">
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {photoUrls.map((url, photoIndex) => (
+                      <button key={`${url}-${photoIndex}`} type="button" onClick={() => setSelectedPhoto(photoIndex)} aria-pressed={selectedPhoto === photoIndex} aria-label={`Foto ${photoIndex + 1}`} className={`relative h-16 w-14 shrink-0 overflow-hidden rounded-xl border-2 transition ${selectedPhoto === photoIndex ? "border-accent ring-4 ring-accent/25" : "border-fg/15"}`}>
+                        <img src={url} alt="" className="h-full w-full object-cover" style={{ transform: outputMirrored ? "scaleX(-1)" : undefined }} />
+                        <span className="absolute left-1 top-1 rounded-full bg-black/70 px-1.5 text-[0.6rem] font-bold text-white">{photoIndex + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted">Foto {selectedPhoto + 1}: perbesar atau perkecil, lalu geser supaya pas di dalam kotaknya.</p>
+                  <div>
+                    <span className="mb-2 flex justify-between text-sm font-semibold"><span>Ukuran</span><span className="text-muted">{Math.round(edit.zoom * 100)}%</span></span>
+                    <div className="flex items-center gap-3">
+                      <button type="button" aria-label="Perkecil" onClick={() => setZoom(edit.zoom - 0.1)} disabled={edit.zoom <= 1} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-fg/15 bg-fg/5 text-2xl leading-none disabled:opacity-35">−</button>
+                      <input type="range" aria-label="Ukuran foto" min={100} max={300} step={5} value={Math.round(edit.zoom * 100)} onChange={(e) => setZoom(Number(e.target.value) / 100)} className="h-3 min-w-0 flex-1 accent-[var(--accent)]" />
+                      <button type="button" aria-label="Perbesar" onClick={() => setZoom(edit.zoom + 0.1)} disabled={edit.zoom >= 3} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-fg/15 bg-fg/5 text-2xl leading-none disabled:opacity-35">+</button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="mb-2 block text-sm font-semibold">Geser</span>
+                    <div className="grid w-fit grid-cols-3 gap-1.5">
+                      <span />
+                      <button type="button" aria-label="Geser ke atas" onClick={() => nudge(0, -0.15)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-fg/15 bg-fg/5 text-lg">▲</button>
+                      <span />
+                      <button type="button" aria-label="Geser ke kiri" onClick={() => nudge(-0.15, 0)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-fg/15 bg-fg/5 text-lg">◀</button>
+                      <button type="button" aria-label="Pusatkan" onClick={() => patchEdit({ offsetX: 0, offsetY: 0 })} className="flex h-12 w-12 items-center justify-center rounded-xl border border-fg/15 bg-fg/5 text-[0.65rem] font-bold">TENGAH</button>
+                      <button type="button" aria-label="Geser ke kanan" onClick={() => nudge(0.15, 0)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-fg/15 bg-fg/5 text-lg">▶</button>
+                      <span />
+                      <button type="button" aria-label="Geser ke bawah" onClick={() => nudge(0, 0.15)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-fg/15 bg-fg/5 text-lg">▼</button>
+                      <span />
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setPhotoEdit(selectedPhoto, { zoom: 1, rotation: 0, offsetX: 0, offsetY: 0 })} disabled={edit.zoom === 1 && edit.offsetX === 0 && edit.offsetY === 0} className="k-btn self-start !min-h-0 !py-2.5 !text-sm disabled:opacity-40">
+                    <Icon name="refresh" className="h-4 w-4" />
+                    Kembalikan semula
+                  </button>
+                </div>
+              )}
+
               {activeTab === "warna" && (
                 <div className="flex flex-col gap-5 p-1">
                   {([["brightness", "Kecerahan"], ["contrast", "Kontras"], ["saturation", "Warna"]] as const).map(([key, label]) => (
@@ -589,6 +651,7 @@ export default function PreviewFoto() {
           </section>
         </div>
       </div>
+      {deadline.active && deadline.remainingSeconds <= 0 && <SessionExpiredNotice detail="Waktu sesi kamu sudah habis. Hasil foto dilanjutkan sekarang." onDone={goNext} />}
       {zoomSnapshot && <ZoomableImageModal src={zoomSnapshot} alt={template?.name ?? "Preview"} onClose={() => setZoomSnapshot(null)} />}
     </ScreenLayoutBoundary>
   );

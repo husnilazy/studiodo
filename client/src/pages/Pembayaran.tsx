@@ -6,6 +6,7 @@ import VirtualKeyboard from "@/components/VirtualKeyboard";
 import QrCodeScanner from "@/components/QrCodeScanner";
 import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
+import { usePaidGuard } from "@/lib/usePaidGuard";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
 import { addPendingSession, createOfflineSessionId, isBrowserOnline } from "@/lib/offlineStore";
@@ -31,7 +32,13 @@ const POLL_FAILURE_TOLERANCE = 5;
 
 export default function Pembayaran() {
   const [, navigate] = useLocation();
-  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession, setFrameId, setSelectedTemplateId, setSelectedTemplateData } = useKioskSession();
+  const { selectedPackage, selectedExtras, orientation, sessionId, setSessionId, resetSession, setFrameId, setSelectedTemplateId, setSelectedTemplateData, markPaid } = useKioskSession();
+  usePaidGuard();
+  // Every way out of this screen means the payment is settled: start the session clock and lock out the earlier steps.
+  const leavePayment = () => {
+    markPaid();
+    navigate(getNextRoute("payment", boothConfig.kioskFlow), { replace: true });
+  };
   const boothConfig = useBoothConfig((state) => state.config);
   const offlineModeEnabled = boothConfig.offlineModeEnabled;
   const eventFreeEntryActive = boothConfig.eventEnabled && boothConfig.eventFreeEntry && (() => {
@@ -153,7 +160,7 @@ export default function Pembayaran() {
       if (sessionId) {
         await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
       }
-      navigate(getNextRoute("payment", boothConfig.kioskFlow));
+      leavePayment();
       return;
     }
     if (!sessionId || !selectedPackage || starting) return;
@@ -222,7 +229,7 @@ export default function Pembayaran() {
             if (idleReturnRef.current) clearTimeout(idleReturnRef.current);
             if (pollGraceTimeoutRef.current) clearTimeout(pollGraceTimeoutRef.current);
             setChecking(false);
-            navigate(getNextRoute("payment", boothConfig.kioskFlow));
+            leavePayment();
           } else if (status === "failed" || status === "expired") {
             if (pollRef.current) clearInterval(pollRef.current);
             if (qrisTimerRef.current) clearInterval(qrisTimerRef.current);
@@ -259,7 +266,7 @@ export default function Pembayaran() {
   const isFreePackage = totalAmount === 0 && !eventFreeEntryActive;
   const startFree = async () => {
     if (sessionId) await api.markEventFree(sessionId, selectedPackage?.name ? `Gratis · ${selectedPackage.name}` : "Gratis").catch(() => undefined);
-    navigate(getNextRoute("payment", boothConfig.kioskFlow));
+    leavePayment();
   };
 
   const closeQris = () => {
@@ -283,7 +290,7 @@ export default function Pembayaran() {
       });
       setSessionId(offlineId);
     }
-    navigate(getNextRoute("payment", boothConfig.kioskFlow));
+    leavePayment();
   };
 
   const redeemVoucher = async (codeOverride?: string) => {
@@ -291,7 +298,7 @@ export default function Pembayaran() {
       if (sessionId) {
         await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
       }
-      navigate(getNextRoute("payment", boothConfig.kioskFlow));
+      leavePayment();
       return;
     }
     const code = (codeOverride ?? voucherCode).trim();
@@ -320,7 +327,7 @@ export default function Pembayaran() {
       // collected cash on the spot) — its "amount" is the full session total,
       // not a remaining balance, so it must never fall through to QRIS.
       if (result.amount === 0 || isCash) {
-        navigate(getNextRoute("payment", boothConfig.kioskFlow));
+        leavePayment();
       } else {
           await startQris();
       }
