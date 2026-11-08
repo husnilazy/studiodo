@@ -279,6 +279,37 @@ ipcMain.on("updater:setEnabled", (_event, enabled) => {
   updaterStatus.autoUpdateEnabled = autoUpdateEnabled;
 });
 
+// GitHub (and the venue's network) fail now and then: a 5xx, a timeout, no connection. Those are not the kiosk's fault and
+// pass by themselves, so they are shown as one short sentence and retried quietly. The raw error text used to be dumped on
+// the admin screen (response headers, cookies and all).
+function describeUpdaterError(error) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const status = /\b(5\d\d)\b/.exec(raw)?.[1];
+  const networkLike = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ERR_INTERNET_DISCONNECTED|ERR_NETWORK|ERR_CONNECTION|net::|socket hang up|timed? ?out/i.test(raw);
+  if (status || networkLike) {
+    return { transient: true, message: status ? `GitHub sedang tidak merespons (kode ${status}). Dicoba lagi otomatis.` : "Tidak bisa terhubung ke server update. Dicoba lagi otomatis." };
+  }
+  if (/\b404\b/.test(raw)) return { transient: false, message: "File update belum ditemukan di GitHub Releases." };
+  if (/\b(401|403|429)\b/.test(raw)) return { transient: true, message: "GitHub menolak permintaan sementara. Dicoba lagi otomatis." };
+  const firstLine = raw.split(/\r?\n/)[0].replace(/\s+/g, " ").trim();
+  return { transient: false, message: firstLine.length > 140 ? `${firstLine.slice(0, 137)}…` : firstLine || "Gagal cek update." };
+}
+
+const UPDATE_RETRY_DELAYS_MS = [2 * 60_000, 5 * 60_000, 15 * 60_000];
+let updateRetryCount = 0;
+let updateRetryTimer = null;
+function scheduleUpdateRetry() {
+  if (updateRetryTimer || updateRetryCount >= UPDATE_RETRY_DELAYS_MS.length) return; // after three tries the regular schedule takes over
+  const delay = UPDATE_RETRY_DELAYS_MS[updateRetryCount];
+  updateRetryCount += 1;
+  console.log(`[updater] retry ${updateRetryCount}/${UPDATE_RETRY_DELAYS_MS.length} in ${Math.round(delay / 1000)}s`);
+  updateRetryTimer = setTimeout(() => {
+    updateRetryTimer = null;
+    if (!autoUpdateEnabled) return;
+    autoUpdater.checkForUpdates().catch(() => undefined); // a failure is reported by the "error" listener, which schedules the next retry
+  }, delay);
+}
+
 function setupAutoUpdater() {
   if (isDev) return; // no packaged build to replace, and no point hitting the feed from a dev checkout
   autoUpdater.autoDownload = true;
@@ -293,6 +324,7 @@ function setupAutoUpdater() {
     broadcastUpdaterStatus();
   });
   autoUpdater.on("update-available", (info) => {
+    updateRetryCount = 0;
     updaterStatus.state = "available";
     updaterStatus.version = info.version;
     updaterStatus.progressPercent = 0;
@@ -301,6 +333,7 @@ function setupAutoUpdater() {
     broadcastUpdaterStatus();
   });
   autoUpdater.on("update-not-available", () => {
+    updateRetryCount = 0;
     if (updaterStatus.state === "downloaded" || updaterStatus.state === "installing") return;
     updaterStatus.state = "not-available";
     updaterStatus.lastCheckedAt = new Date().toISOString();
@@ -325,11 +358,13 @@ function setupAutoUpdater() {
   });
   autoUpdater.on("error", (error) => {
     if (updaterStatus.state === "installing") return;
+    const { message, transient } = describeUpdaterError(error);
     updaterStatus.state = "error";
-    updaterStatus.error = error instanceof Error ? error.message : String(error);
+    updaterStatus.error = message;
     updaterStatus.lastCheckedAt = new Date().toISOString();
-    console.error("[updater] error", error);
+    console.error("[updater] error", error); // the full error (headers, cookies, body) stays in the log, never on screen
     broadcastUpdaterStatus();
+    if (transient) scheduleUpdateRetry();
   });
 
   const check = () => {
