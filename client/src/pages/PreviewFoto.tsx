@@ -4,7 +4,8 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useKioskSession } from "@/lib/sessionStore";
 import { drawStickers, renderTemplate } from "@/lib/output";
-import { renderPhotoStrip } from "@/lib/stripRenderer";
+import { layoutSlots, renderPhotoStrip } from "@/lib/stripRenderer";
+import { loadImage } from "@/lib/output";
 import { useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { BUILTIN_CATEGORIES, buildStickerAssets, resolveStickerDataUrl, useEmojiVersion } from "@/lib/builtinStickers";
@@ -18,6 +19,7 @@ import Positionable from "@/components/Positionable";
 import ZoomableImageModal from "@/components/ZoomableImageModal";
 import SessionExpiredNotice from "@/components/kiosk/SessionExpiredNotice";
 import AppleSlider from "@/components/kiosk/AppleSlider";
+import PhotoGestureLayer, { type GestureSlot } from "@/components/kiosk/PhotoGestureLayer";
 import { formatClock, useSessionDeadline } from "@/lib/useSessionDeadline";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { Icon } from "@/components/kiosk/Icons";
@@ -71,7 +73,7 @@ function StickerLayer({
   };
 
   return (
-    <div ref={layerRef} className="absolute inset-0 touch-none" onPointerDown={() => onSelect(null)} onPointerMove={onMove} onPointerUp={() => { gesture.current = null; }} onPointerCancel={() => { gesture.current = null; }}>
+    <div ref={layerRef} className="pointer-events-none absolute inset-0 touch-none" onPointerDown={() => onSelect(null)} onPointerMove={onMove} onPointerUp={() => { gesture.current = null; }} onPointerCancel={() => { gesture.current = null; }}>
       {stickers.map((sticker) => {
         const src = assets[sticker.stickerId];
         if (!src) return null;
@@ -80,7 +82,7 @@ function StickerLayer({
         return (
           <div
             key={sticker.id}
-            className="absolute"
+            className="pointer-events-auto absolute"
             style={{ left: sticker.x * box.width, top: sticker.y * box.height, width: size, height: size, transform: `translate(-50%, -50%) rotate(${sticker.rotation ?? 0}deg)`, zIndex: selected ? 20 : 10, minWidth: 44, minHeight: 44 }}
             onPointerDown={(event) => {
               event.stopPropagation();
@@ -302,6 +304,19 @@ export default function PreviewFoto() {
     navigate("/sesi-foto");
   };
 
+  // Natural size of every photo (needed to turn a finger drag into a pan amount).
+  const [photoDims, setPhotoDims] = useState<Record<number, { w: number; h: number }>>({});
+  useEffect(() => {
+    let cancelled = false;
+    photoUrls.forEach((url, index) => {
+      loadImage(url).then((img) => {
+        if (cancelled) return;
+        setPhotoDims((prev) => (prev[index]?.w === img.naturalWidth && prev[index]?.h === img.naturalHeight ? prev : { ...prev, [index]: { w: img.naturalWidth, h: img.naturalHeight } }));
+      }).catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [photoUrls]);
+
   const photoForSlot = (slot: number): number | null => {
     const index = templatePhotoMap[slot] ?? slot;
     return index >= 0 && index < photoUrls.length ? index : null;
@@ -334,6 +349,21 @@ export default function PreviewFoto() {
 
   // Framing of the selected photo inside its box: zoom and pan (rendered into the preview, the result and the print).
   const edit = photoEdits[selectedPhoto] ?? { zoom: 1, rotation: 0, offsetX: 0, offsetY: 0 };
+  const gestureSlots = useMemo<GestureSlot[]>(() => {
+    if (!canvasSize) return [];
+    if (template) {
+      return template.slots.flatMap((slot, slotIndex) => {
+        const photo = photoForSlot(slotIndex);
+        return photo === null ? [] : [{ photo, x: slot.x, y: slot.y, w: slot.w, h: slot.h }];
+      });
+    }
+    return layoutSlots(config.stripLayout, photoUrls.length, canvasSize.w, canvasSize.h)
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ slot, index }) => !slot.rotation && index < photoUrls.length)
+      .map(({ slot, index }) => ({ photo: index, x: slot.x / canvasSize.w, y: slot.y / canvasSize.h, w: slot.w / canvasSize.w, h: slot.h / canvasSize.h }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasSize, template, templatePhotoMap, photoUrls.length, config.stripLayout]);
+
   const patchEdit = (patch: Partial<typeof edit>) => setPhotoEdit(selectedPhoto, { ...edit, ...patch });
   const setZoom = (zoom: number) => patchEdit({ zoom: Math.max(1, Math.min(3, Math.round(zoom * 100) / 100)) });
   const nudge = (dx: number, dy: number) => patchEdit({ offsetX: Math.max(-1, Math.min(1, edit.offsetX + dx)), offsetY: Math.max(-1, Math.min(1, edit.offsetY + dy)) });
@@ -396,6 +426,19 @@ export default function PreviewFoto() {
                       );
                     })}
                   </div>
+                )}
+                {box && canvasSize && activeTab !== "susunan" && gestureSlots.length > 0 && (
+                  <PhotoGestureLayer
+                    slots={gestureSlots}
+                    box={box}
+                    canvas={canvasSize}
+                    dims={photoDims}
+                    edits={photoEdits}
+                    selected={selectedPhoto}
+                    onSelect={setSelectedPhoto}
+                    onEdit={setPhotoEdit}
+                    onFirstGesture={() => setSelectedStickerId(null)}
+                  />
                 )}
                 {box && features.stickers && (
                   <StickerLayer
