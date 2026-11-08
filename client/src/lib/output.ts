@@ -38,14 +38,28 @@ export function drawImageCover(
   }
 }
 
+// Every re-render of the preview (a colour slider moves 30 times a second) reloads the same photos and frame. Decoding them
+// again each time was what made the picture blink; a picture is now decoded once and reused.
+const imageCache = new Map<string, Promise<HTMLImageElement>>();
+const IMAGE_CACHE_LIMIT = 80;
+
 export function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
+  const cached = imageCache.get(src);
+  if (cached) return cached;
+  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Gagal memuat gambar: ${src}`));
     image.src = src;
   });
+  promise.catch(() => imageCache.delete(src));
+  imageCache.set(src, promise);
+  if (imageCache.size > IMAGE_CACHE_LIMIT) {
+    const oldest = imageCache.keys().next().value;
+    if (oldest !== undefined) imageCache.delete(oldest);
+  }
+  return promise;
 }
 
 export async function renderTemplate(
