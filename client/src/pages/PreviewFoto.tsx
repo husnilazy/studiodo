@@ -158,8 +158,8 @@ export default function PreviewFoto() {
     // Minimalis: the filter comes first and opens by default; stickers stay one tap away instead of filling the screen.
     const minimal = config.kioskStyle === "minimal";
     // Arranging comes first: it is the step customers get lost on (which photo goes in which box).
-    if (template && photoUrls.length > 1) list.push({ key: "susunan", label: "Susunan foto", icon: "layers" });
-    if (photoUrls.length > 0) list.push({ key: "ukuran", label: "Zoom foto", icon: "zoom" });
+    if (template && photoUrls.length > 1) list.push({ key: "susunan", label: "Susunan", icon: "layers" });
+    if (photoUrls.length > 0) list.push({ key: "ukuran", label: "Zoom", icon: "zoom" });
     if (features.stickers && !minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
     if (features.filters) list.push({ key: "filter", label: "Filter", icon: "palette" });
     if (features.stickers && minimal) list.push({ key: "stiker", label: "Stiker", icon: "smile" });
@@ -354,7 +354,7 @@ export default function PreviewFoto() {
     if (template) {
       return template.slots.flatMap((slot, slotIndex) => {
         const photo = photoForSlot(slotIndex);
-        return photo === null ? [] : [{ photo, x: slot.x, y: slot.y, w: slot.w, h: slot.h }];
+        return photo === null ? [] : [{ photo, slotIndex, x: slot.x, y: slot.y, w: slot.w, h: slot.h }];
       });
     }
     return layoutSlots(config.stripLayout, photoUrls.length, canvasSize.w, canvasSize.h)
@@ -398,7 +398,7 @@ export default function PreviewFoto() {
           </div>
         </header>
 
-        <div className="mx-auto grid min-h-0 w-full max-w-[1700px] flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 px-4 pb-4 md:px-8 landscape:lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] landscape:lg:grid-rows-1">
+        <div className="mx-auto grid min-h-0 w-full max-w-[1700px] flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 px-4 pb-4 md:px-8 landscape:lg:grid-cols-[minmax(0,1fr)_minmax(21rem,28rem)] landscape:lg:grid-rows-1">
           {/* ---------------- canvas ---------------- */}
           <section className="relative flex min-h-[42vh] min-w-0 flex-col landscape:min-h-0">
             <div ref={previewBoxRef} className="relative flex min-h-0 flex-1 items-center justify-center rounded-[1.75rem] bg-fg/[0.04]" onPointerDown={() => setSelectedStickerId(null)}>
@@ -408,26 +408,23 @@ export default function PreviewFoto() {
                 {rendering && canvasSize && <div className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5"><Spinner className="h-4 w-4 !border-white/30 !border-t-white" /></div>}
                 {template && activeTab === "susunan" && box && (
                   <div className="pointer-events-none absolute inset-0 z-30">
-                    {template.slots.map((slot, slotIndex) => {
+                    {template.slots.map((slotIndex_, slotIndex) => {
+                      const slot = slotIndex_;
                       const photo = photoForSlot(slotIndex);
                       const active = pending?.kind === "slot" && pending.index === slotIndex;
-                      return (
-                        <button
-                          key={slotIndex}
-                          type="button"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={() => tapSlot(slotIndex)}
-                          aria-label={`Kotak ${slotIndex + 1}`}
-                          className={`pointer-events-auto absolute flex items-start justify-start rounded-md border-2 transition ${active ? "border-accent bg-accent/25 shadow-[0_0_0_4px_rgba(255,255,255,0.7)]" : pending?.kind === "photo" ? "animate-pulse border-dashed border-white bg-white/20" : "border-dashed border-white/80 bg-black/10 hover:bg-white/20"}`}
-                          style={{ left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` }}
-                        >
-                          <span className="m-1 rounded-full bg-black/75 px-2 py-0.5 text-xs font-bold text-white">Kotak {slotIndex + 1}{photo !== null ? ` · Foto ${photo + 1}` : ""}</span>
-                        </button>
+                      const cls = `absolute flex items-start justify-start rounded-md border-2 transition ${active ? "border-accent bg-accent/25 shadow-[0_0_0_4px_rgba(255,255,255,0.7)]" : pending?.kind === "photo" ? "animate-pulse border-dashed border-white bg-white/20" : "border-dashed border-white/80 " + (photo === null ? "bg-black/10 hover:bg-white/20" : "")}`;
+                      const style = { left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, width: `${slot.w * 100}%`, height: `${slot.h * 100}%` };
+                      const label = <span className="m-1 rounded-full bg-black/75 px-2 py-0.5 text-xs font-bold text-white">Kotak {slotIndex + 1}{photo !== null ? ` · Foto ${photo + 1}` : ""}</span>;
+                      // A filled box lets fingers through to the photo underneath (drag / pinch); only an empty box is a button.
+                      return photo === null ? (
+                        <button key={slotIndex} type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => tapSlot(slotIndex)} aria-label={`Kotak ${slotIndex + 1}`} className={`pointer-events-auto ${cls}`} style={style}>{label}</button>
+                      ) : (
+                        <div key={slotIndex} className={cls} style={style}>{label}</div>
                       );
                     })}
                   </div>
                 )}
-                {box && canvasSize && activeTab !== "susunan" && gestureSlots.length > 0 && (
+                {box && canvasSize && gestureSlots.length > 0 && (
                   <PhotoGestureLayer
                     slots={gestureSlots}
                     box={box}
@@ -438,6 +435,7 @@ export default function PreviewFoto() {
                     onSelect={setSelectedPhoto}
                     onEdit={setPhotoEdit}
                     onFirstGesture={() => setSelectedStickerId(null)}
+                    onTap={activeTab === "susunan" ? tapSlot : undefined}
                   />
                 )}
                 {box && features.stickers && (
@@ -462,9 +460,9 @@ export default function PreviewFoto() {
 
           {/* ---------------- tools ---------------- */}
           <aside className="flex min-h-0 min-w-0 flex-col gap-3 landscape:max-h-full max-h-[37vh]">
-            <div role="tablist" aria-label="Alat edit" className="flex shrink-0 gap-1.5 overflow-x-auto pb-0.5 landscape:lg:grid landscape:lg:overflow-visible" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(tabs.length, 4))}, minmax(0, 1fr))` }}>
+            <div role="tablist" aria-label="Alat edit" className="flex shrink-0 gap-1.5 overflow-x-auto pb-0.5 landscape:lg:grid landscape:lg:overflow-visible" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(tabs.length, 6))}, minmax(0, 1fr))` }}>
               {tabs.map((t) => (
-                <button key={t.key} role="tab" aria-selected={activeTab === t.key} type="button" onClick={() => setTab((current) => (current === t.key ? null : t.key))} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold landscape:lg:flex-col landscape:lg:justify-center landscape:lg:gap-1 landscape:lg:rounded-2xl landscape:lg:px-1 landscape:lg:py-2 landscape:lg:text-[0.72rem] transition ${activeTab === t.key ? "bg-fg text-canvas shadow-md" : "bg-fg/5 text-muted hover:bg-fg/10"}`}>
+                <button key={t.key} role="tab" aria-selected={activeTab === t.key} type="button" onClick={() => setTab((current) => (current === t.key ? null : t.key))} className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold landscape:lg:flex-col landscape:lg:justify-center landscape:lg:gap-1 landscape:lg:min-w-0 landscape:lg:rounded-xl landscape:lg:px-0.5 landscape:lg:py-1.5 landscape:lg:text-[0.66rem] landscape:lg:leading-tight transition ${activeTab === t.key ? "bg-fg text-canvas shadow-md" : "bg-fg/5 text-muted hover:bg-fg/10"}`}>
                   <Icon name={t.icon} className="h-4 w-4" />
                   {t.label}
                   {t.key === "stiker" && photoStickers.length > 0 && <span className="rounded-full bg-accent px-1.5 text-[0.65rem] text-on-accent">{photoStickers.length}</span>}
@@ -473,7 +471,7 @@ export default function PreviewFoto() {
             </div>
 
             {activeTab && (
-            <div className="glass-panel flex min-h-0 flex-1 flex-col rounded-[1.75rem] p-3">
+            <div className="glass-panel flex min-h-0 flex-1 flex-col rounded-[1.5rem] p-3">
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {tabs.length === 0 && <p className="p-6 text-center text-muted">Tidak ada alat edit yang aktif. Tekan “Selesai &amp; lanjut”.</p>}
 
@@ -583,16 +581,16 @@ export default function PreviewFoto() {
 
               {/* ---- Susunan (which photo goes in which box) ---- */}
               {activeTab === "susunan" && template && (
-                <div className="flex flex-col gap-3">
-                  <div className={`rounded-2xl border p-3 text-sm font-medium transition ${pending ? "border-accent bg-accent/10 text-fg" : "border-fg/10 bg-fg/5 text-muted"}`} aria-live="polite">
-                    {pending?.kind === "slot" && <>Kotak {pending.index + 1} dipilih. <b>Sekarang ketuk foto</b> yang mau ditaruh di sana.</>}
-                    {pending?.kind === "photo" && <>Foto {pending.index + 1} dipilih. <b>Sekarang ketuk kotak</b> di frame (atau di daftar kotak) tujuannya.</>}
-                    {!pending && <>Ketuk <b>sebuah foto</b> lalu <b>kotak</b> di frame (atau sebaliknya) untuk memindahkannya. Foto yang sudah dipakai akan bertukar tempat.</>}
+                <div className="flex flex-col gap-2.5">
+                  <div className={`rounded-xl border px-3 py-1.5 text-xs leading-snug transition ${pending ? "border-accent/50 bg-accent/10 text-fg" : "border-fg/10 bg-fg/[0.04] text-muted"}`} aria-live="polite">
+                    {pending?.kind === "slot" && <>Kotak {pending.index + 1} dipilih. <b>Ketuk foto</b> yang mau ditaruh di sana.</>}
+                    {pending?.kind === "photo" && <>Foto {pending.index + 1} dipilih. <b>Ketuk kotak</b> tujuannya di frame atau daftar bawah.</>}
+                    {!pending && <>Ketuk <b>foto</b> lalu <b>kotak</b> untuk memindahkannya (bertukar tempat).</>}
                   </div>
 
                   <div>
-                    <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Semua foto kamu ({photoUrls.length})</p>
-                    <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(6.25rem, 1fr))" }}>
+                    <p className="mb-1.5 flex justify-between text-[0.65rem] font-bold uppercase tracking-wider text-muted"><span>Semua foto kamu</span><span>{photoUrls.length} foto</span></p>
+                    <div className={`grid gap-2 ${photoUrls.length > 3 ? "grid-cols-4" : "grid-cols-3"}`}>
                       {photoUrls.map((url, photoIndex) => {
                         const usedIn = template.slots.map((_, slotIndex) => slotIndex).filter((slotIndex) => photoForSlot(slotIndex) === photoIndex);
                         const armed = pending?.kind === "photo" && pending.index === photoIndex;
@@ -602,12 +600,12 @@ export default function PreviewFoto() {
                             type="button"
                             onClick={() => tapPhoto(photoIndex)}
                             aria-pressed={armed}
-                            className={`relative overflow-hidden rounded-2xl border-2 text-left transition active:scale-[0.97] ${armed ? "border-accent shadow-lg ring-4 ring-accent/30" : pending?.kind === "slot" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 hover:border-fg/30"}`}
+                            className={`relative overflow-hidden rounded-xl border-2 bg-fg/[0.04] text-left transition active:scale-[0.97] ${armed ? "border-accent ring-2 ring-accent/30" : pending?.kind === "slot" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 hover:border-fg/30"}`}
                           >
-                            <img src={url} alt={`Foto ${photoIndex + 1}`} className="aspect-[4/5] w-full object-cover" style={{ filter: filterCss, transform: outputMirrored ? "scaleX(-1)" : undefined }} />
-                            <span className="absolute left-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-xs font-bold text-white">Foto {photoIndex + 1}</span>
-                            <span className={`absolute inset-x-0 bottom-0 px-2 py-1 text-center text-[0.7rem] font-bold ${usedIn.length ? "bg-accent text-on-accent" : "bg-black/65 text-white/80"}`}>
-                              {usedIn.length ? `Di Kotak ${usedIn.map((n) => n + 1).join(", ")}` : "Belum dipakai"}
+                            <img src={url} alt={`Foto ${photoIndex + 1}`} className={`w-full object-cover ${photoUrls.length > 3 ? "aspect-[16/10]" : "aspect-[4/3]"}`} style={{ filter: filterCss, transform: outputMirrored ? "scaleX(-1)" : undefined }} />
+                            <span className="flex items-center justify-between gap-1 px-2 py-1 text-[0.68rem] font-bold">
+                              <span className={armed ? "text-accent" : ""}>Foto {photoIndex + 1}</span>
+                              <span className={`h-3 w-3 shrink-0 rounded-full border-2 ${armed ? "border-accent bg-accent" : usedIn.length ? "border-accent/70 bg-accent/30" : "border-fg/25"}`} />
                             </span>
                           </button>
                         );
@@ -616,8 +614,11 @@ export default function PreviewFoto() {
                   </div>
 
                   <div>
-                    <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Kotak di frame ({template.slots.length})</p>
-                    <div className="flex flex-wrap gap-2">
+                    <p className="mb-1.5 flex items-center justify-between text-[0.65rem] font-bold uppercase tracking-wider text-muted">
+                      <span>Pilih kotak tujuan</span>
+                      <button type="button" onClick={() => { setTemplatePhotoMap({}); setPending(null); }} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 normal-case tracking-normal text-accent hover:bg-accent/10"><Icon name="refresh" className="h-3 w-3" />Urutkan otomatis</button>
+                    </p>
+                    <div className={`grid gap-2 ${template.slots.length > 6 ? "grid-cols-4" : "grid-cols-3"}`}>
                       {template.slots.map((_, slotIndex) => {
                         const photo = photoForSlot(slotIndex);
                         const armed = pending?.kind === "slot" && pending.index === slotIndex;
@@ -627,20 +628,16 @@ export default function PreviewFoto() {
                             type="button"
                             onClick={() => tapSlot(slotIndex)}
                             aria-pressed={armed}
-                            className={`flex items-center gap-2 rounded-2xl border-2 p-1.5 pr-3 text-left transition active:scale-[0.97] ${armed ? "border-accent bg-accent/10 ring-4 ring-accent/30" : pending?.kind === "photo" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}
+                            className={`flex min-w-0 items-center gap-1.5 rounded-xl border px-1.5 py-1 text-left transition active:scale-[0.97] ${armed ? "border-accent bg-accent/10 ring-2 ring-accent/30" : pending?.kind === "photo" ? "animate-pulse border-dashed border-accent/60" : "border-fg/10 bg-fg/[0.04] hover:border-fg/30"}`}
                           >
-                            {photo !== null ? <img src={photoUrls[photo]} alt="" className="h-11 w-11 rounded-xl object-cover" style={{ transform: outputMirrored ? "scaleX(-1)" : undefined }} /> : <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-fg/10 text-muted">–</span>}
-                            <span className="text-xs font-bold leading-tight">Kotak {slotIndex + 1}<span className="block font-medium text-muted">{photo !== null ? `Foto ${photo + 1}` : "Kosong"}</span></span>
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-fg/10 text-[0.65rem] font-bold">{slotIndex + 1}</span>
+                            <span className="min-w-0 truncate whitespace-nowrap text-[0.68rem] font-bold leading-tight">{photo !== null ? `Foto ${photo + 1}` : "Kosong"}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  <button type="button" onClick={() => { setTemplatePhotoMap({}); setPending(null); }} className="k-btn self-start !min-h-0 !py-2.5 !text-sm">
-                    <Icon name="refresh" className="h-4 w-4" />
-                    Urutkan ulang otomatis
-                  </button>
                 </div>
               )}
 
@@ -685,7 +682,7 @@ export default function PreviewFoto() {
             </div>
             )}
 
-            <div className="glass-panel shrink-0 rounded-[1.75rem] p-3">
+            <div className="glass-panel shrink-0 rounded-[1.5rem] px-3.5 py-2.5">
             
             <div className="flex shrink-0 flex-col gap-2">
               <div className="flex flex-wrap items-center justify-between gap-2">

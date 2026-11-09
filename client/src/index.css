@@ -12,7 +12,7 @@
    web pages, not a walk-up touchscreen, so they opt back out below. */
 html {
   /* --ui-scale is the tenant's "Skala tampilan" setting (Kustomisasi Kiosk); 1 = the automatic screen-based size. */
-  font-size: calc(clamp(16px, 1vw + 1vh, 26px) * var(--ui-scale, 1));
+  font-size: calc(clamp(16px, 0.8vw + 0.8vh, 24px) * var(--ui-scale, 1));
 }
 html.admin-mode,
 html.public-gallery-mode {

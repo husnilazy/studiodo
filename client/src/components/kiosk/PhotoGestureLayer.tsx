@@ -9,6 +9,8 @@ export interface GestureSlot {
   y: number;
   w: number;
   h: number;
+  /** Which box of the frame this is (so a plain tap can pick it in the arrange tab). */
+  slotIndex?: number;
 }
 
 const ZOOM_MIN = 1;
@@ -26,10 +28,11 @@ interface ZoneProps {
   onSelect: (photo: number) => void;
   onEdit: (photo: number, edit: PhotoEdit) => void;
   onFirstGesture: () => void;
+  onTap?: (slotIndex: number) => void;
 }
 
 /** One photo box: drag = move the picture inside the box, pinch / wheel = zoom, double tap = zoom 2x or back to normal. */
-function Zone({ slot, box, canvas, dim, edit, selected, onSelect, onEdit, onFirstGesture }: ZoneProps) {
+function Zone({ slot, box, canvas, dim, edit, selected, onSelect, onEdit, onFirstGesture, onTap }: ZoneProps) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const lastTap = useRef(0);
@@ -115,6 +118,7 @@ function Zone({ slot, box, canvas, dim, edit, selected, onSelect, onEdit, onFirs
     if (pointers.current.size === 0) {
       setActive(false);
       if (wasDown && !moved.current) {
+        if (onTap && slot.slotIndex !== undefined) onTap(slot.slotIndex);
         const now = Date.now();
         if (now - lastTap.current < 320) {
           apply(editRef.current.zoom > 1.05 ? { zoom: 1, offsetX: 0, offsetY: 0 } : { zoom: 2 });
@@ -146,7 +150,7 @@ function Zone({ slot, box, canvas, dim, edit, selected, onSelect, onEdit, onFirs
 }
 
 /** Touch layer over the finished preview: every photo box can be moved and zoomed directly with the fingers. */
-export default function PhotoGestureLayer({ slots, box, canvas, dims, edits, selected, onSelect, onEdit, onFirstGesture }: {
+export default function PhotoGestureLayer({ slots, box, canvas, dims, edits, selected, onSelect, onEdit, onFirstGesture, onTap }: {
   slots: GestureSlot[];
   box: { width: number; height: number };
   canvas: { w: number; h: number };
@@ -156,6 +160,7 @@ export default function PhotoGestureLayer({ slots, box, canvas, dims, edits, sel
   onSelect: (photo: number) => void;
   onEdit: (photo: number, edit: PhotoEdit) => void;
   onFirstGesture: () => void;
+  onTap?: (slotIndex: number) => void;
 }) {
   return (
     <div className="absolute inset-0">
@@ -171,6 +176,7 @@ export default function PhotoGestureLayer({ slots, box, canvas, dims, edits, sel
           onSelect={onSelect}
           onEdit={onEdit}
           onFirstGesture={onFirstGesture}
+          onTap={onTap}
         />
       ))}
     </div>
