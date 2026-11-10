@@ -1,5 +1,5 @@
 import { deliverToTenant } from "./emails.js";
-import { buildInvoice, invoiceUrl } from "./invoice.js";
+import { buildInvoice, invoiceUrl, PAYMENT_WINDOW_MS } from "./invoice.js";
 import { invoiceMail } from "./invoiceEmail.js";
 import crypto from "node:crypto";
 import { and, eq, isNull, ne } from "drizzle-orm";
@@ -114,6 +114,15 @@ export async function settleOrder(order: Order, outcome: OrderOutcome, paymentTy
     }
     void sendInvoiceEmail(order.id);
     return "paid";
+  }
+
+  // A single Core API charge (e.g. a QRIS code, which Midtrans may expire much sooner than the 24h invoice window) running
+  // out must not kill the whole order while the invoice is still payable: drop that charge so the pay page offers the
+  // methods again. Only a charge made on the pay page has a providerRef; the order itself still expires after its window.
+  if (outcome === "expired" && order.provider === "midtrans" && order.providerRef && Date.now() < order.createdAt.getTime() + PAYMENT_WINDOW_MS) {
+    const reset = await db.update(billingOrders).set({ providerRef: null, paymentInstruction: null })
+      .where(and(eq(billingOrders.id, order.id), eq(billingOrders.status, "pending"), eq(billingOrders.providerRef, order.providerRef))).returning({ id: billingOrders.id });
+    return reset.length > 0 ? "closed" : "ignored";
   }
 
   if (outcome === "failed" || outcome === "expired") {
