@@ -488,6 +488,7 @@ sessionsRouter.get("/admin/overview", requireAdminAuth, async (req, res) => {
     driveFolderId: sessions.driveFolderId,
     drivePhotoIds: sessions.drivePhotoIds,
     driveStripId: sessions.driveStripId,
+    paidLateAt: sessions.paidLateAt,
   }).from(sessions).where(and(eq(sessions.tenantId, tenantId), gte(sessions.createdAt, since))).orderBy(sessions.createdAt),
   ]);
   // photoUrls/stripUrl are thumbnail/preview URLs (see uploadSessionPhoto

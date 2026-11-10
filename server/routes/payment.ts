@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { db } from "../db/client.js";
 import { tenantSettings, tenants, sessions, templates, vouchers, voucherRedemptions } from "../db/schema.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 import { loadGateway } from "../lib/gateways.js";
@@ -86,6 +86,9 @@ const parseDokuQrisRef = (value: string | null | undefined) => {
   const [partnerReferenceNo, referenceNo] = String(value ?? "").split("|");
   return partnerReferenceNo && referenceNo ? { partnerReferenceNo, referenceNo } : null;
 };
+
+// Appends a gateway reference to the session's invoice history (never overwritten, unlike xenditInvoiceId which only holds the latest).
+const addInvoice = (ref: string) => sql`${sessions.paymentInvoices} || ${JSON.stringify([ref])}::jsonb`;
 
 const dokuNotificationPath = (tenantId: string) => `/api/payment/webhook/doku/${tenantId}`;
 
@@ -187,7 +190,7 @@ async function creditWallet(tenantId: string, sessionId: string, amount: number,
 // a re-delivered notification for the first payment must never complete a later extra-print charge, and vice versa. Callers that
 // asked the gateway about the session's CURRENT invoice themselves (status polling) leave it undefined.
 async function settlePayment(tenantId: string, sessionId: string, paidAmount: number, method: string, label: string, forAdditional?: boolean) {
-  const [session] = await db.select({ paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending, additionalPrintsPaid: sessions.additionalPrintsPaid }).from(sessions).where(eq(sessions.id, sessionId));
+  const [session] = await db.select({ paymentStatus: sessions.paymentStatus, paymentPurpose: sessions.paymentPurpose, tenantId: sessions.tenantId, totalAmount: sessions.totalAmount, additionalPrintsPending: sessions.additionalPrintsPending, additionalPrintsPaid: sessions.additionalPrintsPaid }).from(sessions).where(eq(sessions.id, sessionId));
   if (session?.tenantId !== tenantId) return;
   if (forAdditional !== undefined && forAdditional !== (session.paymentPurpose === "additional_print")) {
     console.warn(`[${label}] Notifikasi ${forAdditional ? "cetak tambahan" : "pembayaran sesi"} tidak cocok dengan status sesi ${sessionId}, diabaikan (kemungkinan kiriman ulang).`);
@@ -212,6 +215,12 @@ async function settlePayment(tenantId: string, sessionId: string, paidAmount: nu
       const flipped = await db.update(sessions).set({ paymentStatus: "success", paymentMethod: method })
         .where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId), ne(sessions.paymentStatus, "success"))).returning({ id: sessions.id });
       if (flipped.length === 0) return;
+      // The session had already been closed (expired/failed) when the money arrived: a stale QR was paid or the callback came very late.
+      // The payment is real and credited, so flag it for the admin (payment log) instead of letting it pass unnoticed.
+      if (session.paymentStatus === "expired" || session.paymentStatus === "failed") {
+        console.warn(`[${label}] Pembayaran sesi ${sessionId} masuk SETELAH sesi ditutup (${session.paymentStatus}) - ditandai terlambat.`);
+        await db.update(sessions).set({ paidLateAt: new Date() }).where(eq(sessions.id, sessionId));
+      }
       await creditWallet(tenantId, sessionId, expected, "session", method);
       expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     }
@@ -242,12 +251,12 @@ paymentRouter.post("/qris", requireKioskAuth, requireActiveSubscription, async (
       const invoice = `${sessionId}-q-${Date.now().toString(36)}`;
       if (doku.snap) {
         const qr = await createDokuQris(doku, { partnerReferenceNo: invoice, amount });
-        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo), paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo), paymentInvoices: addInvoice(dokuQrisRef(invoice, qr.referenceNo)), paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
         return res.json({ demo: false, qrString: qr.qrContent, invoiceId: invoice, provider: "doku", direct: true });
       }
       const url = await createDokuPayment(doku, tenantId, invoice, amount);
       // xenditInvoiceId doubles as the gateway reference (for DOKU: the invoice number) so /status can double-check a missed notification.
-      await db.update(sessions).set({ xenditInvoiceId: invoice, paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      await db.update(sessions).set({ xenditInvoiceId: invoice, paymentInvoices: addInvoice(invoice), paymentMethod: "doku", paymentStatus: "pending" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
       return res.json({ demo: false, qrString: url, invoiceId: invoice, provider: "doku" });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -282,7 +291,7 @@ paymentRouter.post("/qris", requireKioskAuth, requireActiveSubscription, async (
     // doesn't need to block the response the kiosk is waiting on to render
     // the QR code.
     db.update(sessions)
-      .set({ xenditInvoiceId: invoice.id, paymentMethod: "qris", paymentStatus: "pending" })
+      .set({ xenditInvoiceId: invoice.id, paymentInvoices: addInvoice(invoice.id), paymentMethod: "qris", paymentStatus: "pending" })
       .where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)))
       .catch((error) => console.error("[qris] Gagal mencatat xenditInvoiceId", error));
     return res.json({ demo: false, qrString: invoice.qr_string, invoiceId: invoice.id });
@@ -316,11 +325,11 @@ paymentRouter.post("/additional-print", requireKioskAuth, requireActiveSubscript
       const invoice = `${sessionId}-additional-${Date.now()}`;
       if (doku.snap) {
         const qr = await createDokuQris(doku, { partnerReferenceNo: invoice, amount });
-        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo) }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+        await db.update(sessions).set({ xenditInvoiceId: dokuQrisRef(invoice, qr.referenceNo), paymentInvoices: addInvoice(dokuQrisRef(invoice, qr.referenceNo)) }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
         return res.json({ demo: false, qrString: qr.qrContent, invoiceId: invoice, amount, provider: "doku", direct: true });
       }
       const url = await createDokuPayment(doku, tenantId, invoice, amount);
-      await db.update(sessions).set({ xenditInvoiceId: invoice }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+      await db.update(sessions).set({ xenditInvoiceId: invoice, paymentInvoices: addInvoice(invoice) }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
       return res.json({ demo: false, qrString: url, invoiceId: invoice, amount, provider: "doku" });
     } catch (error) {
       await db.update(sessions).set({ additionalPrintsPending: 0, paymentPurpose: "session", paymentStatus: "success" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
@@ -339,7 +348,7 @@ paymentRouter.post("/additional-print", requireKioskAuth, requireActiveSubscript
   }
   try {
     const invoice = await createXenditQrisInvoice(tenantId, `${sessionId}-additional-${Date.now()}`, amount, xendit.secretKey);
-    await db.update(sessions).set({ xenditInvoiceId: invoice.id }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
+    await db.update(sessions).set({ xenditInvoiceId: invoice.id, paymentInvoices: addInvoice(invoice.id) }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
     return res.json({ demo: false, qrString: invoice.qr_string, invoiceId: invoice.id, amount });
   } catch (error) {
     await db.update(sessions).set({ additionalPrintsPending: 0, paymentPurpose: "session", paymentStatus: "success" }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
@@ -428,13 +437,24 @@ paymentRouter.get("/status/:sessionId", requireKioskAuth, async (req, res) => {
   if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
   // DOKU fallback: if the notification is late or lost, ask DOKU directly while the kiosk is still waiting.
   if (session.paymentStatus === "pending" || session.additionalPrintsPending > 0) {
-    const [ref] = await db.select({ invoice: sessions.xenditInvoiceId, method: sessions.paymentMethod }).from(sessions).where(and(eq(sessions.id, String(req.params.sessionId)), eq(sessions.tenantId, req.tenantId!)));
+    const [ref] = await db.select({ invoice: sessions.xenditInvoiceId, history: sessions.paymentInvoices }).from(sessions).where(and(eq(sessions.id, String(req.params.sessionId)), eq(sessions.tenantId, req.tenantId!)));
     const sid = String(req.params.sessionId);
     const due = ref?.invoice && Date.now() - (lastDokuCheck.get(sid) ?? 0) > 4000; // DOKU is asked at most every 4s per session
     if (due) lastDokuCheck.set(sid, Date.now());
     const doku = due ? await getDokuConfig(req.tenantId!) : null;
-    const qrisRef = parseDokuQrisRef(ref?.invoice);
-    const paid = doku && ref?.invoice && (qrisRef && doku.snap ? (await queryDokuQris(doku, qrisRef)).paid : await dokuInvoicePaid(doku, ref.invoice));
+    // The current invoice first, then the older ones (a customer may have paid the QR from before "Buat QRIS baru"). Capped at 3 to bound DOKU calls.
+    const refs = [ref?.invoice, ...[...(ref?.history ?? [])].reverse()].filter((v, i, all): v is string => Boolean(v) && all.indexOf(v) === i).slice(0, 3);
+    let paid = false;
+    if (doku) {
+      for (const invoiceRef of refs) {
+        try {
+          const qrisRef = parseDokuQrisRef(invoiceRef);
+          if (qrisRef && doku.snap ? (await queryDokuQris(doku, qrisRef)).paid : await dokuInvoicePaid(doku, invoiceRef)) { paid = true; break; }
+        } catch (error) {
+          console.error("[doku-status] gagal cek invoice", invoiceRef, error);
+        }
+      }
+    }
     if (paid) {
       await settlePayment(req.tenantId!, String(req.params.sessionId), NaN, "doku", "doku-status");
       const [fresh] = await db.select({ paymentStatus: sessions.paymentStatus, additionalPrintsPaid: sessions.additionalPrintsPaid, additionalPrintsPending: sessions.additionalPrintsPending }).from(sessions).where(eq(sessions.id, String(req.params.sessionId)));

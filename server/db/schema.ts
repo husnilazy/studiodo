@@ -508,6 +508,12 @@ export const sessions = pgTable("sessions", {
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }),
   voucherCode: text("voucher_code"),
   xenditInvoiceId: text("xendit_invoice_id"),
+  // Every gateway reference ever issued for this session (a regenerated QR overwrites xenditInvoiceId, so the older ones
+  // would otherwise be lost): lets status polling still catch a customer who paid the FIRST QR, and a session be traced from all its invoices.
+  paymentInvoices: jsonb("payment_invoices").$type<string[]>().notNull().default([]),
+  // Set when the gateway confirmed a payment AFTER the session had already been closed as expired/failed (customer paid a
+  // stale QR, callback arrived late). The money is real and credited; the customer may have left, so the admin follows up.
+  paidLateAt: timestamp("paid_late_at"),
   filter: text("filter").notNull().default("normal"),
   frameId: uuid("frame_id"),
   layout: text("layout"),
