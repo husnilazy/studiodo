@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, type Package } from "@/lib/sessionStore";
 import { cachePackages, isBrowserOnline, readCachedPackages } from "@/lib/offlineStore";
@@ -22,25 +22,60 @@ function formatIDR(v: string | number) {
 export interface PrintOption { enabled: boolean; label: string; price: number; max: number }
 type ChooseFn = (pkg: Package, extras: string[], printQty: number) => void;
 
-/** "Tambah print" stepper: the price of each extra copy is added to the total right here, before paying. */
-function PrintStepper({ option, qty, setQty, compact = false }: { option: PrintOption | null; qty: number; setQty: (n: number) => void; compact?: boolean }) {
-  if (!option || !option.enabled || option.max < 1) return null;
-  const btn = "flex h-11 w-11 items-center justify-center rounded-full border-2 border-fg/15 bg-canvas/60 text-xl font-bold transition active:scale-90 disabled:opacity-35";
+/** "Tambah print" pop-up: slides up from the bottom after a package is picked, so the cards themselves stay clean. */
+function PrintSheet({ pkg, option, onCancel, onConfirm }: { pkg: Package; option: PrintOption; onCancel: () => void; onConfirm: (qty: number) => void }) {
+  const [qty, setQty] = useState(0);
+  const total = Number(pkg.price) + qty * option.price;
+  const btn = "flex h-14 w-14 items-center justify-center rounded-full border-2 border-fg/15 bg-canvas text-2xl font-bold transition active:scale-90 disabled:opacity-35";
+  const quick = Array.from({ length: Math.min(option.max, 5) }, (_, i) => i + 1);
   return (
-    <div className={`rounded-2xl border border-fg/10 bg-fg/5 ${compact ? "p-3" : "p-4"}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">{option.label || "Tambah print"}</p>
-          <p className="text-xs text-muted">{formatIDR(option.price)} per lembar · maks {option.max}</p>
+    <motion.div className="fixed inset-0 z-[60] flex items-end justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} role="dialog" aria-modal="true" aria-label={option.label || "Tambah print"}>
+      <button type="button" aria-label="Tutup" onClick={onCancel} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 320 }}
+        className="glass-solid relative w-full max-w-[40rem] rounded-t-[2rem] px-6 pb-6 pt-3 shadow-2xl md:px-8"
+        style={{ background: "var(--kiosk-surface, #fff)" }}
+      >
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-fg/20" />
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="font-display text-2xl font-semibold tracking-tight">{option.label || "Tambah print"}?</h3>
+            <p className="mt-0.5 text-sm text-muted">{formatIDR(option.price)} per lembar · maks {option.max} · paket {pkg.name}</p>
+          </div>
+          <button type="button" onClick={onCancel} aria-label="Batal" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fg/10 text-lg font-bold">✕</button>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+
+        <div className="mt-5 flex items-center justify-center gap-6">
           <button type="button" aria-label="Kurangi print" onClick={() => setQty(Math.max(0, qty - 1))} disabled={qty <= 0} className={btn}>−</button>
-          <span className="w-8 text-center font-display text-2xl font-semibold tabular-nums">{qty}</span>
+          <div className="w-24 text-center">
+            <motion.span key={qty} initial={{ scale: 1.25 }} animate={{ scale: 1 }} className="block font-display text-6xl font-semibold tabular-nums">{qty}</motion.span>
+            <span className="text-xs font-bold uppercase tracking-wider text-muted">lembar</span>
+          </div>
           <button type="button" aria-label="Tambah print" onClick={() => setQty(Math.min(option.max, qty + 1))} disabled={qty >= option.max} className={btn}>+</button>
         </div>
-      </div>
-      {qty > 0 && <p className="mt-2 text-right text-sm font-semibold text-accent">+ {formatIDR(qty * option.price)}</p>}
-    </div>
+
+        {quick.length > 1 && (
+          <div className="mt-4 flex justify-center gap-2">
+            {quick.map((n) => (
+              <button key={n} type="button" onClick={() => setQty(n)} aria-pressed={qty === n} className={`h-10 min-w-[2.5rem] rounded-full border px-3 text-sm font-semibold transition ${qty === n ? "border-accent bg-accent text-on-accent" : "border-fg/15 bg-fg/5"}`}>{n}</button>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between rounded-2xl bg-fg/[0.06] px-5 py-3">
+          <span className="text-sm font-bold uppercase tracking-wider text-muted">Total bayar{qty > 0 ? ` (+${formatIDR(qty * option.price)})` : ""}</span>
+          <motion.span key={total} initial={{ scale: 1.12 }} animate={{ scale: 1 }} className="font-display text-2xl font-semibold tabular-nums">{Number(pkg.price) === 0 && qty === 0 ? "Gratis" : formatIDR(total)}</motion.span>
+        </div>
+
+        <button type="button" onClick={() => onConfirm(qty)} className="k-btn k-btn-accent k-btn-lg mt-4 w-full">
+          {qty > 0 ? `Lanjut dengan ${qty} print` : "Lanjut tanpa print"}
+          <Icon name="arrow-right" className="h-5 w-5" />
+        </button>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -55,12 +90,11 @@ function Feature({ icon, label }: { icon: string; label: string }) {
   );
 }
 
-function PackageCard({ pkg, index, onChoose, printOption }: { pkg: Package; index: number; onChoose: ChooseFn; printOption: PrintOption | null }) {
+function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; onChoose: ChooseFn }) {
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
-  const [printQty, setPrintQty] = useState(0);
   const extras = pkg.extraPrints ?? [];
   const extrasTotal = extras.filter((e) => selectedExtras.includes(e.id)).reduce((sum, e) => sum + Number(e.price), 0);
-  const total = Number(pkg.price) + extrasTotal + (printOption?.enabled ? printQty * printOption.price : 0);
+  const total = Number(pkg.price) + extrasTotal ;
   const isFree = Number(pkg.price) === 0 && total === 0;
 
   const toggleExtra = (id: string) => setSelectedExtras((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
@@ -120,9 +154,7 @@ function PackageCard({ pkg, index, onChoose, printOption }: { pkg: Package; inde
           </div>
         )}
 
-        {printOption?.enabled && <div className="mt-4 landscape:mt-2"><PrintStepper option={printOption} qty={printQty} setQty={setPrintQty} compact /></div>}
-
-        <div className="mt-auto pt-7 landscape:pt-3"><button type="button" onClick={() => onChoose(pkg, selectedExtras, printQty)} className="k-btn k-btn-accent k-btn-lg w-full landscape:!min-h-[3rem] landscape:!py-2">
+        <div className="mt-auto pt-7 landscape:pt-3"><button type="button" onClick={() => onChoose(pkg, selectedExtras, 0)} className="k-btn k-btn-accent k-btn-lg w-full landscape:!min-h-[3rem] landscape:!py-2">
           Pilih paket ini
           {total !== Number(pkg.price) && <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm">{formatIDR(total)}</span>}
           <Icon name="arrow-right" className="h-5 w-5" />
@@ -133,12 +165,11 @@ function PackageCard({ pkg, index, onChoose, printOption }: { pkg: Package; inde
 }
 
 /** "Daftar" layout: one compact row per package, add-ons as chips — fastest to scan, used by the Minimalis style. */
-function PackageRow({ pkg, index, onChoose, printOption }: { pkg: Package; index: number; onChoose: ChooseFn; printOption: PrintOption | null }) {
+function PackageRow({ pkg, index, onChoose }: { pkg: Package; index: number; onChoose: ChooseFn }) {
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
-  const [printQty, setPrintQty] = useState(0);
   const extras = pkg.extraPrints ?? [];
   const extrasTotal = extras.filter((e) => selectedExtras.includes(e.id)).reduce((sum, e) => sum + Number(e.price), 0);
-  const total = Number(pkg.price) + extrasTotal + (printOption?.enabled ? printQty * printOption.price : 0);
+  const total = Number(pkg.price) + extrasTotal ;
   const isFree = Number(pkg.price) === 0 && total === 0;
   const toggleExtra = (id: string) => setSelectedExtras((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
   const included = [`${pkg.photoCount} foto`, pkg.hasGif && "GIF", pkg.hasVideo && "Video", pkg.hasStopMotion && "Stop motion"].filter(Boolean).join("  ·  ");
@@ -168,11 +199,10 @@ function PackageRow({ pkg, index, onChoose, printOption }: { pkg: Package; index
             })}
           </div>
         )}
-        {printOption?.enabled && <div className="mt-3 max-w-md"><PrintStepper option={printOption} qty={printQty} setQty={setPrintQty} compact /></div>}
       </div>
       <div className="flex shrink-0 items-center justify-between gap-5 md:flex-col md:items-end md:gap-3">
         <p className="font-display text-3xl font-semibold tracking-tight md:text-4xl">{isFree ? "Gratis" : formatIDR(total)}</p>
-        <button type="button" onClick={() => onChoose(pkg, selectedExtras, printQty)} className="k-btn k-btn-accent">
+        <button type="button" onClick={() => onChoose(pkg, selectedExtras, 0)} className="k-btn k-btn-accent">
           Pilih <Icon name="arrow-right" className="h-5 w-5" />
         </button>
       </div>
@@ -181,9 +211,8 @@ function PackageRow({ pkg, index, onChoose, printOption }: { pkg: Package; index
 }
 
 /** One-price mode: no package list. The booth sells a single package; the customer only chooses how many extra prints. */
-function SinglePriceCard({ pkg, printOption, onChoose }: { pkg: Package; printOption: PrintOption | null; onChoose: ChooseFn }) {
-  const [printQty, setPrintQty] = useState(0);
-  const total = Number(pkg.price) + (printOption?.enabled ? printQty * printOption.price : 0);
+function SinglePriceCard({ pkg, onChoose }: { pkg: Package; onChoose: ChooseFn }) {
+  const total = Number(pkg.price) ;
   const included = [`${pkg.photoCount} foto`, pkg.hasGif && "GIF", pkg.hasVideo && "Video", pkg.hasStopMotion && "Stop motion"].filter(Boolean) as string[];
   return (
     <motion.article initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="glass-panel flex w-full max-w-[34rem] flex-col gap-5 rounded-[2rem] p-7 text-center md:p-9 landscape:gap-3 landscape:p-5">
@@ -194,12 +223,7 @@ function SinglePriceCard({ pkg, printOption, onChoose }: { pkg: Package; printOp
         <p className="mt-3 font-display text-5xl font-semibold tracking-tight text-accent landscape:text-4xl">{Number(pkg.price) === 0 ? "Gratis" : formatIDR(pkg.price)}</p>
         <p className="mt-2 text-sm font-semibold text-muted">{included.join("  ·  ")}</p>
       </div>
-      <PrintStepper option={printOption} qty={printQty} setQty={setPrintQty} />
-      <div className="flex items-center justify-between rounded-2xl bg-fg/[0.06] px-5 py-3">
-        <span className="text-sm font-bold uppercase tracking-wider text-muted">Total bayar</span>
-        <motion.span key={total} initial={{ scale: 1.15 }} animate={{ scale: 1 }} className="font-display text-3xl font-semibold tabular-nums">{formatIDR(total)}</motion.span>
-      </div>
-      <button type="button" onClick={() => onChoose(pkg, [], printQty)} className="k-btn k-btn-accent k-btn-lg w-full">
+      <button type="button" onClick={() => onChoose(pkg, [], 0)} className="k-btn k-btn-accent k-btn-lg w-full">
         Mulai foto <Icon name="arrow-right" className="h-5 w-5" />
       </button>
     </motion.article>
@@ -283,6 +307,13 @@ export default function PilihPaket() {
     ? packages.find((pkg) => pkg.id === boothConfig.kioskFlow.singlePackageId) ?? null
     : null;
 
+  const [printPrompt, setPrintPrompt] = useState<{ pkg: Package; extraIds: string[] } | null>(null);
+  /** A card was tapped: if extra prints are on sale, ask first in a pop-up; otherwise go straight on. */
+  const requestChoose: ChooseFn = (pkg, extraIds) => {
+    if (printOption?.enabled && printOption.max >= 1) setPrintPrompt({ pkg, extraIds });
+    else choose(pkg, extraIds, 0);
+  };
+
   const choose: ChooseFn = (pkg, extraIds, printQty) => {
     setPackage(pkg);
     const chosen: { id: string; name: string; price: number; qty?: number }[] = (pkg.extraPrints ?? []).filter((extra) => extraIds.includes(extra.id));
@@ -325,11 +356,11 @@ export default function PilihPaket() {
         )}
 
         {!eventActive && singlePackage && (
-          <SinglePriceCard pkg={singlePackage} printOption={printOption} onChoose={choose} />
+          <SinglePriceCard pkg={singlePackage} onChoose={requestChoose} />
         )}
         {!eventActive && !singlePackage && packageLayout === "list" && (
           <div className="flex w-full max-w-[1100px] flex-col gap-4">
-            {packages.map((pkg, i) => <PackageRow key={pkg.id} pkg={pkg} index={i} onChoose={choose} printOption={printOption} />)}
+            {packages.map((pkg, i) => <PackageRow key={pkg.id} pkg={pkg} index={i} onChoose={requestChoose} />)}
           </div>
         )}
         {!eventActive && !singlePackage && packageLayout === "carousel" && (
@@ -337,7 +368,7 @@ export default function PilihPaket() {
             <div className="pkg-carousel">
               {packages.map((pkg, i) => (
                 <div key={pkg.id} className="pkg-slot flex">
-                  <div className="w-full"><PackageCard pkg={pkg} index={i} onChoose={choose} printOption={printOption} /></div>
+                  <div className="w-full"><PackageCard pkg={pkg} index={i} onChoose={requestChoose} /></div>
                 </div>
               ))}
             </div>
@@ -348,7 +379,7 @@ export default function PilihPaket() {
           <div className="grid w-full max-w-[1500px] items-stretch gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 17rem), 1fr))" }}>
             {packages.map((pkg, i) => (
               <div key={pkg.id} className="pkg-slot mx-auto w-full max-w-[34rem]">
-                <PackageCard pkg={pkg} index={i} onChoose={choose} printOption={printOption} />
+                <PackageCard pkg={pkg} index={i} onChoose={requestChoose} />
               </div>
             ))}
           </div>
@@ -356,6 +387,11 @@ export default function PilihPaket() {
 
         <BackButton onClick={() => navigate(getPreviousRoute("packages", boothConfig.kioskFlow))} label="Kembali ke awal" />
       </KioskPage>
+      <AnimatePresence>
+        {printPrompt && printOption && (
+          <PrintSheet key="print-sheet" pkg={printPrompt.pkg} option={printOption} onCancel={() => setPrintPrompt(null)} onConfirm={(qty) => { const { pkg, extraIds } = printPrompt; setPrintPrompt(null); choose(pkg, extraIds, qty); }} />
+        )}
+      </AnimatePresence>
     </ScreenLayoutBoundary>
   );
 }
