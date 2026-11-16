@@ -4,10 +4,11 @@ import { checkTetherBridge, detectTetherCameras, diagnoseTetherCamera, type Came
 import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
-import Spinner from "@/components/Spinner";
+import Spinner from "@/components/Spinner";
 import Select from "@/components/Select";
+import MultiCameraSettings from "@/components/MultiCameraSettings";
 
-type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl">;
+type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl" | "mainCameraName" | "mainCameraDeviceId" | "multiCameraMode" | "extraCameras">;
 const pickDraft = (config: BoothConfig): CameraDraft => ({
   countdownSeconds: config.countdownSeconds,
   captureVibe: config.captureVibe,
@@ -15,6 +16,10 @@ const pickDraft = (config: BoothConfig): CameraDraft => ({
   autoCaptureEnabled: config.autoCaptureEnabled,
   cameraMode: config.cameraMode,
   tetherBridgeUrl: config.tetherBridgeUrl,
+  mainCameraName: config.mainCameraName,
+  mainCameraDeviceId: config.mainCameraDeviceId,
+  multiCameraMode: config.multiCameraMode,
+  extraCameras: config.extraCameras,
 });
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
@@ -85,7 +90,7 @@ export default function CameraSettings() {
   const { config, update } = useBoothConfig();
   const [draft, setDraft] = useState<CameraDraft>(() => pickDraft(config));
   const set = <K extends keyof CameraDraft>(key: K, value: CameraDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
-  const dirty = (Object.keys(draft) as (keyof CameraDraft)[]).some((key) => draft[key] !== config[key]);
+  const dirty = (Object.keys(draft) as (keyof CameraDraft)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(config[key]));
   const [saving, setSaving] = useState(false);
 
   const save = () => {
@@ -311,6 +316,8 @@ export default function CameraSettings() {
           )}
         </div>
       </section>
+
+      <MultiCameraSettings draft={draft} set={set as never} />
 
       <section className={`${sectionClass} xl:col-span-2`}>
         <p className="eyebrow">PANDUAN</p>

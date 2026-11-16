@@ -10,6 +10,7 @@ import { useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { BUILTIN_CATEGORIES, buildStickerAssets, resolveStickerDataUrl, useEmojiVersion } from "@/lib/builtinStickers";
 import { api } from "@/lib/api";
+import { addPendingPhoto, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import type { PhotoSticker, CameraFilter } from "@/lib/sessionStore";
 import { FILTER_LABELS, FILTER_CSS, composeFilterCss } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
@@ -133,6 +134,7 @@ export default function PreviewFoto() {
     photoUrls, orientation, selectedTemplateId, selectedTemplateData, setSelectedTemplateId, setSelectedTemplateData, filter, setFilter,
     colorCorrection, setColorCorrection, photoStickers, setPhotoStickers, templatePhotoMap, setTemplatePhotoMap, setCurrentSlot, incrementRetake, retakeCounts,
     outputMirrored, setOutputMirrored, outputPreset, photoEdits, setPhotoEdit,
+    sessionId, photoAngles, altPhotos, swapAngle,
   } = useKioskSession();
   const config = useBoothConfig((s) => s.config);
   const features = config.features;
@@ -296,6 +298,25 @@ export default function PreviewFoto() {
     copy.getContext("2d")!.drawImage(canvas, 0, 0);
     await drawStickers(copy, photoStickers, assets);
     setZoomSnapshot(copy.toDataURL("image/png"));
+  };
+
+  // Multi-camera "dua sudut": swap the slot's photo for the other camera's shot of the same moment. The server copy is replaced too.
+  const chooseOtherAngle = async (slot: number) => {
+    const alt = useKioskSession.getState().altPhotos[slot];
+    if (!alt) return;
+    swapAngle(slot);
+    if (!sessionId) return;
+    try {
+      const blob = await (await fetch(alt.url)).blob();
+      if (isBrowserOnline() && !isOfflineSessionId(sessionId)) await api.uploadPhoto(sessionId, slot, blob);
+      else await addPendingPhoto(sessionId, slot, blob);
+    } catch (error) {
+      console.warn("Foto sudut lain belum tersimpan ke server, akan dicoba lagi saat sinkronisasi", error);
+      try {
+        const blob = await (await fetch(alt.url)).blob();
+        await addPendingPhoto(sessionId, slot, blob);
+      } catch { /* the local copy is already swapped in */ }
+    }
   };
 
   const redo = (slot: number) => {
@@ -534,6 +555,12 @@ export default function PreviewFoto() {
                         <span className="absolute left-0.5 top-0.5 rounded-full bg-black/70 px-1 text-[0.55rem] font-bold text-white">{photoIndex + 1}</span>
                       </button>
                     ))}
+                    {altPhotos[selectedPhoto] && (
+                      <button type="button" onClick={() => void chooseOtherAngle(selectedPhoto)} className="shrink-0 rounded-xl border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-[0.65rem] font-bold text-accent transition active:scale-95">
+                        Pakai sudut: {altPhotos[selectedPhoto].camera || "lain"}
+                      </button>
+                    )}
+                    {photoAngles[selectedPhoto] && <span className="shrink-0 text-[0.65rem] font-semibold text-muted">Sudut sekarang: {photoAngles[selectedPhoto]}</span>}
                     <span className="ml-auto shrink-0 pl-2 text-sm font-semibold tabular-nums text-muted">{Math.round(edit.zoom * 100)}%</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -604,7 +631,7 @@ export default function PreviewFoto() {
                           >
                             <img src={url} alt={`Foto ${photoIndex + 1}`} className={`w-full object-cover ${photoUrls.length > 3 ? "aspect-[16/10]" : "aspect-[4/3]"}`} style={{ filter: filterCss, transform: outputMirrored ? "scaleX(-1)" : undefined }} />
                             <span className="flex items-center justify-between gap-1 px-2 py-1 text-[0.68rem] font-bold">
-                              <span className={armed ? "text-accent" : ""}>Foto {photoIndex + 1}</span>
+                              <span className={armed ? "text-accent" : ""}>Foto {photoIndex + 1}{photoAngles[photoIndex] ? ` · ${photoAngles[photoIndex]}` : ""}</span>
                               <span className={`h-3 w-3 shrink-0 rounded-full border-2 ${armed ? "border-accent bg-accent" : usedIn.length ? "border-accent/70 bg-accent/30" : "border-fg/25"}`} />
                             </span>
                           </button>

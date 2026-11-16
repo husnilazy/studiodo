@@ -248,3 +248,37 @@ export async function detectTetherCameras(): Promise<DetectedCamera[]> {
         : `Kamera via digiCamControl`,
     }));
 }
+
+export interface WebcamDevice { deviceId: string; label: string }
+
+/** Lists the webcams / virtual cameras the browser can see. Labels are empty until camera permission was granted once. */
+export async function listWebcams(): Promise<WebcamDevice[]> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((device) => device.kind === "videoinput")
+      .map((device, index) => ({ deviceId: device.deviceId, label: device.label || `Webcam ${index + 1}` }));
+  } catch {
+    return [];
+  }
+}
+
+/** Opens one webcam by its deviceId (null/empty = browser default). Throws if the device is missing or busy. */
+export function openWebcam(deviceId?: string | null): Promise<MediaStream> {
+  return navigator.mediaDevices.getUserMedia({
+    video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false,
+  });
+}
+
+/** Grabs one JPEG frame (center-cropped by `zoom`) from a playing <video>. */
+export function snapshotVideo(video: HTMLVideoElement, canvas: HTMLCanvasElement, cssFilter: string, zoom = 1): Promise<Blob> {
+  const cropW = Math.max(1, Math.round(video.videoWidth / zoom));
+  const cropH = Math.max(1, Math.round(video.videoHeight / zoom));
+  canvas.width = cropW;
+  canvas.height = cropH;
+  const ctx = canvas.getContext("2d")!;
+  ctx.filter = cssFilter;
+  ctx.drawImage(video, Math.round((video.videoWidth - cropW) / 2), Math.round((video.videoHeight - cropH) / 2), cropW, cropH, 0, 0, cropW, cropH);
+  return new Promise((resolve, reject) => canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Gagal membuat foto"))), "image/jpeg", 0.92));
+}
