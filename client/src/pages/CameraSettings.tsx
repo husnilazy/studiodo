@@ -5,8 +5,10 @@ import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
+import Select from "@/components/Select";
+import MultiCameraSettings from "@/components/MultiCameraSettings";
 
-type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl">;
+type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl" | "mainCameraName" | "mainCameraDeviceId" | "multiCameraMode" | "extraCameras">;
 const pickDraft = (config: BoothConfig): CameraDraft => ({
   countdownSeconds: config.countdownSeconds,
   captureVibe: config.captureVibe,
@@ -14,6 +16,10 @@ const pickDraft = (config: BoothConfig): CameraDraft => ({
   autoCaptureEnabled: config.autoCaptureEnabled,
   cameraMode: config.cameraMode,
   tetherBridgeUrl: config.tetherBridgeUrl,
+  mainCameraName: config.mainCameraName,
+  mainCameraDeviceId: config.mainCameraDeviceId,
+  multiCameraMode: config.multiCameraMode,
+  extraCameras: config.extraCameras,
 });
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
@@ -84,7 +90,7 @@ export default function CameraSettings() {
   const { config, update } = useBoothConfig();
   const [draft, setDraft] = useState<CameraDraft>(() => pickDraft(config));
   const set = <K extends keyof CameraDraft>(key: K, value: CameraDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
-  const dirty = (Object.keys(draft) as (keyof CameraDraft)[]).some((key) => draft[key] !== config[key]);
+  const dirty = (Object.keys(draft) as (keyof CameraDraft)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(config[key]));
   const [saving, setSaving] = useState(false);
 
   const save = () => {
@@ -244,9 +250,9 @@ export default function CameraSettings() {
               <input type="number" min={1} max={15} className={inputClass} value={draft.countdownSeconds} onChange={(e) => set("countdownSeconds", Math.max(1, Number(e.target.value)))} />
             </Field>
             <Field label="Capture vibe">
-              <select className={inputClass} value={draft.captureVibe} onChange={(e) => set("captureVibe", e.target.value as BoothConfig["captureVibe"])}>
+              <Select className={inputClass} value={draft.captureVibe} onChange={(e) => set("captureVibe", e.target.value as BoothConfig["captureVibe"])}>
                 {["Electric", "Cotton Candy", "Ocean", "Sunset", "Mono"].map((v) => <option key={v}>{v}</option>)}
-              </select>
+              </Select>
             </Field>
           </div>
           <label className="flex items-center gap-3">
@@ -258,10 +264,10 @@ export default function CameraSettings() {
             <span className="text-sm text-fg/70">Jepret otomatis (kiosk lanjut sendiri ke foto berikutnya, tanpa perlu customer menekan tombol tiap kali)</span>
           </label>
           <Field label="Mode kamera">
-            <select className={inputClass} value={draft.cameraMode} onChange={(e) => set("cameraMode", e.target.value as BoothConfig["cameraMode"])}>
+            <Select className={inputClass} value={draft.cameraMode} onChange={(e) => set("cameraMode", e.target.value as BoothConfig["cameraMode"])}>
               <option value="webcam">Webcam / virtual camera</option>
               <option value="tether">Canon DSLR / tether bridge</option>
-            </select>
+            </Select>
           </Field>
           {draft.cameraMode === "tether" && (
             <Field label="URL tether bridge">
@@ -310,6 +316,8 @@ export default function CameraSettings() {
           )}
         </div>
       </section>
+
+      <MultiCameraSettings draft={draft} set={set as never} />
 
       <section className={`${sectionClass} xl:col-span-2`}>
         <p className="eyebrow">PANDUAN</p>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { LocalTemplate, TemplateSlot } from "@/lib/templateStore";
+import type { LocalTemplate, TemplateSlot } from "@/lib/templateStore";
+import Select from "@/components/Select";
 
 type EditorMode = "slots" | "guide";
 
@@ -259,16 +260,16 @@ export default function TemplateEditor({ template, onChange }: Props) {
           + Tambah slot
         </button>
         <label className="block text-xs text-fg/60">Slot aktif
-          <select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
+          <Select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
             {template.slots.map((_, index) => <option key={index} value={index}>Foto {index + 1}</option>)}
-          </select>
+          </Select>
         </label>
         {selectedSlot && (
           <>
             <label className="block text-xs text-fg/60">Rasio slot
-              <select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selectedSlot.aspectRatio ?? "free"} onChange={(event) => setRatio(event.target.value === "free" ? null : Number(event.target.value))}>
+              <Select className="mt-1 w-full rounded border border-white/15 bg-black/30 px-2 py-2" value={selectedSlot.aspectRatio ?? "free"} onChange={(event) => setRatio(event.target.value === "free" ? null : Number(event.target.value))}>
                 {SLOT_RATIOS.map((ratio) => <option key={ratio.label} value={ratio.value ?? "free"}>{ratio.label}</option>)}
-              </select>
+              </Select>
             </label>
             <p className="rounded-lg border border-accent/20 bg-accent/10 p-2 text-[11px] text-accent/80">Ukuran dan posisi diatur langsung pada preview agar nyaman seperti editor shape.</p>
             <button type="button" onClick={deleteSelectedSlot} disabled={template.slots.length <= 1} className="w-full rounded border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-200 hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-40">

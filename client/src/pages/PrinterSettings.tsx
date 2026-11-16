@@ -5,6 +5,8 @@ import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import { PAPER_OPTIONS, printLayoutFromConfig } from "@/lib/printLayout";
+import Select from "@/components/Select";
+import PaperSizePicker from "@/components/PaperSizePicker";
 
 type PrinterDraft = Pick<BoothConfig, "offlineModeEnabled" | "autoPrintEnabled" | "printerName" | "printCopies" | "printPaperSize" | "printFit" | "printMarginMm" | "printTwoUp">;
 const pickDraft = (config: BoothConfig): PrinterDraft => ({
@@ -155,14 +157,14 @@ export default function PrinterSettings() {
             <h2 className="font-display text-xl font-semibold">Printer &amp; jumlah cetak</h2>
             <div className="mt-4 space-y-4">
               <Field label="Printer">
-                <select className={inputClass} value={draft.printerName ?? ""} onChange={(e) => set("printerName", e.target.value || null)}>
+                <Select className={inputClass} value={draft.printerName ?? ""} onChange={(e) => set("printerName", e.target.value || null)}>
                   <option value="">Printer default sistem</option>
                   {printers.map((printer) => (
                     <option key={printer.name} value={printer.name}>
                       {printer.displayName || printer.name}{printer.isDefault ? " (default)" : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {printersError && <p className="mt-1 text-xs text-red-300">{printersError}</p>}
                 {!window.studiodo?.listPrinters && <p className="mt-1 text-xs text-fg/40">Daftar printer hanya bisa dibaca dari aplikasi desktop STUDIODO (Electron).</p>}
               </Field>
@@ -188,11 +190,7 @@ export default function PrinterSettings() {
             <h2 className="font-display text-xl font-semibold">Ukuran kertas &amp; hasil cetak</h2>
             <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Samakan dengan kertas yang terpasang dan ukuran di Printing preferences driver Windows.</p>
             <div className="mt-4 space-y-4">
-              <Field label="Ukuran kertas">
-                <select className={inputClass} value={draft.printPaperSize} onChange={(e) => set("printPaperSize", e.target.value as PrinterDraft["printPaperSize"])}>
-                  {PAPER_OPTIONS.map((paper) => <option key={paper.id} value={paper.id}>{paper.label} ({paper.size})</option>)}
-                </select>
-              </Field>
+              <Field label="Ukuran kertas"><PaperSizePicker value={draft.printPaperSize} onChange={(id) => set("printPaperSize", id)} /></Field>
               <div>
                 <span className="text-sm text-fg/60">Penyesuaian gambar</span>
                 <div className="mt-1 grid grid-cols-2 gap-2">

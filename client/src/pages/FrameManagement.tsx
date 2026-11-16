@@ -14,10 +14,11 @@ import { renderPhotoStrip, STRIP_LAYOUT_LABELS, STRIP_TEMPLATE_LABELS } from "@/
 import { panel, panelAccent, inputClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
-import StopMotionFramePanel from "@/components/StopMotionFramePanel";
+import StopMotionFramePanel from "@/components/StopMotionFramePanel";
+import Select from "@/components/Select";
 
 // Reused by the batch-draft editor and the single-template editor. Used to be
-// a bare native <select> (the exact "old-fashioned app" look the admin called
+// a bare native <Select> (the exact "old-fashioned app" look the admin called
 // out) with "+ Kategori baru…" as a special option that revealed a separate
 // input below it. Now a proper custom dropdown matching the rest of the
 // admin's dark styling, with "+ Kategori baru…" as an inline row inside the
@@ -401,16 +402,16 @@ export default function FrameManagement() {
                     </label>
                     <label className="block text-sm text-fg/55">
                       Orientasi
-                      <select value={template.orientation} onChange={(event) => patchDraft(template.id, { orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
+                      <Select value={template.orientation} onChange={(event) => patchDraft(template.id, { orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
                         <option value="portrait">Portrait</option>
                         <option value="landscape">Landscape</option>
-                      </select>
+                      </Select>
                     </label>
                     <label className="block text-sm text-fg/55">
                       Resize / output
-                      <select value={template.outputPreset} onChange={(event) => updatePreset(template, event.target.value as OutputPreset)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
+                      <Select value={template.outputPreset} onChange={(event) => updatePreset(template, event.target.value as OutputPreset)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
                         {Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}
-                      </select>
+                      </Select>
                     </label>
                     <button onClick={() => setDrafts((current) => current.filter((item) => item.id !== template.id))} className="text-sm text-red-300 hover:text-red-100">
                       Hapus dari antrean
@@ -436,8 +437,8 @@ export default function FrameManagement() {
               <label className="block text-sm text-fg/55">Nama frame<input value={editingTemplate.name} onChange={(event) => setEditingTemplate({ ...editingTemplate, name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
               <label className="block text-sm text-fg/55">Kategori<CategoryPicker value={editingTemplate.category} onChange={(category) => setEditingTemplate({ ...editingTemplate, category })} /></label>
               <label className="block text-sm text-fg/55">Style / warna<input value={editingTemplate.style} onChange={(event) => setEditingTemplate({ ...editingTemplate, style: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
-              <label className="block text-sm text-fg/55">Orientasi<select value={editingTemplate.orientation} onChange={(event) => setEditingTemplate({ ...editingTemplate, orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
-              <label className="block text-sm text-fg/55">Resize / output<select value={editingTemplate.outputPreset} onChange={(event) => { const outputPreset = event.target.value as OutputPreset; const preset = outputPreset === "custom" ? null : OUTPUT_PRESETS[outputPreset]; setEditingTemplate({ ...editingTemplate, outputPreset, ...(preset ? { canvasWidth: preset.width, canvasHeight: preset.height } : {}) }); }} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">{Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}</select></label>
+              <label className="block text-sm text-fg/55">Orientasi<Select value={editingTemplate.orientation} onChange={(event) => setEditingTemplate({ ...editingTemplate, orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></Select></label>
+              <label className="block text-sm text-fg/55">Resize / output<Select value={editingTemplate.outputPreset} onChange={(event) => { const outputPreset = event.target.value as OutputPreset; const preset = outputPreset === "custom" ? null : OUTPUT_PRESETS[outputPreset]; setEditingTemplate({ ...editingTemplate, outputPreset, ...(preset ? { canvasWidth: preset.width, canvasHeight: preset.height } : {}) }); }} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">{Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}</Select></label>
             </div>
           </div>
         </section>
@@ -548,15 +549,15 @@ export default function FrameManagement() {
           <div className="space-y-4">
             <label className="block text-sm text-fg/60">
               Layout foto
-              <select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
+              <Select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
                 {Object.entries(STRIP_LAYOUT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="block text-sm text-fg/60">
               Visual template
-              <select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
+              <Select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
                 {Object.entries(STRIP_TEMPLATE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </Select>
             </label>
             <p className="text-xs text-fg/45">Warna aksen di visual template (Neon Glow, gradient, footer bar) mengikuti warna aksen di Kustomisasi Kiosk.</p>
           </div>

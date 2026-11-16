@@ -8,6 +8,22 @@ import type { CaptureLayoutId, IdleLayoutId, KioskStyleId, PackageLayoutId } fro
 
 export type CaptureVibe = "Electric" | "Cotton Candy" | "Ocean" | "Sunset" | "Mono";
 export type CameraMode = "webcam" | "tether";
+/** off = one camera (legacy path). alternate = photo 1 from the main camera, photo 2 from angle 2, and so on. dual = every shutter press takes both. */
+export type MultiCameraMode = "off" | "alternate" | "dual";
+/**
+ * An extra camera beyond the main one (which stays in cameraMode/tetherBridgeUrl so single-camera configs are unchanged).
+ * Only the first enabled entry is used as "Sudut 2" for now.
+ */
+export interface ExtraCamera {
+  id: string;
+  name: string;
+  kind: CameraMode;
+  /** webcam: MediaDeviceInfo.deviceId */
+  deviceId?: string;
+  /** tether: bridge URL (must differ from the main camera's). */
+  bridgeUrl?: string;
+  enabled: boolean;
+}
 export type ButtonStyle = "rounded" | "pill" | "square";
 export type ButtonSize = "small" | "medium" | "large";
 export type KioskDensity = "comfortable" | "compact";
@@ -137,6 +153,12 @@ export interface BoothConfig {
   tetherBridgeUrl: string;
   /** Camera settings saved from Admin > Kamera ({ iso: "400", shutterspeed: "1/125", ... }), pushed back to the camera when a session's live view starts. Device-local: depends on this PC's camera. */
   cameraPreset: Record<string, string>;
+  /** Name shown for the main camera when multi-camera is on (photo angle label). */
+  mainCameraName: string;
+  /** Webcam deviceId of the main camera; empty = the browser default (the old behaviour). */
+  mainCameraDeviceId: string;
+  multiCameraMode: MultiCameraMode;
+  extraCameras: ExtraCamera[];
   qrisEnabled: boolean;
   stripLayout: StripLayout;
   stripTemplate: StripVisualTemplate;
@@ -150,7 +172,7 @@ export interface BoothConfig {
   printCopies: number;
   printerName: string | null;
   /** Physical sheet size sent to the printer driver. The strip is always rendered for it, so it must match the paper loaded. */
-  printPaperSize: "4r" | "5r" | "6r" | "a4";
+  printPaperSize: "2r" | "3r" | "4r" | "5r" | "6r" | "a4";
   /** cover = fill the sheet (edges may be cropped); contain = whole image visible with white edges. */
   printFit: "cover" | "contain";
   /** White margin around the print, in mm (0 = borderless). */
@@ -268,6 +290,10 @@ const DEFAULT_CONFIG: BoothConfig = {
   cameraMode: "webcam",
   tetherBridgeUrl: "http://127.0.0.1:5510",
   cameraPreset: {},
+  mainCameraName: "Kamera utama",
+  mainCameraDeviceId: "",
+  multiCameraMode: "off",
+  extraCameras: [],
   qrisEnabled: true,
   stripLayout: "classic-vertical",
   stripTemplate: "solid",
@@ -333,6 +359,9 @@ function mergeConfig(config?: Partial<BoothConfig>): BoothConfig {
     ...DEFAULT_CONFIG,
     ...config,
     tetherBridgeUrl,
+    // Older saved configs have no multi-camera fields: stay on the single-camera path.
+    extraCameras: Array.isArray(config?.extraCameras) ? config.extraCameras.filter((c) => c && typeof c.id === "string") : [],
+    multiCameraMode: config?.multiCameraMode === "alternate" || config?.multiCameraMode === "dual" ? config.multiCameraMode : "off",
     enabledPages: { ...DEFAULT_CONFIG.enabledPages, ...(config?.enabledPages ?? {}) },
     features: { ...DEFAULT_CONFIG.features, ...(config?.features ?? {}) },
     // Server sends `null` (not just "missing") for tenants that never configured
@@ -372,7 +401,7 @@ export const useBoothConfig = create<BoothConfigStore>()(
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.
-const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "operatorPin", "operatorEntryCorner", "operatorEntryTaps", "offlineModeEnabled", "kioskFlow"];
+const DEVICE_LOCAL_KEYS: (keyof BoothConfig)[] = ["cameraMode", "tetherBridgeUrl", "cameraPreset", "mainCameraName", "mainCameraDeviceId", "multiCameraMode", "extraCameras", "printerName", "printPaperSize", "printFit", "printMarginMm", "printTwoUp", "operatorPin", "operatorEntryCorner", "operatorEntryTaps", "offlineModeEnabled", "kioskFlow"];
 // Profile columns the server has always stored (set from "Profil Gallery"); applied first, the design config on top.
 const PROFILE_KEYS = ["brandName", "tagline", "logoUrl", "contactWhatsapp", "socialInstagram", "socialTiktok", "socialFacebook", "socialYoutube", "hashtag", "websiteUrl", "address"] as const;
 

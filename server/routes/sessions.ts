@@ -555,7 +555,7 @@ sessionsRouter.get("/:id", requireKioskAuth, async (req, res) => {
 });
 
 // GET /api/sessions/:id/public — dibuka customer dari HP lewat QR, tanpa auth apa pun.
-// Aman karena hanya lookup by id (nanoid, tidak bisa ditebak) dan read-only.
+// Aman karena hanya lookup by id (UUID acak, tidak bisa ditebak) dan read-only.
 sessionsRouter.get("/:id/public", async (req, res) => {
   const [row] = await db.select({
     id: sessions.id,

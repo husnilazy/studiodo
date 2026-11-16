@@ -1,3 +1,5 @@
+import { PaperBundleRow } from "@/components/PaperPicker";
+import { paperItemsSummary, paperShortLabel } from "@/lib/printLayout";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
@@ -42,17 +44,21 @@ function PrintSheet({ pkg, option, onCancel, onConfirm }: { pkg: Package; option
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-fg/20" />
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="font-display text-2xl font-semibold tracking-tight">{option.label || "Tambah print"}?</h3>
-            <p className="mt-0.5 text-sm text-muted">{formatIDR(option.price)} per lembar · maks {option.max} · paket {pkg.name}</p>
+            <h3 className="font-display text-2xl font-semibold tracking-tight">Mau cetak lebih banyak?</h3>
+            <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-accent/12 px-3 py-1 text-sm font-semibold text-accent">
+              <Icon name="check" className="h-4 w-4" />
+              Paket {pkg.name} sudah termasuk {pkg.paperItems?.length ? paperItemsSummary(pkg.paperItems) : "1 print 4R"}
+            </p>
+            <p className="mt-1.5 text-sm text-muted">Print tambahan {formatIDR(option.price)} per lembar{pkg.paperItems?.length ? ` ${paperShortLabel(pkg.paperItems[0].size)}` : ""} · maks {option.max}</p>
           </div>
           <button type="button" onClick={onCancel} aria-label="Batal" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fg/10 text-lg font-bold">✕</button>
         </div>
 
         <div className="mt-5 flex items-center justify-center gap-6">
           <button type="button" aria-label="Kurangi print" onClick={() => setQty(Math.max(0, qty - 1))} disabled={qty <= 0} className={btn}>−</button>
-          <div className="w-24 text-center">
+          <div className="w-32 text-center">
             <motion.span key={qty} initial={{ scale: 1.25 }} animate={{ scale: 1 }} className="block font-display text-6xl font-semibold tabular-nums">{qty}</motion.span>
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">lembar</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-muted">lembar tambahan</span>
           </div>
           <button type="button" aria-label="Tambah print" onClick={() => setQty(Math.min(option.max, qty + 1))} disabled={qty >= option.max} className={btn}>+</button>
         </div>
@@ -71,7 +77,7 @@ function PrintSheet({ pkg, option, onCancel, onConfirm }: { pkg: Package; option
         </div>
 
         <button type="button" onClick={() => onConfirm(qty)} className="k-btn k-btn-accent k-btn-lg mt-4 w-full">
-          {qty > 0 ? `Lanjut dengan ${qty} print` : "Lanjut tanpa print"}
+          {qty > 0 ? `Lanjut: 1 print + ${qty} tambahan` : "Lanjut dengan 1 print"}
           <Icon name="arrow-right" className="h-5 w-5" />
         </button>
       </motion.div>
@@ -124,6 +130,7 @@ function PackageCard({ pkg, index, onChoose }: { pkg: Package; index: number; on
           {pkg.hasStopMotion && <Feature icon="video" label="Video stop motion" />}
           <span className="k-desc contents"><Feature icon="download" label="Unduh lewat QR code" /></span>
         </ul>
+        <PaperBundleRow items={pkg.paperItems} className="mt-4 landscape:mt-2" />
 
         {/* Extras are shown up front (they used to hide behind a collapsed row that customers never opened) */}
         {extras.length > 0 && (
@@ -185,6 +192,7 @@ function PackageRow({ pkg, index, onChoose }: { pkg: Package; index: number; onC
       <div className="min-w-0 flex-1">
         <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{pkg.name}</h2>
         <p className="mt-1 text-sm font-semibold text-accent md:text-base">{included}</p>
+        <PaperBundleRow items={pkg.paperItems} className="mt-3" />
         {pkg.description && <p className="mt-1 text-sm text-muted md:text-base">{pkg.description}</p>}
         {extras.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -222,6 +230,7 @@ function SinglePriceCard({ pkg, onChoose }: { pkg: Package; onChoose: ChooseFn }
         {pkg.description && <p className="mt-1.5 text-sm text-muted md:text-base">{pkg.description}</p>}
         <p className="mt-3 font-display text-5xl font-semibold tracking-tight text-accent landscape:text-4xl">{Number(pkg.price) === 0 ? "Gratis" : formatIDR(pkg.price)}</p>
         <p className="mt-2 text-sm font-semibold text-muted">{included.join("  ·  ")}</p>
+        <PaperBundleRow items={pkg.paperItems} className="mt-4 justify-center" />
       </div>
       <button type="button" onClick={() => onChoose(pkg, [], 0)} className="k-btn k-btn-accent k-btn-lg w-full">
         Mulai foto <Icon name="arrow-right" className="h-5 w-5" />

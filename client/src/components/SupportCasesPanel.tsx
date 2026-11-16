@@ -3,7 +3,8 @@ import { superadminApi, type CasePriority, type CaseStatus, type SupportCase, ty
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import ChatBody from "@/components/ChatBody";
-import { errMessage, fieldClass, fmtDate } from "@/lib/leadUi";
+import { errMessage, fieldClass, fmtDate } from "@/lib/leadUi";
+import Select from "@/components/Select";
 
 // The documented record of every problem tenants reported ("Laporkan masalah" in the Bantuan chat): triage it (status, priority),
 // keep internal notes and the resolution for the product team, and export everything to a spreadsheet. Nothing here is ever deleted.
@@ -62,10 +63,10 @@ export default function SupportCasesPanel({ onOpenThread }: { onOpenThread?: (th
         {[["open", `Terbuka${list ? ` (${list.open})` : ""}`], ["resolved", "Selesai"], ["wontfix", "Tidak dilanjutkan"], ["all", `Semua${list ? ` (${list.total})` : ""}`]].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setFilter(id)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === id ? "bg-fg text-canvas" : "border border-fg/15 text-fg/60"}`}>{label}</button>
         ))}
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-full border border-fg/15 bg-surface px-3 py-1.5 text-xs">
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-full border border-fg/15 bg-surface px-3 py-1.5 text-xs">
           <option value="">Semua jenis</option>
           {Object.entries(CATEGORY).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-        </select>
+        </Select>
         <div className="ml-auto flex gap-2">
           <button type="button" onClick={() => void download("/support/cases.csv", "kasus-bug-studiodo.csv")} className="rounded-full border border-fg/20 px-3 py-1.5 text-xs font-semibold">Unduh kasus (CSV)</button>
           <button type="button" onClick={() => void download("/support/messages.csv", "riwayat-chat-bantuan.csv")} className="rounded-full border border-fg/20 px-3 py-1.5 text-xs font-semibold">Unduh seluruh chat (CSV)</button>
@@ -108,19 +109,19 @@ export default function SupportCasesPanel({ onOpenThread }: { onOpenThread?: (th
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="text-xs font-semibold text-fg/60">Status
-                  <select disabled={busy} value={c.status} onChange={(e) => void update({ status: e.target.value as CaseStatus })} className={`${fieldClass} mt-1 font-normal`}>
+                  <Select disabled={busy} value={c.status} onChange={(e) => void update({ status: e.target.value as CaseStatus })} className={`${fieldClass} mt-1 font-normal`}>
                     {(Object.keys(CASE_STATUS) as CaseStatus[]).map((s) => <option key={s} value={s}>{CASE_STATUS[s].label}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <label className="text-xs font-semibold text-fg/60">Prioritas
-                  <select disabled={busy} value={c.priority} onChange={(e) => void update({ priority: e.target.value as CasePriority })} className={`${fieldClass} mt-1 font-normal`}>
+                  <Select disabled={busy} value={c.priority} onChange={(e) => void update({ priority: e.target.value as CasePriority })} className={`${fieldClass} mt-1 font-normal`}>
                     {(Object.keys(PRIORITY) as CasePriority[]).map((p) => <option key={p} value={p}>{PRIORITY[p]}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <label className="text-xs font-semibold text-fg/60">Jenis
-                  <select disabled={busy} value={c.category} onChange={(e) => void update({ category: e.target.value })} className={`${fieldClass} mt-1 font-normal`}>
+                  <Select disabled={busy} value={c.category} onChange={(e) => void update({ category: e.target.value })} className={`${fieldClass} mt-1 font-normal`}>
                     {Object.entries(CATEGORY).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                  </select>
+                  </Select>
                 </label>
               </div>
               <p className="text-[11px] text-fg/45">Tenant otomatis diberi tahu di lonceng dashboard saat status berubah. Catatan internal tidak pernah terlihat oleh tenant.</p>

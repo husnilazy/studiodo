@@ -3,6 +3,8 @@ import { api } from "@/lib/api";
 import { getApiBaseUrl } from "@/lib/apiConfig";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { inputClass, sectionClass } from "@/lib/adminUi";
+import PaperPicker from "@/components/PaperPicker";
+import { paperItemsSummary, type PaperItem } from "@/lib/printLayout";
 import { pushToast } from "@/lib/toastStore";
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
@@ -40,7 +42,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
   const [providerSaving, setProviderSaving] = useState(false);
   const [cashPaymentSaved, setCashPaymentSaved] = useState(false);
   const [packages, setPackages] = useState<any[]>([]);
-  const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "" });
+  const [packageDraft, setPackageDraft] = useState({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "", paperItems: [] as PaperItem[] });
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [editingPackage, setEditingPackage] = useState<Record<string, any>>({});
   const [packageError, setPackageError] = useState<string | null>(null);
@@ -198,7 +200,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
         thumbnailUrl: packageDraft.thumbnailUrl || null,
         description: packageDraft.description.trim() || null,
       });
-      setPackageDraft({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "" });
+      setPackageDraft({ name: "", price: "50000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, thumbnailUrl: "", description: "", paperItems: [] as PaperItem[] });
       refreshPackages();
     } catch (err) {
       setPackageError(err instanceof Error ? err.message : "Gagal membuat paket");
@@ -226,6 +228,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
       hasVideo: Boolean(pkg.hasVideo),
       hasStopMotion: Boolean(pkg.hasStopMotion),
       thumbnailUrl: pkg.thumbnailUrl ?? "",
+      paperItems: (pkg.paperItems ?? []) as PaperItem[],
     });
   };
 
@@ -242,6 +245,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
         hasVideo: Boolean(editingPackage.hasVideo),
         hasStopMotion: Boolean(editingPackage.hasStopMotion),
         thumbnailUrl: editingPackage.thumbnailUrl || null,
+        paperItems: editingPackage.paperItems ?? [],
       });
       setEditingPackageId(null);
       refreshPackages();
@@ -353,6 +357,10 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
               <Field label="Harga"><input className={inputClass} type="number" placeholder="50000" value={packageDraft.price} onChange={(e) => setPackageDraft({ ...packageDraft, price: e.target.value })} /></Field>
               <Field label="Jumlah foto (maks 10)"><input className={inputClass} type="number" min={1} max={10} value={packageDraft.photoCount} onChange={(e) => setPackageDraft({ ...packageDraft, photoCount: Math.max(1, Math.min(10, Number(e.target.value))) })} /></Field>
               <Field label="Deskripsi singkat" className="sm:col-span-2 lg:col-span-3"><input className={inputClass} placeholder="mis. Termasuk 1 GIF + cetak 4R" value={packageDraft.description} onChange={(e) => setPackageDraft({ ...packageDraft, description: e.target.value })} /></Field>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <span className="text-sm text-fg/60">Kertas cetak (bundle) — pilih satu atau beberapa ukuran</span>
+                <div className="mt-1"><PaperPicker value={packageDraft.paperItems} onChange={(paperItems) => setPackageDraft({ ...packageDraft, paperItems })} price={Number(packageDraft.price) || 0} /></div>
+              </div>
               <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title={gifVideoEnabled ? undefined : `Tidak termasuk paket${planName ? ` "${planName}"` : ""} kamu saat ini`}>
                 <input type="checkbox" disabled={!gifVideoEnabled} checked={packageDraft.hasGif} onChange={(e) => setPackageDraft({ ...packageDraft, hasGif: e.target.checked })} /> Termasuk GIF{!gifVideoEnabled && " 🔒"}
               </label>
@@ -396,6 +404,10 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
                       <Field label="Harga"><input className={inputClass} type="number" value={editingPackage.price ?? "0"} onChange={(e) => setEditingPackage({ ...editingPackage, price: e.target.value })} /></Field>
                       <Field label="Jumlah foto"><input className={inputClass} type="number" min={1} max={10} value={editingPackage.photoCount ?? "1"} onChange={(e) => setEditingPackage({ ...editingPackage, photoCount: e.target.value })} /></Field>
                       <Field label="Deskripsi"><input className={inputClass} value={editingPackage.description ?? ""} onChange={(e) => setEditingPackage({ ...editingPackage, description: e.target.value })} /></Field>
+                      <div className="sm:col-span-2">
+                        <span className="text-sm text-fg/60">Kertas cetak (bundle)</span>
+                        <div className="mt-1"><PaperPicker value={editingPackage.paperItems ?? []} onChange={(paperItems) => setEditingPackage({ ...editingPackage, paperItems })} price={Number(editingPackage.price) || 0} /></div>
+                      </div>
                       <label className={`flex items-center gap-2 text-xs ${gifVideoEnabled ? "text-fg/60" : "text-fg/25"}`} title={gifVideoEnabled ? undefined : `Tidak termasuk paket${planName ? ` "${planName}"` : ""} kamu saat ini`}>
                         <input type="checkbox" disabled={!gifVideoEnabled} checked={Boolean(editingPackage.hasGif)} onChange={(e) => setEditingPackage({ ...editingPackage, hasGif: e.target.checked })} /> Termasuk GIF{!gifVideoEnabled && " 🔒"}
                       </label>
@@ -420,7 +432,7 @@ export default function PaymentSettings({ view = "all" }: { view?: "all" | "pack
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${pkg.active === false ? "bg-fg/10 text-fg/50" : "bg-emerald-400/15 text-emerald-200"}`}>{pkg.active === false ? "Nonaktif" : "Aktif"}</span>
                     </div>
                     {pkg.description && <p className="mt-0.5 truncate text-xs text-fg/45">{pkg.description}</p>}
-                    <p className="mt-1 text-xs text-fg/50">Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto {pkg.hasGif ? "· GIF" : ""} {pkg.hasVideo ? "· Video" : ""} {pkg.hasStopMotion ? "· Stop motion" : ""}</p>
+                    <p className="mt-1 text-xs text-fg/50">Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto {pkg.hasGif ? "· GIF" : ""} {pkg.hasVideo ? "· Video" : ""} {pkg.hasStopMotion ? "· Stop motion" : ""} {paperItemsSummary(pkg.paperItems) ? `· Cetak ${paperItemsSummary(pkg.paperItems)}` : ""}</p>
                   </div>
                 </div>
               )}

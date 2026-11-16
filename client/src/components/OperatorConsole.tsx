@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { getApiBaseUrl, isKioskPaired } from "@/lib/apiConfig";
 import { checkTetherBridge, type TetherBridgeHealth } from "@/lib/camera";
 import { checkKioskToken, checkCamera, checkNetwork, checkPrinter, type DiagnosticResult } from "@/lib/deviceDiagnostics";
-import type { StudiodoPrinterInfo, StudiodoSystemDiagnostics } from "@/types/electron";
+import type { StudiodoPrinterInfo, StudiodoSystemDiagnostics } from "@/types/electron";
+import Select from "@/components/Select";
 
 type TabKey = "diagnostik" | "kamera" | "printer" | "sync" | "sistem" | "riwayat";
 
@@ -399,7 +400,7 @@ function PrinterPanel() {
       <h2 className="font-display text-2xl font-bold">Konfigurasi printer</h2>
       {!window.studiodo?.listPrinters && <p className="text-sm text-fg/40">Fitur ini hanya tersedia di aplikasi desktop STUDIODO (Electron).</p>}
       {error && <p className="text-sm text-red-300">{error}</p>}
-      <select
+      <Select
         className="w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2.5 text-sm outline-none focus:border-accent"
         value={config.printerName ?? ""}
         onChange={(event) => update({ printerName: event.target.value || null })}
@@ -410,7 +411,7 @@ function PrinterPanel() {
             {printer.displayName}{printer.isDefault ? " (default)" : ""}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={refresh} className="rounded-lg border border-fg/15 px-3 py-2 text-xs">Scan ulang</button>
         <button type="button" onClick={runTestPrint} disabled={testStatus === "printing"} className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold disabled:opacity-50">

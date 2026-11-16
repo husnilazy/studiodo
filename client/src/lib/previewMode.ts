@@ -131,7 +131,7 @@ export async function seedStage(stage: PreviewStage) {
 // Shown on the package screen when the tenant has no packages yet (or the frame is not paired), so the buttons, cards
 // and prices can still be judged.
 const SAMPLE_PACKAGES = [
-  { id: "preview-package-1", name: "Paket Hemat", price: "35000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, extraPrints: [], description: "3 foto, cetak 4R" },
+  { id: "preview-package-1", name: "Paket Hemat", price: "35000", photoCount: 3, hasGif: false, hasVideo: false, hasStopMotion: false, extraPrints: [], paperItems: [{ size: "4r", copies: 1 }, { size: "2r", copies: 2 }], description: "3 foto, cetak 4R + 2R" },
   { id: "preview-package-2", name: "Paket Seru", price: "60000", photoCount: 4, hasGif: true, hasVideo: false, hasStopMotion: false, extraPrints: [], description: "4 foto + GIF animasi" },
   { id: "preview-package-3", name: "Paket Lengkap", price: "95000", photoCount: 6, hasGif: true, hasVideo: true, hasStopMotion: true, extraPrints: [], description: "6 foto + GIF + video" },
 ];
