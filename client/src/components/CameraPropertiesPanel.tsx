@@ -10,7 +10,8 @@ import {
 } from "@/lib/camera";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
-import Spinner from "@/components/Spinner";
+import Spinner from "@/components/Spinner";
+import ThemedSelect from "@/components/Select";
 
 // Property names are the bridge's own (see native/canon-bridge-src/CameraProps.cs and
 // electron/digicam-bridge.cjs). Labels come from the bridge when it sends them; these are the
@@ -81,9 +82,9 @@ function Select({ name, state, value, onChange }: { name: string; state: CameraP
     );
   }
   return (
-    <select className={inputClass} value={value} onChange={(e) => onChange(e.target.value)} aria-label={labelOf(name, state)}>
+    <ThemedSelect className={inputClass} value={value} onChange={(e) => onChange(e.target.value)} aria-label={labelOf(name, state)}>
       {state.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-    </select>
+    </ThemedSelect>
   );
 }
 

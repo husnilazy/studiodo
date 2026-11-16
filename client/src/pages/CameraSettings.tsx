@@ -4,7 +4,8 @@ import { checkTetherBridge, detectTetherCameras, diagnoseTetherCamera, type Came
 import CameraPropertiesPanel from "@/components/CameraPropertiesPanel";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
-import Spinner from "@/components/Spinner";
+import Spinner from "@/components/Spinner";
+import Select from "@/components/Select";
 
 type CameraDraft = Pick<BoothConfig, "countdownSeconds" | "captureVibe" | "beepEnabled" | "autoCaptureEnabled" | "cameraMode" | "tetherBridgeUrl">;
 const pickDraft = (config: BoothConfig): CameraDraft => ({
@@ -244,9 +245,9 @@ export default function CameraSettings() {
               <input type="number" min={1} max={15} className={inputClass} value={draft.countdownSeconds} onChange={(e) => set("countdownSeconds", Math.max(1, Number(e.target.value)))} />
             </Field>
             <Field label="Capture vibe">
-              <select className={inputClass} value={draft.captureVibe} onChange={(e) => set("captureVibe", e.target.value as BoothConfig["captureVibe"])}>
+              <Select className={inputClass} value={draft.captureVibe} onChange={(e) => set("captureVibe", e.target.value as BoothConfig["captureVibe"])}>
                 {["Electric", "Cotton Candy", "Ocean", "Sunset", "Mono"].map((v) => <option key={v}>{v}</option>)}
-              </select>
+              </Select>
             </Field>
           </div>
           <label className="flex items-center gap-3">
@@ -258,10 +259,10 @@ export default function CameraSettings() {
             <span className="text-sm text-fg/70">Jepret otomatis (kiosk lanjut sendiri ke foto berikutnya, tanpa perlu customer menekan tombol tiap kali)</span>
           </label>
           <Field label="Mode kamera">
-            <select className={inputClass} value={draft.cameraMode} onChange={(e) => set("cameraMode", e.target.value as BoothConfig["cameraMode"])}>
+            <Select className={inputClass} value={draft.cameraMode} onChange={(e) => set("cameraMode", e.target.value as BoothConfig["cameraMode"])}>
               <option value="webcam">Webcam / virtual camera</option>
               <option value="tether">Canon DSLR / tether bridge</option>
-            </select>
+            </Select>
           </Field>
           {draft.cameraMode === "tether" && (
             <Field label="URL tether bridge">

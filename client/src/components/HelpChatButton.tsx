@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SupportAttachment, type SupportChat } from "@/lib/api";
 import ChatBody from "@/components/ChatBody";
 import { imagesFrom, shrinkImage } from "@/lib/imageUpload";
-import { isChatSoundOn, playChime, setChatSound } from "@/lib/notifySound";
+import { isChatSoundOn, playChime, setChatSound } from "@/lib/notifySound";
+import Select from "@/components/Select";
 
 // "Bantuan" button for the tenant dashboard: a chat with the STUDIODO team. Messages land in the Superadmin's Bantuan inbox
 // (and alert the owner); replies come back here and in the notification bell. Screenshots can be attached (button, paste or drop),
@@ -220,9 +221,9 @@ export default function HelpChatButton() {
                 <>
                   <p className="text-xs text-fg/55">Laporan dicatat lengkap (versi aplikasi dan halaman yang sedang dibuka ikut tercatat otomatis) supaya masalahnya bisa dilacak sampai selesai.</p>
                   <label className="block text-xs font-semibold text-fg/60">Jenis masalah
-                    <select value={report.category} onChange={(e) => setReport({ ...report, category: e.target.value })} className="mt-1 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2 text-sm font-normal text-fg outline-none focus:border-accent">
+                    <Select value={report.category} onChange={(e) => setReport({ ...report, category: e.target.value })} className="mt-1 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2 text-sm font-normal text-fg outline-none focus:border-accent">
                       {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
+                    </Select>
                   </label>
                   <label className="block text-xs font-semibold text-fg/60">Judul singkat
                     <input value={report.title} maxLength={120} onChange={(e) => setReport({ ...report, title: e.target.value })} placeholder="Contoh: QRIS tidak muncul di kiosk" className="mt-1 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2 text-sm font-normal text-fg outline-none focus:border-accent" />
