@@ -14,6 +14,7 @@ import Positionable from "@/components/Positionable";
 import StepProgress from "@/components/kiosk/StepProgress";
 import { BackButton, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { paperItemsSummary } from "@/lib/printLayout";
 import { useWideLandscape } from "@/lib/useWideLandscape";
 
 interface FrameOption {
@@ -35,7 +36,7 @@ const SLOT_NUMBER_COLOR = "rgba(40, 36, 60, 0.55)";
 export default function PilihFrame() {
   const wide = useWideLandscape();
   const [, navigate] = useLocation();
-  const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
+  const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId, selectedPackage } = useKioskSession();
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
   // Paid already: the steps before the payment are closed, so there is no "back" here (it used to land on the idle screen).
   const paymentDone = useKioskSession((s) => s.paymentDone);
@@ -203,7 +204,7 @@ export default function PilihFrame() {
       <div className="kinetic-page relative flex h-full min-h-0 w-full flex-col">
         <StepProgress current="frame" />
         <div className={`shrink-0 px-6 md:px-10 ${wide ? "pb-2 pt-[112px]" : "pb-3 pt-20"}`}>
-          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle="Opsional. Bisa lanjut tanpa frame." />
+          <ScreenTitle compact={wide} title={frameHeadline || "Pilih Frame"} subtitle={selectedPackage?.paperItems?.length ? `Opsional. Frame dipakai untuk semua cetakan: ${paperItemsSummary(selectedPackage.paperItems)}.` : "Opsional. Bisa lanjut tanpa frame."} />
         </div>
 
         {loading && (

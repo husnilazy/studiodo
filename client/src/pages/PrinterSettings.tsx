@@ -4,9 +4,9 @@ import { useBoothConfig, type BoothConfig } from "@/lib/boothConfigStore";
 import { inputClass, sectionClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
-import { PAPER_OPTIONS, printLayoutFromConfig } from "@/lib/printLayout";
+import { PAPER_OPTIONS, printLayoutFromConfig } from "@/lib/printLayout";
 import Select from "@/components/Select";
-import PaperPicker from "@/components/PaperPicker";
+import PaperSizePicker from "@/components/PaperSizePicker";
 
 type PrinterDraft = Pick<BoothConfig, "offlineModeEnabled" | "autoPrintEnabled" | "printerName" | "printCopies" | "printPaperSize" | "printFit" | "printMarginMm" | "printTwoUp">;
 const pickDraft = (config: BoothConfig): PrinterDraft => ({
@@ -190,7 +190,7 @@ export default function PrinterSettings() {
             <h2 className="font-display text-xl font-semibold">Ukuran kertas &amp; hasil cetak</h2>
             <p className="mt-1 text-sm text-[var(--kiosk-muted)]">Samakan dengan kertas yang terpasang dan ukuran di Printing preferences driver Windows.</p>
             <div className="mt-4 space-y-4">
-              <Field label="Ukuran kertas"><PaperPicker value={draft.printPaperSize} onChange={(id) => set("printPaperSize", id)} /></Field>
+              <Field label="Ukuran kertas"><PaperSizePicker value={draft.printPaperSize} onChange={(id) => set("printPaperSize", id)} /></Field>
               <div>
                 <span className="text-sm text-fg/60">Penyesuaian gambar</span>
                 <div className="mt-1 grid grid-cols-2 gap-2">

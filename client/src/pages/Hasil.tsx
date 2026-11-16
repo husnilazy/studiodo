@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { printLayoutFromConfig } from "@/lib/printLayout";
+import { buildPrintJobs } from "@/lib/printLayout";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
@@ -434,7 +434,9 @@ export default function Hasil() {
   };
 
   // The booth's normal copy count plus any extra prints the customer already paid for on the package screen.
-  const printNow = async (copies = config.printCopies + (useKioskSession.getState().selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0)) => {
+  // `onlyCopies` is set for a purchase made on this screen (extra sheets of the main size); otherwise the session's own jobs run:
+  // a bundle package prints every item on its own paper size, a legacy package prints the PC's normal copy count.
+  const printNow = async (onlyCopies?: number) => {
     if (!stripDataUrl || printing) return;
     setPrinting(true);
     setPrintStatus("idle");
@@ -446,12 +448,17 @@ export default function Hasil() {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 60));
         const printDataUrl = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored, photoEdits);
         setPrintStage("sending");
-        const result = await window.studiodo.printImage({
-          dataUrl: printDataUrl,
-          printerName: config.printerName,
-          copies,
-          ...printLayoutFromConfig(config),
-        });
+        const bundle = useKioskSession.getState().selectedPackage?.paperItems;
+        const paidExtra = useKioskSession.getState().selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0;
+        const jobs = onlyCopies !== undefined
+          ? buildPrintJobs(bundle?.slice(0, 1), config).slice(0, 1).map((job) => ({ ...job, copies: onlyCopies }))
+          : buildPrintJobs(bundle, config, paidExtra);
+        const copies = jobs.reduce((sum, job) => sum + job.copies, 0);
+        let result: { ok: boolean; error?: string } = { ok: true };
+        for (const job of jobs) {
+          result = await window.studiodo.printImage({ dataUrl: printDataUrl, printerName: config.printerName, ...job });
+          if (!result.ok) break;
+        }
         if (result.ok) {
           // The printer has the job; keep the animation up until the physical print leaves the Windows queue.
           let finished: { ok: boolean; error?: string } = { ok: true };

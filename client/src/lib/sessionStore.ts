@@ -14,6 +14,8 @@ export interface Package {
   hasVideo: boolean;
   hasStopMotion?: boolean;
   extraPrints?: { id: string; name: string; price: number }[];
+  /** Bundle & Paket: print sheets included, one entry per paper size. Empty/absent = legacy package (PC's own printer settings). */
+  paperItems?: { size: "2r" | "3r" | "4r" | "5r" | "6r" | "a4"; copies: number }[];
   thumbnailUrl?: string | null;
   description?: string | null;
 }

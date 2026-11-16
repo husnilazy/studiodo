@@ -9,7 +9,7 @@ export interface StudiodoPrintPayload {
   printerName?: string | null;
   copies?: number;
   /** "4r" (default, 10.2x15.2cm — photo strip) or "receipt" (7.2x12cm — cash voucher). */
-  pageSize?: "4r" | "5r" | "6r" | "a4" | "receipt";
+  pageSize?: "2r" | "3r" | "4r" | "5r" | "6r" | "a4" | "receipt";
   /** "cover" (default) fills the sheet, "contain" keeps the whole image. */
   fit?: "cover" | "contain";
   marginMm?: number;

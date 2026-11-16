@@ -438,6 +438,8 @@ export const packages = pgTable("packages", {
   // A slow stop-motion video built from every photo of the session (separate from the live GIF/video clips above).
   hasStopMotion: boolean("has_stop_motion").notNull().default(false),
   extraPrints: jsonb("extra_prints").$type<{ id: string; name: string; price: number }[]>().notNull().default([]),
+  // Bundle & Paket: the print sheets this package includes, one entry per paper size. Empty = legacy package, printed with the PC's own printer settings.
+  paperItems: jsonb("paper_items").$type<{ size: "2r" | "3r" | "4r" | "5r" | "6r" | "a4"; copies: number }[]>().notNull().default([]),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   thumbnailUrl: text("thumbnail_url"),
