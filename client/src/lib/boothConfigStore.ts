@@ -150,7 +150,7 @@ export interface BoothConfig {
   printCopies: number;
   printerName: string | null;
   /** Physical sheet size sent to the printer driver. The strip is always rendered for it, so it must match the paper loaded. */
-  printPaperSize: "4r" | "5r" | "6r" | "a4";
+  printPaperSize: "2r" | "3r" | "4r" | "5r" | "6r" | "a4";
   /** cover = fill the sheet (edges may be cropped); contain = whole image visible with white edges. */
   printFit: "cover" | "contain";
   /** White margin around the print, in mm (0 = borderless). */
