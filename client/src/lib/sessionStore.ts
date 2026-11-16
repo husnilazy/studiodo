@@ -80,6 +80,10 @@ interface KioskSessionState {
   // animating at once" output.
   slotClipUrls: (string | null)[];
   photoUrls: string[];
+  /** Multi-camera only: which camera took the photo currently in each slot (empty on the single-camera path). */
+  photoAngles: Record<number, string>;
+  /** Multi-camera "dua sudut": the other camera's photo of the same shot, so PreviewFoto can swap it in. */
+  altPhotos: Record<number, { url: string; camera: string }>;
   photoEdits: Record<number, PhotoEdit>;
   currentSlot: number;
   retakeCounts: Record<number, number>;
@@ -106,6 +110,10 @@ interface KioskSessionState {
   beginSessionTimer: () => void;
   markPaid: () => void;
   setPhotoAtSlot: (slot: number, url: string) => void;
+  setPhotoAngle: (slot: number, camera: string | null) => void;
+  setAltPhoto: (slot: number, alt: { url: string; camera: string } | null) => void;
+  /** Puts the alternate angle's photo into the slot (and the old one becomes the alternate). */
+  swapAngle: (slot: number) => void;
   setCurrentSlot: (slot: number) => void;
   incrementRetake: (slot: number) => boolean;
   resetSession: () => void;
@@ -135,6 +143,8 @@ const initial = {
   stopMotionUrl: null as string | null,
   slotClipUrls: [] as (string | null)[],
   photoUrls: [] as string[],
+  photoAngles: {} as Record<number, string>,
+  altPhotos: {} as Record<number, { url: string; camera: string }>,
   photoEdits: {},
   currentSlot: 0,
   retakeCounts: {},
@@ -186,6 +196,33 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
       photoUrls[slot] = url;
       return { photoUrls };
     }),
+  setPhotoAngle: (slot, camera) =>
+    set((s) => {
+      const photoAngles = { ...s.photoAngles };
+      if (camera) photoAngles[slot] = camera;
+      else delete photoAngles[slot];
+      return { photoAngles };
+    }),
+  setAltPhoto: (slot, alt) =>
+    set((s) => {
+      const altPhotos = { ...s.altPhotos };
+      if (alt) altPhotos[slot] = alt;
+      else delete altPhotos[slot];
+      return { altPhotos };
+    }),
+  swapAngle: (slot) =>
+    set((s) => {
+      const alt = s.altPhotos[slot];
+      const current = s.photoUrls[slot];
+      if (!alt || !current) return {};
+      const photoUrls = [...s.photoUrls];
+      photoUrls[slot] = alt.url;
+      return {
+        photoUrls,
+        photoAngles: { ...s.photoAngles, [slot]: alt.camera },
+        altPhotos: { ...s.altPhotos, [slot]: { url: current, camera: s.photoAngles[slot] ?? "" } },
+      };
+    }),
   setCurrentSlot: (slot) => set({ currentSlot: slot }),
   incrementRetake: (slot) => {
     const current = useKioskSession.getState().retakeCounts[slot] ?? 0;
@@ -193,7 +230,7 @@ export const useKioskSession = create<KioskSessionState>((set) => ({
     set((state) => ({ retakeCounts: { ...state.retakeCounts, [slot]: current + 1 } }));
     return true;
   },
-  resetSession: () => set({ ...initial, photoUrls: [], photoEdits: {}, templatePhotoMap: {} }),
+  resetSession: () => set({ ...initial, photoUrls: [], photoAngles: {}, altPhotos: {}, photoEdits: {}, templatePhotoMap: {} }),
 }));
 
 export const FILTER_LABELS: Record<CameraFilter, string> = {

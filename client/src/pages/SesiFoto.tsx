@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useKioskSession, FILTER_CSS, FILTER_LABELS, type CameraFilter } from "@/lib/sessionStore";
 import { isEventActive, useBoothConfig } from "@/lib/boothConfigStore";
-import { applyCameraPreset, captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
+import { openWebcam, snapshotVideo, applyCameraPreset, captureFromTether, focusTetherCamera, checkTetherBridge, startTetherLiveView, stopTetherLiveView } from "@/lib/camera";
 import { loadImage, renderTemplate } from "@/lib/output";
 import { getNextRoute } from "@/lib/kioskFlow";
 import { useTemplateLibrary } from "@/lib/templateStore";
@@ -162,7 +162,20 @@ export default function SesiFoto() {
     beginSessionTimer,
     setMediaUrl,
     setSlotClipUrl,
+    setPhotoAngle,
+    setAltPhoto,
   } = useKioskSession();
+
+  // --- Multi-camera (optional; everything below is inert while multiCameraMode is "off" or no extra camera is enabled) ---
+  const angle2 = IS_KIOSK_PREVIEW ? null : config.extraCameras.find((camera) => camera.enabled) ?? null;
+  const multiMode = angle2 ? config.multiCameraMode : "off";
+  const mainCameraLabel = config.mainCameraName || "Kamera utama";
+  const angle2Label = angle2?.name || "Sudut 2";
+  const video2Ref = useRef<HTMLVideoElement | null>(null);
+  const stream2Ref = useRef<MediaStream | null>(null);
+  const [angle2Ready, setAngle2Ready] = useState(false);
+  const angle2ReadyRef = useRef(false);
+  angle2ReadyRef.current = angle2Ready;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -362,10 +375,14 @@ export default function SesiFoto() {
     let stream: MediaStream | undefined;
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false,
-        });
+        try {
+          stream = await openWebcam(config.mainCameraDeviceId || undefined);
+        } catch (deviceError) {
+          // A saved deviceId that is no longer plugged in must not black out the booth: fall back to the default camera.
+          if (!config.mainCameraDeviceId) throw deviceError;
+          console.warn("Webcam utama yang dipilih tidak ditemukan, memakai kamera default", deviceError);
+          stream = await openWebcam();
+        }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         // Warm-up delay for Sony Imaging Edge Webcam / other virtual cams
@@ -376,7 +393,50 @@ export default function SesiFoto() {
       }
     })();
     return () => stream?.getTracks().forEach((t) => t.stop());
-  }, [cameraMode, selectedPackage, sessionId]);
+  }, [cameraMode, selectedPackage, sessionId, config.mainCameraDeviceId]);
+
+  // Second camera ("Sudut 2"): never blocks the booth. If it cannot be opened/reached the session simply stays single-camera.
+  useEffect(() => {
+    if (isEditMode || !selectedPackage || !sessionId || !angle2 || multiMode === "off") {
+      setAngle2Ready(false);
+      return;
+    }
+    let cancelled = false;
+    if (angle2.kind === "tether") {
+      const url = (angle2.bridgeUrl ?? "").trim();
+      const trim = (value: string) => value.replace(/\/$/, "");
+      if (!url || (cameraMode === "tether" && trim(url) === trim(config.tetherBridgeUrl))) {
+        setAngle2Ready(false);
+        return;
+      }
+      const check = async () => {
+        const result = await checkTetherBridge(url);
+        if (!cancelled) setAngle2Ready(Boolean(result.ok && result.digicamReachable && result.cameraConnected !== false));
+      };
+      void check();
+      const interval = window.setInterval(check, 5000);
+      return () => { cancelled = true; window.clearInterval(interval); setAngle2Ready(false); };
+    }
+    let stream: MediaStream | undefined;
+    (async () => {
+      try {
+        stream = await openWebcam(angle2.deviceId);
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        stream2Ref.current = stream;
+        if (video2Ref.current) video2Ref.current.srcObject = stream;
+        window.setTimeout(() => { if (!cancelled) setAngle2Ready(true); }, CAMERA_WARMUP_MS);
+      } catch (error) {
+        console.warn("Kamera sudut 2 tidak dapat dibuka, sesi memakai satu kamera", error);
+        if (!cancelled) setAngle2Ready(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stream?.getTracks().forEach((t) => t.stop());
+      stream2Ref.current = null;
+      setAngle2Ready(false);
+    };
+  }, [isEditMode, selectedPackage, sessionId, angle2?.id, angle2?.kind, angle2?.deviceId, angle2?.bridgeUrl, multiMode, cameraMode, config.tetherBridgeUrl]);
 
   // Tether mode: don't just assume the Canon bridge/camera is reachable —
   // actually check, and keep checking, so a customer never pays and steps up
@@ -498,7 +558,40 @@ export default function SesiFoto() {
     setFlash(true);
     setTimeout(() => setFlash(false), 500);
 
-    let blob: Blob;
+    // Which camera takes THIS shot. "alternate": every second photo comes from angle 2; "dual": both cameras fire on every press.
+    // If angle 2 is not ready (unplugged, bridge down) everything silently stays on the main camera.
+    const angle2Usable = multiMode !== "off" && angle2ReadyRef.current && angle2 !== null;
+    const takeAngle2Only = angle2Usable && multiMode === "alternate" && currentSlot % 2 === 1;
+    const shootAngle2 = async (): Promise<Blob> => {
+      if (!angle2) throw new Error("Tidak ada kamera sudut 2");
+      if (angle2.kind === "tether") {
+        const raw = await captureFromTether({ bridgeUrl: angle2.bridgeUrl ?? "", slotIndex: currentSlot, filter, orientation });
+        return cropBlobCenter(raw, zoomRef.current);
+      }
+      const video = video2Ref.current;
+      if (!video || !video.videoWidth) throw new Error("Kamera sudut 2 belum siap");
+      return snapshotVideo(video, document.createElement("canvas"), FILTER_CSS[filter], zoomRef.current);
+    };
+    // Dual mode fires angle 2 at the same moment as the main camera; failures are swallowed so the main photo is never lost.
+    const altPromise: Promise<Blob | null> | null = angle2Usable && multiMode === "dual"
+      ? shootAngle2().catch((error) => { console.warn("Foto sudut 2 gagal, memakai kamera utama saja", error); return null; })
+      : null;
+    let blob: Blob | null = null;
+    let shotBy: string | null = null;
+    if (takeAngle2Only) {
+      setCapturing(true);
+      try {
+        blob = await shootAngle2();
+        shotBy = angle2Label;
+      } catch (error) {
+        console.warn("Foto sudut 2 gagal, memakai kamera utama", error);
+        showCaptureNotice("Kamera sudut 2 gagal, foto diambil dari kamera utama.");
+      } finally {
+        setCapturing(false);
+      }
+    }
+    if (!blob) {
+    shotBy = angle2Usable ? mainCameraLabel : null;
     if (cameraMode === "tether") {
       setCapturing(true);
       try {
@@ -528,10 +621,12 @@ export default function SesiFoto() {
       const ctx = canvas.getContext("2d")!;
       ctx.filter = FILTER_CSS[filter];
       ctx.drawImage(video, Math.round((video.videoWidth - cropW) / 2), Math.round((video.videoHeight - cropH) / 2), cropW, cropH, 0, 0, cropW, cropH);
-      blob = await new Promise((resolve, reject) =>
+      blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Gagal membuat foto"))), "image/jpeg", 0.92)
       );
     }
+    }
+    const altBlob = altPromise ? await altPromise : null;
 
     // Local capture succeeded — show it and let the customer move on right
     // away. The server upload happens in the background: awaiting it here
@@ -542,6 +637,9 @@ export default function SesiFoto() {
     const slotJustCaptured = currentSlot;
     const localUrl = URL.createObjectURL(blob);
     setPhotoAtSlot(slotJustCaptured, localUrl);
+    // Angle bookkeeping for PreviewFoto (single-camera sessions leave these empty, as before).
+    setPhotoAngle(slotJustCaptured, shotBy);
+    setAltPhoto(slotJustCaptured, altBlob ? { url: URL.createObjectURL(altBlob), camera: angle2Label } : null);
     if (sessionRecRef.current) shotTimesRef.current[slotJustCaptured] = Math.round(performance.now() - sessionRecRef.current.startedAt);
     setCapturedSlot(slotJustCaptured);
     setTimeout(() => setCapturedSlot(null), 1600);
@@ -1295,6 +1393,21 @@ export default function SesiFoto() {
           className="h-full w-full object-cover"
           style={{ filter: FILTER_CSS[filter], transform: liveTransform, transition: "transform 0.2s ease-out" }}
         />
+      )}
+      {angle2 && multiMode !== "off" && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-30 w-28 overflow-hidden rounded-xl border border-white/30 bg-black/60 shadow-lg">
+          {angle2.kind === "webcam" && (
+            <video
+              ref={(el) => { video2Ref.current = el; if (el && stream2Ref.current && el.srcObject !== stream2Ref.current) el.srcObject = stream2Ref.current; }}
+              autoPlay playsInline muted
+              className="aspect-video w-full object-cover"
+              style={{ transform: mirrorLiveView ? "scaleX(-1)" : undefined }}
+            />
+          )}
+          <p className="truncate px-2 py-1 text-[0.6rem] font-semibold text-white/85">
+            {angle2Ready ? (multiMode === "alternate" ? `${angle2Label}${currentSlot % 2 === 1 ? " · foto ini" : ""}` : angle2Label) : `${angle2Label} · tidak siap`}
+          </p>
+        </div>
       )}
       {flash && <div className="pointer-events-none absolute inset-0 z-40 animate-flash bg-white" />}
       <CountdownOverlay value={countdown} total={config.countdownSeconds} styleId={styleId} />
