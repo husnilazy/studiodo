@@ -1,11 +1,10 @@
-import { PAPER_OPTIONS } from "@/lib/printLayout";
+import { PAPER_DIMENSIONS_MM, PAPER_OPTIONS } from "@/lib/printLayout";
 import type { BoothConfig } from "@/lib/boothConfigStore";
 
 type PaperId = BoothConfig["printPaperSize"];
 
 // Real proportions (cm) so the sheets on screen are drawn to scale relative to each other.
-const DIMENSIONS: Record<string, [number, number]> = { "4r": [10.2, 15.2], "5r": [12.7, 17.8], "6r": [15.2, 20.3], a4: [21, 29.7] };
-const HINTS: Record<string, string> = { "4r": "Standar photobooth", "5r": "Foto lebih besar", "6r": "Poster kecil", a4: "Dokumen / poster" };
+const HINTS: Record<string, string> = { "2r": "Mini / kartu", "3r": "Foto kecil", "4r": "Standar photobooth", "5r": "Foto lebih besar", "6r": "Poster kecil", a4: "Dokumen / poster" };
 const SCALE = 3.6; // px per cm
 const MAX_H = 29.7 * SCALE;
 
@@ -14,7 +13,7 @@ export default function PaperSizePicker({ value, onChange }: { value: PaperId; o
   return (
     <div role="radiogroup" aria-label="Ukuran kertas" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {PAPER_OPTIONS.map((paper) => {
-        const [w, h] = DIMENSIONS[paper.id as string] ?? [10.2, 15.2];
+        const w = PAPER_DIMENSIONS_MM[paper.id].w / 10, h = PAPER_DIMENSIONS_MM[paper.id].h / 10;
         const selected = paper.id === value;
         const pw = w * SCALE, ph = h * SCALE;
         return (
