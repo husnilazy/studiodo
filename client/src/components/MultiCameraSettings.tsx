@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BoothConfig, CameraMode, ExtraCamera, MultiCameraMode } from "@/lib/boothConfigStore";
 import { checkTetherBridge, listWebcams, openWebcam, startTetherLiveView, stopTetherLiveView, type TetherBridgeHealth, type WebcamDevice } from "@/lib/camera";
 import { inputClass, sectionClass } from "@/lib/adminUi";
+import Select from "@/components/Select";
 
 export type MultiCameraDraft = Pick<BoothConfig, "mainCameraName" | "mainCameraDeviceId" | "multiCameraMode" | "extraCameras" | "cameraMode" | "tetherBridgeUrl">;
 
@@ -74,12 +75,12 @@ function CameraPreview({ kind, deviceId, bridgeUrl }: { kind: CameraMode; device
 
 function WebcamSelect({ value, onChange, webcams, allowDefault }: { value: string; onChange: (value: string) => void; webcams: WebcamDevice[]; allowDefault?: boolean }) {
   return (
-    <select className={inputClass} value={value} onChange={(e) => onChange(e.target.value)}>
+    <Select className={inputClass} value={value} onChange={(e) => onChange(e.target.value)}>
       {allowDefault && <option value="">Kamera default browser</option>}
       {!allowDefault && !value && <option value="">Pilih webcam…</option>}
       {webcams.map((cam) => <option key={cam.deviceId} value={cam.deviceId}>{cam.label}</option>)}
       {value && !webcams.some((cam) => cam.deviceId === value) && <option value={value}>(webcam tersimpan, tidak terdeteksi)</option>}
-    </select>
+    </Select>
   );
 }
 
@@ -119,9 +120,9 @@ export default function MultiCameraSettings({ draft, set }: { draft: MultiCamera
 
       <label className="mt-4 block">
         <span className="text-sm text-fg/60">Mode pengambilan foto</span>
-        <select className={inputClass} value={draft.multiCameraMode} onChange={(e) => set("multiCameraMode", e.target.value as MultiCameraMode)}>
+        <Select className={inputClass} value={draft.multiCameraMode} onChange={(e) => set("multiCameraMode", e.target.value as MultiCameraMode)}>
           {MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-        </select>
+        </Select>
         <p className="mt-1 text-xs text-fg/45">{MODES.find((mode) => mode.value === draft.multiCameraMode)?.hint}</p>
       </label>
       {draft.multiCameraMode !== "off" && !firstEnabledId && <p className="mt-2 text-xs text-amber-500">Belum ada kamera Sudut 2 yang aktif, jadi kiosk tetap memakai satu kamera.</p>}
@@ -164,10 +165,10 @@ export default function MultiCameraSettings({ draft, set }: { draft: MultiCamera
                     <input className={inputClass} value={cam.name} onChange={(e) => patchExtra(cam.id, { name: e.target.value })} />
                   </label>
                   <label className="block"><span className="text-xs text-fg/55">Jenis</span>
-                    <select className={inputClass} value={cam.kind} onChange={(e) => patchExtra(cam.id, { kind: e.target.value as CameraMode })}>
+                    <Select className={inputClass} value={cam.kind} onChange={(e) => patchExtra(cam.id, { kind: e.target.value as CameraMode })}>
                       <option value="webcam">Webcam / virtual camera</option>
                       <option value="tether">Kamera bridge (Canon/Sony/digiCamControl)</option>
-                    </select>
+                    </Select>
                   </label>
                 </div>
                 {cam.kind === "webcam" ? (
