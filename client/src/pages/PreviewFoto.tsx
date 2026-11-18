@@ -646,7 +646,7 @@ export default function PreviewFoto() {
                 <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(6rem, 1fr))" }}>
                   {availableTemplates.map((item) => (
                     <button key={item.id} type="button" onClick={() => selectTemplate(item.id)} aria-pressed={template?.id === item.id} className={`rounded-2xl border p-2 text-center transition ${template?.id === item.id ? "border-accent bg-accent/10 shadow-md" : "border-fg/10 bg-fg/5 hover:border-fg/30"}`}>
-                      <div className="flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg bg-white">
+                      <div className={`flex items-center justify-center overflow-hidden rounded-lg bg-white ${item.canvasWidth > item.canvasHeight ? "aspect-[3/2]" : "aspect-[2/3]"}`}>
                         <img src={item.frameDataUrl} alt="" className="h-full w-full object-contain" />
                       </div>
                       <span className="mt-1.5 block truncate text-xs font-semibold">{item.name}</span>

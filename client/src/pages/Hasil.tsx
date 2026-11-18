@@ -807,7 +807,7 @@ export default function Hasil() {
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate font-display text-lg font-semibold">Detail Cetak</h3>
                 </div>
-                {stripDataUrl && <img src={stripDataUrl} alt="" className="h-11 w-9 shrink-0 rounded-md border border-fg/10 object-cover" />}
+                {stripDataUrl && <img src={stripDataUrl} alt="" className={`shrink-0 rounded-md border border-fg/10 ${template && template.canvasWidth > template.canvasHeight ? "h-9 w-11 object-contain" : "h-11 w-9 object-cover"}`} />}
               </div>
               <p className="font-semibold">{additionalPrintConfig.label}</p>
               <p className="mt-1 text-xs text-fg/50">Bayar QRIS atau pakai kode voucher, lalu {additionalQuantity} lembar akan langsung dicetak.</p>
