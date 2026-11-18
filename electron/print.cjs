@@ -37,7 +37,9 @@ function pageSizeMicrons(pageSize) {
 }
 
 function buildPrintHtml(dataUrl, pageSize, layout = {}) {
-  const mm = PAGE_SIZES_MM[pageSize] ?? PAGE_SIZES_MM["4r"];
+  const base = PAGE_SIZES_MM[pageSize] ?? PAGE_SIZES_MM["4r"];
+  // Landscape frames: same paper, turned sideways.
+  const mm = layout.landscape ? { width: base.height, height: base.width } : base;
   const fit = layout.fit === "contain" ? "contain" : "cover";
   const margin = Math.max(0, Math.min(10, Number(layout.marginMm) || 0));
   const copies = layout.twoUp ? 2 : 1;
@@ -73,7 +75,8 @@ async function listPrinters() {
   }
 }
 
-function printImage({ dataUrl, printerName, copies, pageSize, fit, marginMm, twoUp }) {
+function printImage({ dataUrl, printerName, copies, pageSize, fit, marginMm, twoUp, orientation }) {
+  const landscape = orientation === "landscape";
   return new Promise((resolve, reject) => {
     if (!isValidImageDataUrl(dataUrl)) {
       reject(new Error("dataUrl strip tidak valid"));
@@ -81,7 +84,7 @@ function printImage({ dataUrl, printerName, copies, pageSize, fit, marginMm, two
     }
 
     const printWin = new BrowserWindow({ show: false, webPreferences: { offscreen: false } });
-    const html = buildPrintHtml(dataUrl, pageSize, { fit, marginMm, twoUp });
+    const html = buildPrintHtml(dataUrl, pageSize, { fit, marginMm, twoUp, landscape });
 
     printWin.webContents.once("did-finish-load", () => {
       const options = {
@@ -89,6 +92,7 @@ function printImage({ dataUrl, printerName, copies, pageSize, fit, marginMm, two
         printBackground: true,
         copies: Math.max(1, Math.min(20, Number(copies) || 1)),
         pageSize: pageSizeMicrons(pageSize),
+        landscape,
         margins: { marginType: "none" },
       };
       if (printerName) options.deviceName = printerName;

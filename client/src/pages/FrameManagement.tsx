@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Icon } from "@/components/kiosk/Icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
-import { OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate, type OutputPreset } from "@/lib/templateStore";
+import { OUTPUT_PRESETS, orientCanvas, presetSize, useTemplateLibrary, type LocalTemplate, type OutputPreset } from "@/lib/templateStore";
 import { useFrameCategories, hydrateFrameCategoriesFromServer } from "@/lib/frameCategoryStore";
 import type { Orientation } from "@/lib/sessionStore";
 import TemplateEditor from "@/components/TemplateEditor";
@@ -121,6 +121,69 @@ function CategoryPicker({ value, onChange }: { value: string; onChange: (categor
   );
 }
 
+const fieldClass = "mt-1 w-full rounded-xl border border-fg/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition focus:border-accent";
+
+/** Little page-shaped icon so "Portrait" / "Landscape" read at a glance. */
+function OrientationGlyph({ orientation, className = "" }: { orientation: Orientation; className?: string }) {
+  return <span className={`inline-block shrink-0 rounded-[3px] border-2 border-current ${className}`} style={orientation === "landscape" ? { width: 18, height: 12 } : { width: 12, height: 18 }} />;
+}
+
+function OrientationToggle({ value, onChange }: { value: Orientation; onChange: (orientation: Orientation) => void }) {
+  return (
+    <div className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-fg/10 bg-black/30 p-1">
+      {(["portrait", "landscape"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          aria-pressed={value === option}
+          className={`flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${value === option ? "bg-accent text-white shadow" : "text-fg/55 hover:bg-fg/10 hover:text-fg"}`}
+        >
+          <OrientationGlyph orientation={option} />
+          {option === "portrait" ? "Portrait" : "Landscape"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// One form for both the upload queue and the edit pop-up. Orientation and output size are tied together here: picking
+// "Landscape" turns the canvas sideways (1200×1800 → 1800×1200), picking a size keeps the chosen orientation. Before,
+// the two were independent, so a "landscape" frame kept a portrait canvas and rendered/printed squashed.
+function FrameDetailsForm({ template, onChange }: { template: LocalTemplate; onChange: (patch: Partial<LocalTemplate>) => void }) {
+  const setOrientation = (orientation: Orientation) => {
+    const canvas = orientCanvas(template.canvasWidth, template.canvasHeight, orientation);
+    onChange({ orientation, canvasWidth: canvas.width, canvasHeight: canvas.height });
+  };
+  const setPreset = (outputPreset: OutputPreset) => {
+    if (outputPreset === "custom") { onChange({ outputPreset }); return; }
+    const size = presetSize(outputPreset, template.orientation);
+    onChange({ outputPreset, canvasWidth: size.width, canvasHeight: size.height });
+  };
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_1fr_1.2fr_1.2fr]">
+      <label className="block text-xs font-medium text-fg/55">Nama frame
+        <input value={template.name} onChange={(event) => onChange({ name: event.target.value })} className={fieldClass} />
+      </label>
+      <label className="block text-xs font-medium text-fg/55">Kategori
+        <CategoryPicker value={template.category} onChange={(category) => onChange({ category })} />
+      </label>
+      <label className="block text-xs font-medium text-fg/55">Style / warna
+        <input value={template.style} onChange={(event) => onChange({ style: event.target.value })} placeholder="Pastel pink, gold…" className={fieldClass} />
+      </label>
+      <div className="block text-xs font-medium text-fg/55">Orientasi
+        <OrientationToggle value={template.orientation} onChange={setOrientation} />
+      </div>
+      <label className="block text-xs font-medium text-fg/55">Ukuran cetak
+        <select value={template.outputPreset} onChange={(event) => setPreset(event.target.value as OutputPreset)} className={fieldClass}>
+          {Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}
+        </select>
+        <span className="mt-1 block text-[11px] text-fg/35">Kanvas {template.canvasWidth} × {template.canvasHeight} px</span>
+      </label>
+    </div>
+  );
+}
+
 export default function FrameManagement() {
   const { templates, addTemplate, removeTemplate } = useTemplateLibrary();
   const { stickers, addSticker, removeSticker } = useStickerLibrary();
@@ -194,21 +257,32 @@ export default function FrameManagement() {
     for (const file of Array.from(files).filter((file) => file.type === "image/png")) {
       try {
         const frameDataUrl = await fileToDataUrl(file);
+        // The PNG's own shape decides the orientation, so a wide design is never silently saved as a portrait frame.
+        const bitmap = await createImageBitmap(file);
+        const orientation: Orientation = bitmap.width > bitmap.height ? "landscape" : "portrait";
+        bitmap.close();
+        const size = presetSize("4r", orientation);
+        const slotH = 0.4 * size.width / size.height / (4 / 3);
         setDrafts((current) => [...current, {
           id: crypto.randomUUID(),
           name: file.name.replace(/\.png$/i, ""),
           category: "custom",
           style: "Custom",
-          orientation: "portrait",
+          orientation,
           outputPreset: "4r",
           frameDataUrl,
-          canvasWidth: OUTPUT_PRESETS["4r"].width,
-          canvasHeight: OUTPUT_PRESETS["4r"].height,
-          slots: [
-            { x: 0.1, y: 0.08, w: 0.4, h: 0.4 * OUTPUT_PRESETS["4r"].width / OUTPUT_PRESETS["4r"].height / (4 / 3) },
-            { x: 0.5, y: 0.08, w: 0.4, h: 0.4 * OUTPUT_PRESETS["4r"].width / OUTPUT_PRESETS["4r"].height / (4 / 3) },
-            { x: 0.1, y: 0.5, w: 0.4, h: 0.4 * OUTPUT_PRESETS["4r"].width / OUTPUT_PRESETS["4r"].height / (4 / 3) },
-          ],
+          canvasWidth: size.width,
+          canvasHeight: size.height,
+          slots: orientation === "landscape"
+            ? [
+                { x: 0.08, y: (1 - slotH) / 2, w: 0.4, h: slotH },
+                { x: 0.52, y: (1 - slotH) / 2, w: 0.4, h: slotH },
+              ]
+            : [
+                { x: 0.1, y: 0.08, w: 0.4, h: slotH },
+                { x: 0.5, y: 0.08, w: 0.4, h: slotH },
+                { x: 0.1, y: 0.5, w: 0.4, h: slotH },
+              ],
         }]);
       } catch (error) {
         console.error("Gagal memproses gambar frame", file.name, error);
@@ -281,15 +355,6 @@ export default function FrameManagement() {
     }
   };
 
-  const updatePreset = (template: LocalTemplate, outputPreset: OutputPreset) => {
-    if (outputPreset === "custom") {
-      patchDraft(template.id, { outputPreset });
-      return;
-    }
-    const preset = OUTPUT_PRESETS[outputPreset];
-    patchDraft(template.id, { outputPreset, canvasWidth: preset.width, canvasHeight: preset.height });
-  };
-
   const uploadSticker = (file: File) => {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -332,11 +397,18 @@ export default function FrameManagement() {
     }
   }, [categoryFilter, groupedTemplates]);
   const searchTerm = search.trim().toLowerCase();
+  const [orientationFilter, setOrientationFilter] = useState<"all" | Orientation>("all");
+  const orientationCounts = useMemo(() => ({
+    all: publishedTemplates.length,
+    portrait: publishedTemplates.filter((template) => template.orientation !== "landscape").length,
+    landscape: publishedTemplates.filter((template) => template.orientation === "landscape").length,
+  }), [publishedTemplates]);
   const visibleTemplates = useMemo(() => {
-    const pool = categoryFilter === "__all__" ? publishedTemplates : (groupedTemplates.find((group) => group.key === categoryFilter)?.items ?? []);
+    let pool = categoryFilter === "__all__" ? publishedTemplates : (groupedTemplates.find((group) => group.key === categoryFilter)?.items ?? []);
+    if (orientationFilter !== "all") pool = pool.filter((template) => (template.orientation === "landscape" ? "landscape" : "portrait") === orientationFilter);
     if (!searchTerm) return pool;
     return pool.filter((template) => `${template.name} ${template.style} ${template.category}`.toLowerCase().includes(searchTerm));
-  }, [publishedTemplates, groupedTemplates, categoryFilter, searchTerm]);
+  }, [publishedTemplates, groupedTemplates, categoryFilter, orientationFilter, searchTerm]);
   const TABS = [
     { id: "frames", label: "Frame", count: publishedTemplates.length },
     { id: "stopmotion", label: "Stop Motion" },
@@ -384,39 +456,12 @@ export default function FrameManagement() {
           <div className="mt-5 space-y-5">
             {drafts.map((template) => (
               <article key={template.id} className="rounded-2xl border border-fg/10 bg-fg/5 p-4">
-                <div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_320px]">
-                  <TemplateEditor template={template} onChange={(patch) => patchDraft(template.id, patch)} />
-                  <div className="space-y-3">
-                    <label className="block text-sm text-fg/55">
-                      Nama frame
-                      <input value={template.name} onChange={(event) => patchDraft(template.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" />
-                    </label>
-                    <label className="block text-sm text-fg/55">
-                      Kategori
-                      <CategoryPicker value={template.category} onChange={(category) => patchDraft(template.id, { category })} />
-                    </label>
-                    <label className="block text-sm text-fg/55">
-                      Style / warna
-                      <input value={template.style} onChange={(event) => patchDraft(template.id, { style: event.target.value })} placeholder="Contoh: Pastel pink, gold" className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" />
-                    </label>
-                    <label className="block text-sm text-fg/55">
-                      Orientasi
-                      <select value={template.orientation} onChange={(event) => patchDraft(template.id, { orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Landscape</option>
-                      </select>
-                    </label>
-                    <label className="block text-sm text-fg/55">
-                      Resize / output
-                      <select value={template.outputPreset} onChange={(event) => updatePreset(template, event.target.value as OutputPreset)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
-                        {Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}
-                      </select>
-                    </label>
-                    <button onClick={() => setDrafts((current) => current.filter((item) => item.id !== template.id))} className="text-sm text-red-300 hover:text-red-100">
-                      Hapus dari antrean
-                    </button>
-                  </div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-sm font-semibold"><OrientationGlyph orientation={template.orientation} className="text-accent" />{template.name || "Frame baru"}</p>
+                  <button onClick={() => setDrafts((current) => current.filter((item) => item.id !== template.id))} className="text-xs text-red-300 hover:text-red-100">Hapus dari antrean</button>
                 </div>
+                <FrameDetailsForm template={template} onChange={(patch) => patchDraft(template.id, patch)} />
+                <TemplateEditor template={template} onChange={(patch) => patchDraft(template.id, patch)} />
               </article>
             ))}
           </div>
@@ -430,15 +475,9 @@ export default function FrameManagement() {
             <div><p className="eyebrow">EDIT FRAME</p><h2 className="font-display text-2xl font-semibold">Edit {editingTemplate.name}</h2></div>
             <div className="flex gap-2"><button onClick={() => setEditingTemplate(null)} className="rounded-xl border border-fg/15 px-4 py-2 text-sm text-fg/60">Batal</button><button onClick={saveEditedTemplate} disabled={savingEdit} className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold disabled:opacity-50">{savingEdit && <Spinner size="sm" />}{savingEdit ? "Menyimpan…" : "Simpan perubahan"}</button></div>
           </div>
-          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(260px,1fr)_320px]">
+          <div className="mt-5">
+            <FrameDetailsForm template={editingTemplate} onChange={(patch) => setEditingTemplate((current) => current ? { ...current, ...patch } : current)} />
             <TemplateEditor template={editingTemplate} onChange={(patch) => setEditingTemplate((current) => current ? { ...current, ...patch } : current)} />
-            <div className="space-y-3">
-              <label className="block text-sm text-fg/55">Nama frame<input value={editingTemplate.name} onChange={(event) => setEditingTemplate({ ...editingTemplate, name: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
-              <label className="block text-sm text-fg/55">Kategori<CategoryPicker value={editingTemplate.category} onChange={(category) => setEditingTemplate({ ...editingTemplate, category })} /></label>
-              <label className="block text-sm text-fg/55">Style / warna<input value={editingTemplate.style} onChange={(event) => setEditingTemplate({ ...editingTemplate, style: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white" /></label>
-              <label className="block text-sm text-fg/55">Orientasi<select value={editingTemplate.orientation} onChange={(event) => setEditingTemplate({ ...editingTemplate, orientation: event.target.value as Orientation })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
-              <label className="block text-sm text-fg/55">Resize / output<select value={editingTemplate.outputPreset} onChange={(event) => { const outputPreset = event.target.value as OutputPreset; const preset = outputPreset === "custom" ? null : OUTPUT_PRESETS[outputPreset]; setEditingTemplate({ ...editingTemplate, outputPreset, ...(preset ? { canvasWidth: preset.width, canvasHeight: preset.height } : {}) }); }} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">{Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}</select></label>
-            </div>
           </div>
         </section>
         </div>
@@ -471,15 +510,33 @@ export default function FrameManagement() {
             </div>
           </aside>
           <div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {([["all", "Semua"], ["portrait", "Portrait"], ["landscape", "Landscape"]] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setOrientationFilter(key)}
+                  className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${orientationFilter === key ? "border-accent bg-accent/15 text-fg" : "border-fg/10 text-fg/55 hover:border-fg/25 hover:text-fg"}`}
+                >
+                  {key !== "all" && <OrientationGlyph orientation={key} />}
+                  {label}
+                  <span className="text-xs text-fg/40">{orientationCounts[key]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
               {visibleTemplates.map((template) => (
                 <article key={template.id} className="group overflow-hidden rounded-2xl border border-fg/10 bg-fg/[0.04] transition hover:border-fg/25">
-                  <div className="relative aspect-[3/4] overflow-hidden bg-black/30">
+                  <div className={`relative overflow-hidden bg-black/30 ${template.orientation === "landscape" ? "aspect-[4/3]" : "aspect-[3/4]"}`}>
                     <img src={template.frameDataUrl} alt={template.name} loading="lazy" decoding="async" className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
+                    <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/85 backdrop-blur-sm">
+                      <OrientationGlyph orientation={template.orientation === "landscape" ? "landscape" : "portrait"} className="!border-[1.5px]" />
+                      {template.orientation === "landscape" ? "Landscape" : "Portrait"}
+                    </span>
                     <div className="absolute inset-0 flex items-end justify-end gap-2 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
                       <button onClick={() => setEditingTemplate(template)} className="rounded-xl border border-accent/40 bg-accent/25 px-3 py-1.5 text-xs font-semibold text-accent backdrop-blur-sm hover:bg-accent/50">Edit</button>
                       <button
-                        onClick={() => deleteTemplate(template.id)}
+                        onClick={() => { if (window.confirm(`Hapus frame "${template.name}"?`)) deleteTemplate(template.id); }}
                         disabled={deletingId === template.id}
                         className="flex items-center gap-1.5 rounded-xl border border-red-400/40 bg-red-500/25 px-3 py-1.5 text-xs font-semibold text-red-200 backdrop-blur-sm hover:bg-red-500/50 disabled:opacity-50"
                       >

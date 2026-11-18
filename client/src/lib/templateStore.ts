@@ -41,6 +41,26 @@ export const OUTPUT_PRESETS: Record<Exclude<OutputPreset, "custom">, { label: st
   square: { label: "Square", width: 1800, height: 1800 },
 };
 
+/** Canvas size of a preset in the given orientation. The presets are stored portrait; landscape swaps the sides. */
+export function presetSize(preset: Exclude<OutputPreset, "custom">, orientation: Orientation): { width: number; height: number } {
+  const { width, height } = OUTPUT_PRESETS[preset];
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  return orientation === "landscape" ? { width: long, height: short } : { width: short, height: long };
+}
+
+/** Same canvas turned to the wanted orientation (keeps a custom size's own proportions). */
+export function orientCanvas(width: number, height: number, orientation: Orientation): { width: number; height: number } {
+  const isLandscape = width > height;
+  if ((orientation === "landscape") === isLandscape || width === height) return { width, height };
+  return { width: height, height: width };
+}
+
+/** What a template's own canvas is: landscape when wider than tall. */
+export function canvasOrientation(width: number, height: number): Orientation {
+  return width > height ? "landscape" : "portrait";
+}
+
 interface TemplateStore {
   templates: LocalTemplate[];
   addTemplate: (template: LocalTemplate) => void;

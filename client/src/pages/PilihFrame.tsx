@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useKioskSession } from "@/lib/sessionStore";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
-import { CUSTOM_FRAME_LOCK, OUTPUT_PRESETS, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
+import { CUSTOM_FRAME_LOCK, OUTPUT_PRESETS, presetSize, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useFrameCategories, hydrateFrameCategoriesFromServer } from "@/lib/frameCategoryStore";
 import { isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
@@ -25,6 +25,9 @@ interface FrameOption {
   slots?: LocalTemplate["slots"];
   canvasWidth?: number;
   canvasHeight?: number;
+  orientation?: "portrait" | "landscape";
+  style?: string;
+  outputPreset?: string;
 }
 
 // Photo windows in the frame thumbnails: soft pastel tiles numbered in shooting order (1, 2, 3 …), so the customer sees
@@ -35,7 +38,11 @@ const SLOT_NUMBER_COLOR = "rgba(40, 36, 60, 0.55)";
 export default function PilihFrame() {
   const wide = useWideLandscape();
   const [, navigate] = useLocation();
-  const { orientation, photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, outputPreset, sessionId } = useKioskSession();
+  const { photoUrls, setFrameId, setSelectedTemplateId, setSelectedTemplateData, setOrientation, outputPreset, sessionId } = useKioskSession();
+  // Which shape of frame the customer is browsing (and so which way the print comes out). The session's own
+  // `orientation` used to be fixed to portrait, so landscape frames never reached this screen at all.
+  const [orientation, setPickerOrientation] = useState<"portrait" | "landscape">(() => (useKioskSession.getState().orientation === "landscape" ? "landscape" : "portrait"));
+  const [counts, setCounts] = useState<{ portrait: number; landscape: number } | null>(null);
   const kioskFlow = useBoothConfig((s) => s.config.kioskFlow);
   // Paid already: the steps before the payment are closed, so there is no "back" here (it used to land on the idle screen).
   const paymentDone = useKioskSession((s) => s.paymentDone);
@@ -100,13 +107,35 @@ export default function PilihFrame() {
   // using its last-known/default category list, not a broken frame screen.
   useEffect(() => { hydrateFrameCategoriesFromServer(); }, []);
 
-  const options = useMemo(() => {
+  // Knowing both counts up front lets the toggle show only when there is a real choice, and lands the customer on
+  // the orientation that actually has frames instead of an empty "Belum ada frame" screen.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchFrames("portrait"), fetchFrames("landscape")])
+      .then(([portrait, landscape]) => {
+        if (cancelled) return;
+        const next = { portrait: (portrait ?? []).length, landscape: (landscape ?? []).length };
+        setCounts(next);
+        setPickerOrientation((current) => (next[current] === 0 && next[current === "portrait" ? "landscape" : "portrait"] > 0 ? (current === "portrait" ? "landscape" : "portrait") : current));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [retryKey]);
+
+  const switchOrientation = (next: "portrait" | "landscape") => {
+    if (next === orientation) return;
+    setPickerOrientation(next);
+    setSelectedId(null);
+    setActiveCategory("__all__");
+  };
+
+  const options = useMemo<FrameOption[]>(() => {
     const serverIds = new Set(frames.map((frame) => frame.id));
     return [
       ...frames,
       ...localTemplates
-        .filter((template) => !serverIds.has(template.id))
-        .map((template) => ({ id: template.id, kind: "template" as const, name: `${template.name} · ${template.orientation}`, imageUrl: template.frameDataUrl, category: template.category, slots: template.slots, canvasWidth: template.canvasWidth, canvasHeight: template.canvasHeight })),
+        .filter((template) => !serverIds.has(template.id) && (template.orientation === "landscape" ? "landscape" : "portrait") === orientation)
+        .map((template) => ({ id: template.id, kind: "template" as const, orientation: template.orientation, name: template.name, imageUrl: template.frameDataUrl, category: template.category, slots: template.slots, canvasWidth: template.canvasWidth, canvasHeight: template.canvasHeight })),
     ];
   }, [frames, localTemplates, orientation]);
 
@@ -138,15 +167,18 @@ export default function PilihFrame() {
       : undefined;
     setFrameId(resolvedSelected?.id ?? null);
     setSelectedTemplateId(localTemplate?.id ?? null);
+    // The session follows the chosen frame, so the editor lists same-shape frames and the print comes out the same way
+    // up. No frame (plain strip) is always the portrait strip.
+    setOrientation(resolvedSelected ? orientation : "portrait");
     if (localTemplate) {
       setSelectedTemplateData(localTemplate);
     } else if (resolvedSelected?.kind === "template" && resolvedSelected.slots) {
-      const preset = OUTPUT_PRESETS[outputPreset as keyof typeof OUTPUT_PRESETS] ?? OUTPUT_PRESETS["4r"];
+      const preset = presetSize((outputPreset in OUTPUT_PRESETS ? outputPreset : "4r") as Exclude<LocalTemplate["outputPreset"], "custom">, orientation);
       setSelectedTemplateData({
         id: resolvedSelected.id,
         name: resolvedSelected.name,
-        category: "custom",
-        style: "Server template",
+        category: resolvedSelected.category ?? "custom",
+        style: resolvedSelected.style ?? "Server template",
         orientation,
         outputPreset: outputPreset as LocalTemplate["outputPreset"],
         canvasWidth: resolvedSelected.canvasWidth ?? preset.width,
@@ -228,6 +260,28 @@ export default function PilihFrame() {
 
         {!loading && !loadError && (
           <>
+            {/* Portrait / landscape: only when this booth actually has both kinds */}
+            {counts && counts.portrait > 0 && counts.landscape > 0 && (
+              <div className="flex shrink-0 justify-center px-6 pb-3">
+                <div className="glass-panel inline-flex gap-1 rounded-full p-1" role="tablist" aria-label="Orientasi frame">
+                  {(["portrait", "landscape"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      role="tab"
+                      aria-selected={orientation === option}
+                      onClick={() => switchOrientation(option)}
+                      className={`flex items-center gap-2.5 rounded-full px-6 py-2.5 text-base font-semibold transition ${orientation === option ? "bg-accent text-on-accent shadow-lg" : "text-muted hover:text-fg"}`}
+                    >
+                      <span className="inline-block shrink-0 rounded-[3px] border-2 border-current" style={option === "landscape" ? { width: 20, height: 14 } : { width: 14, height: 20 }} />
+                      {option === "portrait" ? "Potret" : "Lanskap"}
+                      <span className="text-sm opacity-60">{counts[option]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Category chips */}
             {categoryGroups.length > 1 && (
               <div className="flex shrink-0 gap-2 overflow-x-auto px-6 pb-3 [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
@@ -248,7 +302,7 @@ export default function PilihFrame() {
                   <p className="text-sm text-muted">Kamu tetap bisa berfoto tanpa frame.</p>
                 </div>
               )}
-              <div className={`mx-auto grid justify-center ${wide ? "max-w-none gap-4 pr-1" : "max-w-[1400px] gap-5"}`} style={{ gridTemplateColumns: wide ? "repeat(auto-fill, minmax(min(100%, 7rem), 8.25rem))" : "repeat(auto-fit, minmax(min(100%, 12rem), 17rem))" }}>
+              <div className={`mx-auto grid justify-center ${wide ? "max-w-none gap-4 pr-1" : "max-w-[1400px] gap-5"}`} style={{ gridTemplateColumns: wide ? (orientation === "landscape" ? "repeat(auto-fill, minmax(min(100%, 11rem), 13rem))" : "repeat(auto-fill, minmax(min(100%, 7rem), 8.25rem))") : (orientation === "landscape" ? "repeat(auto-fit, minmax(min(100%, 16rem), 22rem))" : "repeat(auto-fit, minmax(min(100%, 12rem), 17rem))") }}>
                 {visibleFrames.map((frame, i) => {
                   const active = selectedId === frame.id;
                   return (

@@ -100,9 +100,12 @@ async function renderPrintStrip(
     await drawStickers(sourceCanvas, photoStickers, stickerAssets);
   }
 
+  // A landscape frame prints on the same 4R paper turned sideways (1800×1200), instead of being cropped to fill a
+  // portrait sheet. The caller tells the printer the same orientation.
+  const landscape = sourceCanvas.width > sourceCanvas.height;
   const printCanvas = document.createElement("canvas");
-  printCanvas.width = OUTPUT_PRESETS["4r"].width;
-  printCanvas.height = OUTPUT_PRESETS["4r"].height;
+  printCanvas.width = landscape ? OUTPUT_PRESETS["4r"].height : OUTPUT_PRESETS["4r"].width;
+  printCanvas.height = landscape ? OUTPUT_PRESETS["4r"].width : OUTPUT_PRESETS["4r"].height;
   const printContext = printCanvas.getContext("2d");
   if (!printContext) throw new Error("Canvas print tidak tersedia");
   printContext.fillStyle = "#ffffff";
@@ -111,7 +114,7 @@ async function renderPrintStrip(
   const width = sourceCanvas.width * scale;
   const height = sourceCanvas.height * scale;
   printContext.drawImage(sourceCanvas, (printCanvas.width - width) / 2, (printCanvas.height - height) / 2, width, height);
-  return printCanvas.toDataURL("image/jpeg", 0.95);
+  return { dataUrl: printCanvas.toDataURL("image/jpeg", 0.95), orientation: landscape ? ("landscape" as const) : ("portrait" as const) };
 }
 
 export default function Hasil() {
@@ -444,13 +447,14 @@ export default function Hasil() {
       if (window.studiodo?.printImage) {
         // Let the overlay paint before the heavy canvas render starts, otherwise it freezes on the old screen.
         await new Promise<void>((resolve) => window.setTimeout(resolve, 60));
-        const printDataUrl = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored, photoEdits);
+        const printJob = await renderPrintStrip(photoUrls, template ?? null, photoStickers, stickerAssets, templatePhotoMap, colorCorrection, config.accentColor, config.stripLayout, config.stripTemplate, filter, outputMirrored, photoEdits);
         setPrintStage("sending");
         const result = await window.studiodo.printImage({
-          dataUrl: printDataUrl,
+          dataUrl: printJob.dataUrl,
           printerName: config.printerName,
           copies,
           ...printLayoutFromConfig(config),
+          orientation: printJob.orientation,
         });
         if (result.ok) {
           // The printer has the job; keep the animation up until the physical print leaves the Windows queue.

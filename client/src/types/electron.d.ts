@@ -15,6 +15,8 @@ export interface StudiodoPrintPayload {
   marginMm?: number;
   /** Two copies side by side on one sheet. */
   twoUp?: boolean;
+  /** "landscape" turns the same paper sideways (landscape frames); default "portrait". */
+  orientation?: "portrait" | "landscape";
 }
 
 export interface StudiodoDigicamBridgeStatus {
