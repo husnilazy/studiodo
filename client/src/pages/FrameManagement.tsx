@@ -15,9 +15,10 @@ import { panel, panelAccent, inputClass } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import Spinner from "@/components/Spinner";
 import StopMotionFramePanel from "@/components/StopMotionFramePanel";
+import Select from "@/components/Select";
 
 // Reused by the batch-draft editor and the single-template editor. Used to be
-// a bare native <select> (the exact "old-fashioned app" look the admin called
+// a bare native <Select> (the exact "old-fashioned app" look the admin called
 // out) with "+ Kategori baru…" as a special option that revealed a separate
 // input below it. Now a proper custom dropdown matching the rest of the
 // admin's dark styling, with "+ Kategori baru…" as an inline row inside the
@@ -175,9 +176,9 @@ function FrameDetailsForm({ template, onChange }: { template: LocalTemplate; onC
         <OrientationToggle value={template.orientation} onChange={setOrientation} />
       </div>
       <label className="block text-xs font-medium text-fg/55">Ukuran cetak
-        <select value={template.outputPreset} onChange={(event) => setPreset(event.target.value as OutputPreset)} className={fieldClass}>
+        <Select value={template.outputPreset} onChange={(event) => setPreset(event.target.value as OutputPreset)} className={fieldClass}>
           {Object.entries(OUTPUT_PRESETS).map(([value, preset]) => <option key={value} value={value}>{preset.label}</option>)}
-        </select>
+        </Select>
         <span className="mt-1 block text-[11px] text-fg/35">Kanvas {template.canvasWidth} × {template.canvasHeight} px</span>
       </label>
     </div>
@@ -605,15 +606,15 @@ export default function FrameManagement() {
           <div className="space-y-4">
             <label className="block text-sm text-fg/60">
               Layout foto
-              <select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
+              <Select className={inputClass} value={config.stripLayout} onChange={(e) => set("stripLayout", e.target.value as BoothConfig["stripLayout"])}>
                 {Object.entries(STRIP_LAYOUT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="block text-sm text-fg/60">
               Visual template
-              <select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
+              <Select className={inputClass} value={config.stripTemplate} onChange={(e) => set("stripTemplate", e.target.value as BoothConfig["stripTemplate"])}>
                 {Object.entries(STRIP_TEMPLATE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </Select>
             </label>
             <p className="text-xs text-fg/45">Warna aksen di visual template (Neon Glow, gradient, footer bar) mengikuti warna aksen di Kustomisasi Kiosk.</p>
           </div>

@@ -3,7 +3,8 @@ import { api } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { inputClass, sectionClass, panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
-import Spinner from "@/components/Spinner";
+import Spinner from "@/components/Spinner";
+import Select from "@/components/Select";
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -253,7 +254,7 @@ export default function VoucherManagement() {
           <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.16em] text-accent">+ Buat voucher baru <span className="ml-1 normal-case tracking-normal text-fg/40 group-open:hidden">(klik untuk membuka form)</span></summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Kode voucher"><input className={inputClass} placeholder="HEMAT50" value={voucherDraft.code} onChange={(e) => setVoucherDraft({ ...voucherDraft, code: e.target.value.toUpperCase() })} /></Field>
-            <Field label="Jenis diskon"><select className={inputClass} value={voucherDraft.discountType} onChange={(e) => setVoucherDraft({ ...voucherDraft, discountType: e.target.value })}><option value="percent">Persen (%)</option><option value="fixed">Potongan Rp</option><option value="free">Gratis</option></select></Field>
+            <Field label="Jenis diskon"><Select className={inputClass} value={voucherDraft.discountType} onChange={(e) => setVoucherDraft({ ...voucherDraft, discountType: e.target.value })}><option value="percent">Persen (%)</option><option value="fixed">Potongan Rp</option><option value="free">Gratis</option></Select></Field>
             <Field label="Nilai diskon"><input className={inputClass} type="number" min={0} placeholder="10" value={voucherDraft.discountValue} onChange={(e) => setVoucherDraft({ ...voucherDraft, discountValue: e.target.value })} /></Field>
             <Field label="Kuota penggunaan"><input className={inputClass} type="number" min={1} placeholder="Tanpa batas" value={voucherDraft.maxUses} onChange={(e) => setVoucherDraft({ ...voucherDraft, maxUses: e.target.value })} /></Field>
             <Field label="Mulai aktif"><input className={inputClass} type="datetime-local" value={voucherDraft.startsAt} onChange={(e) => setVoucherDraft({ ...voucherDraft, startsAt: e.target.value })} /></Field>
@@ -267,7 +268,7 @@ export default function VoucherManagement() {
               {editingVoucherId === voucher.id ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Kode"><input className={inputClass} value={editingVoucher.code ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, code: e.target.value.toUpperCase() })} /></Field>
-                  <Field label="Jenis"><select className={inputClass} value={editingVoucher.discountType ?? "percent"} onChange={(e) => setEditingVoucher({ ...editingVoucher, discountType: e.target.value })}><option value="percent">Persen</option><option value="fixed">Nominal</option><option value="free">Gratis</option></select></Field>
+                  <Field label="Jenis"><Select className={inputClass} value={editingVoucher.discountType ?? "percent"} onChange={(e) => setEditingVoucher({ ...editingVoucher, discountType: e.target.value })}><option value="percent">Persen</option><option value="fixed">Nominal</option><option value="free">Gratis</option></Select></Field>
                   <Field label="Nilai"><input className={inputClass} type="number" value={editingVoucher.discountValue ?? "0"} onChange={(e) => setEditingVoucher({ ...editingVoucher, discountValue: e.target.value })} /></Field>
                   <Field label="Kuota"><input className={inputClass} type="number" placeholder="Tanpa batas" value={editingVoucher.maxUses ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, maxUses: e.target.value })} /></Field>
                   <Field label="Mulai aktif"><input className={inputClass} type="datetime-local" value={editingVoucher.startsAt ?? ""} onChange={(e) => setEditingVoucher({ ...editingVoucher, startsAt: e.target.value })} /></Field>
@@ -298,7 +299,7 @@ export default function VoucherManagement() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Jumlah kode"><input className={inputClass} type="number" min={1} max={500} value={bulkDraft.count} onChange={(e) => setBulkDraft({ ...bulkDraft, count: e.target.value })} /></Field>
           <Field label="Prefix kode"><input className={inputClass} placeholder="PROMO" value={bulkDraft.codePrefix} onChange={(e) => setBulkDraft({ ...bulkDraft, codePrefix: e.target.value.toUpperCase() })} /></Field>
-          <Field label="Jenis diskon"><select className={inputClass} value={bulkDraft.discountType} onChange={(e) => setBulkDraft({ ...bulkDraft, discountType: e.target.value })}><option value="percent">Persen (%)</option><option value="fixed">Potongan Rp</option><option value="free">Gratis</option></select></Field>
+          <Field label="Jenis diskon"><Select className={inputClass} value={bulkDraft.discountType} onChange={(e) => setBulkDraft({ ...bulkDraft, discountType: e.target.value })}><option value="percent">Persen (%)</option><option value="fixed">Potongan Rp</option><option value="free">Gratis</option></Select></Field>
           <Field label="Nilai diskon"><input className={inputClass} type="number" min={0} value={bulkDraft.discountValue} onChange={(e) => setBulkDraft({ ...bulkDraft, discountValue: e.target.value })} /></Field>
           <Field label="Kuota per kode"><input className={inputClass} type="number" min={1} placeholder="Tanpa batas" value={bulkDraft.maxUses} onChange={(e) => setBulkDraft({ ...bulkDraft, maxUses: e.target.value })} /></Field>
           <Field label="Mulai aktif"><input className={inputClass} type="datetime-local" value={bulkDraft.startsAt} onChange={(e) => setBulkDraft({ ...bulkDraft, startsAt: e.target.value })} /></Field>

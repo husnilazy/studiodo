@@ -7,7 +7,8 @@ import { PREVIEW_CONFIG_MESSAGE } from "@/lib/previewMode";
 import { isCustomId, type ElementType, type LayoutElement, type RegisteredElement, type ScreenOrientation } from "@/lib/screenBuilder/types";
 import { pushToast } from "@/lib/toastStore";
 import { Icon } from "@/components/kiosk/Icons";
-import { BUILDER_MSG, labelFor } from "./BuilderFrame";
+import { BUILDER_MSG, labelFor } from "./BuilderFrame";
+import Select from "@/components/Select";
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Screen builder: arrange what is on each kiosk screen — move and resize the screen's own elements, hide the optional
@@ -569,13 +570,13 @@ export default function ScreenBuilder({ screenKey }: { screenKey: string }) {
         <div className="h-6 w-px bg-fg/10" />
         <label className="flex items-center gap-2 text-sm">
           <span className="text-fg/50">Layar</span>
-          <select
+          <Select
             value={screenKey}
             onChange={(event) => { if (confirmLeave()) navigate(`/admin/screen-builder/${event.target.value}`); }}
             className="rounded-lg border border-fg/15 bg-surface px-2.5 py-1.5 text-sm font-semibold outline-none focus:border-accent"
           >
             {SCREENS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-          </select>
+          </Select>
         </label>
         <div className="inline-flex rounded-lg border border-fg/10 bg-fg/[0.04] p-0.5 text-xs font-semibold">
           {(["portrait", "landscape"] as const).map((value) => (

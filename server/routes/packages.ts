@@ -7,6 +7,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth } from "../middleware/kioskAuth.js";
 import { saveUploadedFile } from "../storage.js";
 import { applyPackageOverrides, loadBoothSettings } from "../lib/boothSettings.js";
+import { normalizePaperItems } from "../lib/paperItems.js";
 import { getKeyPlanFeatures, getTenantPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 
 export const packagesRouter = Router();
@@ -56,7 +57,7 @@ packagesRouter.get("/all", requireAdminAuth, async (req, res) => {
 
 // POST /api/packages — admin: tambah paket
 packagesRouter.post("/", requireAdminAuth, async (req, res) => {
-  const { name, price, photoCount, hasGif, hasVideo, hasStopMotion, extraPrints = [], sortOrder, thumbnailUrl, description } = req.body;
+  const { name, price, photoCount, hasGif, hasVideo, hasStopMotion, extraPrints = [], paperItems, sortOrder, thumbnailUrl, description } = req.body;
   const normalizedPrice = Number(price ?? 0);
   const normalizedPhotoCount = Number(photoCount ?? 1);
   const normalizedSortOrder = Number(sortOrder ?? 0);
@@ -64,6 +65,8 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
   if (!String(name ?? "").trim() || !Number.isFinite(normalizedPrice) || normalizedPrice < 0 || !Number.isFinite(normalizedPhotoCount) || normalizedPhotoCount < 1) {
     return res.status(400).json({ error: "Nama, harga, dan jumlah foto tidak valid" });
   }
+  const paper = normalizePaperItems(paperItems);
+  if ("error" in paper) return res.status(400).json({ error: paper.error });
   if ((hasGif || hasVideo || hasStopMotion)) {
     const { gifVideoEnabled } = await getTenantPlanFeatures(req.tenantId!);
     if (!gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
@@ -80,6 +83,7 @@ packagesRouter.post("/", requireAdminAuth, async (req, res) => {
       hasVideo: Boolean(hasVideo),
       hasStopMotion: Boolean(hasStopMotion),
       extraPrints: Array.isArray(extraPrints) ? extraPrints : [],
+      paperItems: paper.items,
       sortOrder: normalizedSortOrder,
       thumbnailUrl: await resolveThumbnailUrl(req.tenantId!, thumbnailUrl),
       description: description ? String(description) : null,
@@ -94,7 +98,7 @@ packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
   // Only these fields can be edited. The body used to be spread straight into the UPDATE, which let a client overwrite
   // columns it has no business touching (id, createdAt, …).
   const patch: Record<string, any> = {};
-  for (const key of ["name", "price", "photoCount", "hasGif", "hasVideo", "hasStopMotion", "extraPrints", "active", "sortOrder", "thumbnailUrl", "description"]) {
+  for (const key of ["name", "price", "photoCount", "hasGif", "hasVideo", "hasStopMotion", "extraPrints", "paperItems", "active", "sortOrder", "thumbnailUrl", "description"]) {
     if (req.body?.[key] !== undefined) patch[key] = req.body[key];
   }
 
@@ -118,6 +122,11 @@ packagesRouter.patch("/:id", requireAdminAuth, async (req, res) => {
     if (!gifVideoEnabled) return res.status(403).json(planLockedBody("gifVideo"));
   }
   if (patch.extraPrints !== undefined) patch.extraPrints = Array.isArray(patch.extraPrints) ? patch.extraPrints : [];
+  if (patch.paperItems !== undefined) {
+    const paper = normalizePaperItems(patch.paperItems);
+    if ("error" in paper) return res.status(400).json({ error: paper.error });
+    patch.paperItems = paper.items;
+  }
   if (patch.active !== undefined) patch.active = Boolean(patch.active);
   if (patch.thumbnailUrl !== undefined) patch.thumbnailUrl = await resolveThumbnailUrl(req.tenantId!, patch.thumbnailUrl);
   if (patch.description !== undefined) patch.description = patch.description ? String(patch.description) : null;

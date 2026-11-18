@@ -154,6 +154,18 @@ async function findRedeemableVoucher(tenantId: string, code: string): Promise<{ 
   return { voucher };
 }
 
+// Takes one use of a voucher in a single conditional UPDATE. The earlier "read usedCount, then write usedCount + 1" let two requests
+// arriving together both pass the quota check, so a one-use cash voucher could pay for two sessions. Returns false when the
+// voucher was used up (or switched off) by someone else in the meantime.
+async function claimVoucherUse(voucher: RedeemableVoucher, deactivate = false): Promise<boolean> {
+  const claimed = await db.update(vouchers)
+    .set(deactivate ? { usedCount: sql`${vouchers.usedCount} + 1`, active: false } : { usedCount: sql`${vouchers.usedCount} + 1` })
+    .where(and(eq(vouchers.id, voucher.id), eq(vouchers.active, true), sql`(${vouchers.maxUses} is null or ${vouchers.usedCount} < ${vouchers.maxUses})`))
+    .returning({ id: vouchers.id });
+  return claimed.length > 0;
+}
+const VOUCHER_TAKEN = { error: "Kuota voucher sudah habis" };
+
 async function completeAdditionalPrintPayment(tenantId: string, sessionId: string) {
   const [session] = await db.select().from(sessions).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
   if (!session || session.additionalPrintsPending <= 0) return;
@@ -394,7 +406,7 @@ paymentRouter.post("/additional-print/voucher", requireKioskAuth, limitVoucherGu
   if (voucher.voucherType === "cash") {
     const cashAmount = Number(voucher.cashAmount ?? 0);
     if (cashAmount < chargeAmount) return res.status(400).json({ error: `Nominal invoice cash kurang. Total cetak tambahan Rp ${chargeAmount.toLocaleString("id-ID")}.` });
-    await db.update(vouchers).set({ usedCount: voucher.usedCount + 1, active: false }).where(eq(vouchers.id, voucher.id));
+    if (!(await claimVoucherUse(voucher, true))) return res.status(410).json(VOUCHER_TAKEN);
     await db.update(sessions).set({ additionalPrintsPending: quantity }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
     await completeAdditionalPrintPayment(tenantId, sessionId);
     await db.insert(voucherRedemptions).values({
@@ -416,7 +428,7 @@ paymentRouter.post("/additional-print/voucher", requireKioskAuth, limitVoucherGu
   const remaining = Math.max(0, Math.round(chargeAmount - discount));
   if (remaining > 0) return res.status(400).json({ error: "Voucher ini tidak menutupi seluruh biaya cetak tambahan. Gunakan QRIS untuk melanjutkan." });
 
-  await db.update(vouchers).set({ usedCount: voucher.usedCount + 1 }).where(eq(vouchers.id, voucher.id));
+  if (!(await claimVoucherUse(voucher))) return res.status(410).json(VOUCHER_TAKEN);
   await db.update(sessions).set({ additionalPrintsPending: quantity }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
   await completeAdditionalPrintPayment(tenantId, sessionId);
   await db.insert(voucherRedemptions).values({
@@ -488,7 +500,7 @@ paymentRouter.post("/voucher", requireKioskAuth, limitVoucherGuesses, requireAct
     const cashAmount = Number(voucher.cashAmount ?? 0);
     const sessionAmount = Number(session.totalAmount ?? 0);
     if (cashAmount < sessionAmount) return res.status(400).json({ error: `Nominal invoice cash kurang. Total sesi Rp ${sessionAmount.toLocaleString("id-ID")}.` });
-    await db.update(vouchers).set({ usedCount: voucher.usedCount + 1, active: false }).where(eq(vouchers.id, voucher.id));
+    if (!(await claimVoucherUse(voucher, true))) return res.status(410).json(VOUCHER_TAKEN);
     await db.update(sessions).set({ paymentStatus: "success", paymentMethod: "cash", voucherCode: voucher.code }).where(and(eq(sessions.id, sessionId), eq(sessions.tenantId, tenantId)));
     expireSiblingPendingSessions(tenantId, sessionId).catch(console.error);
     await db.insert(voucherRedemptions).values({
@@ -507,7 +519,7 @@ paymentRouter.post("/voucher", requireKioskAuth, limitVoucherGuesses, requireAct
       : Math.min(originalAmount, Number(voucher.discountValue));
   const amount = Math.max(0, Math.round(originalAmount - discount));
 
-  await db.update(vouchers).set({ usedCount: voucher.usedCount + 1 }).where(eq(vouchers.id, voucher.id));
+  if (!(await claimVoucherUse(voucher))) return res.status(410).json(VOUCHER_TAKEN);
   await db.update(sessions).set({
     paymentStatus: amount === 0 ? "success" : "pending",
     paymentMethod: "voucher",

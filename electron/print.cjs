@@ -14,6 +14,8 @@ const { BrowserWindow } = require("electron");
 
 // Fisik dalam mm; Electron page size pakai microns (1mm = 1000 microns).
 const PAGE_SIZES_MM = {
+  "2r": { width: 63.5, height: 88.9 },
+  "3r": { width: 88.9, height: 127 },
   "4r": { width: 101.6, height: 152.4 },
   receipt: { width: 72, height: 120 },
   "5r": { width: 127, height: 177.8 },

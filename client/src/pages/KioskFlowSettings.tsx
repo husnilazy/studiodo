@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { api } from "@/lib/api";
-import { useBoothConfig } from "@/lib/boothConfigStore";
+import { useBoothConfig } from "@/lib/boothConfigStore";
+import Select from "@/components/Select";
 import {
   STEP_DEFS,
   LOCKED_STEPS,
@@ -140,12 +141,12 @@ export default function KioskFlowSettings() {
           <div className="mt-4 rounded-2xl border border-accent/30 bg-accent/5 p-4">
             <p className="text-sm font-semibold">Paket yang dijual (satu harga)</p>
             <p className="mt-0.5 text-xs text-fg/50">Customer tidak memilih paket. Kiosk langsung memakai paket ini, lalu customer hanya menambah jumlah print. Harga per lembar tambahan diatur di Printer → Additional print.</p>
-            <select value={singlePackageId ?? ""} onChange={(e) => setSinglePackageId(e.target.value || null)} className="mt-3 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2.5 text-sm">
+            <Select value={singlePackageId ?? ""} onChange={(e) => setSinglePackageId(e.target.value || null)} className="mt-3 w-full rounded-xl border border-fg/15 bg-canvas px-3 py-2.5 text-sm">
               <option value="">— Pilih paket —</option>
               {activePackages.map((pkg) => (
                 <option key={pkg.id} value={pkg.id}>{pkg.name} — Rp {Number(pkg.price).toLocaleString("id-ID")} · {pkg.photoCount} foto</option>
               ))}
-            </select>
+            </Select>
             {activePackages.length === 0 && <p className="mt-2 text-xs text-amber-500">Belum ada paket aktif. Buat dulu di Keuangan → Paket (mis. "Paket 30rb").</p>}
             {singleMissing && activePackages.length > 0 && <p className="mt-2 text-xs text-amber-500">Pilih paket dulu sebelum menyimpan.</p>}
           </div>
