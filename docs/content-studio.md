@@ -164,3 +164,13 @@ Go-live: `npm run build:server` + `build:client`, restart service StudiodoServer
 - **Hook** ada di `hooks.ts`, satu per fitur, dari sudut pandang pemilik booth (pertanyaan, rasa sakit, POV). Aturan: dramatis boleh, klaim harus tetap benar. Tes memastikan setiap fitur punya hook sendiri.
 - **Ajakan komentar**: semua caption berisi `Komen "COBA"`. Belum ada balasan otomatis, jadi komentar harus dibalas manual (atau lewat integrasi DM nanti).
 - Font woff2 (Bricolage, Instrument Serif, Inter) ada di `server/assets/fonts`; lisensi OFL.
+
+## Tinjau di HP dan catatan revisi
+- Tab **Tinjau** (tab pertama) menampilkan tiap post antrean dengan preview nyata, caption, peringatan klaim, dan tombol setujui / kirim / hapus. Halaman bisa ditambahkan ke layar utama iPhone (manifest + ikon di `client/public`).
+- **Minta revisi**: catatan disimpan di `post.revision`, post kembali jadi draf dan tidak bisa disetujui sampai catatannya dibatalkan atau dibersihkan (`PATCH /queue/:id` dengan `revision: ""`). Catatan dibaca dan dikerjakan di sesi Claude Code; belum ada pengerjaan otomatis di server.
+
+## Bahan foto dari booth sendiri
+- Tab **Bahan foto**: pilih tenant (booth kita), lihat sesi selesai yang punya foto, ketuk foto atau strip yang cocok (maks 8), pilih fitur dan format, lalu **Buat konten**. Foto diimpor ke aset Studio (`asset:<file>`) dan generator (`withPhotos`) memasangnya: foto pertama jadi sampul penuh, foto kedua latar redup di slide 2, strip masuk ke mockup cetak.
+- **Izin dulu**: daftar bawaan hanya sesi dengan `publishConsent` (pop-up izin media sosial di kiosk). Sesi tanpa izin hanya tampil bila dicentang, dan impornya ditolak server (409) kecuali ada konfirmasi bahwa izin didapat di luar aplikasi.
+- Rute: `GET /content-studio/source/tenants`, `GET /source/sessions?tenantId=&all=1&before=`, `POST /source/import`; `POST /generate` menerima `photos` dan `strips`. Impor membaca file lokal `/storage/...`, URL R2, atau unduhan Google Drive; sumber yang bukan gambar ditolak.
+- Belum diuji terhadap data tenant nyata (butuh server yang sudah dirilis dan sesi berfoto).

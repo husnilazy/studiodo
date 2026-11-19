@@ -61,15 +61,18 @@ export async function deleteDeck(id: string): Promise<void> {
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
 const safeName = (n: string) => n.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 
+export async function saveAssetBuffer(name: string, buf: Buffer, ext: "png" | "jpg" | "jpeg" | "webp" | "gif"): Promise<string> {
+  if (buf.length > 12 * 1024 * 1024) throw new Error("Gambar maksimal 12 MB");
+  await mkdir(assetsDir(), { recursive: true });
+  const file = `${Date.now().toString(36)}-${safeName(name || "gambar")}`.replace(/\.[a-z]+$/i, "") + "." + ext.toLowerCase().replace("jpeg", "jpg");
+  await writeFile(path.join(assetsDir(), file), buf);
+  return file;
+}
+
 export async function saveAsset(name: string, dataUrl: string): Promise<string> {
   const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/i.exec(dataUrl);
   if (!m) throw new Error("File harus gambar PNG/JPG/WebP/GIF");
-  const buf = Buffer.from(m[2], "base64");
-  if (buf.length > 12 * 1024 * 1024) throw new Error("Gambar maksimal 12 MB");
-  await mkdir(assetsDir(), { recursive: true });
-  const file = `${Date.now().toString(36)}-${safeName(name || "gambar")}`.replace(/\.[a-z]+$/i, "") + "." + m[1].toLowerCase().replace("jpeg", "jpg");
-  await writeFile(path.join(assetsDir(), file), buf);
-  return file;
+  return saveAssetBuffer(name, Buffer.from(m[2], "base64"), m[1].toLowerCase() as "png" | "jpg" | "jpeg" | "webp" | "gif");
 }
 
 export async function listAssets(): Promise<{ name: string; size: number }[]> {

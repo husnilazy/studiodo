@@ -40,10 +40,11 @@ function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: number; re
   );
 }
 
-function ReviewCard({ post, deck, warn, tz, connected, busy, onApprove, onDraft, onSendNow, onDelete, onEdit }: {
+function ReviewCard({ post, deck, warn, tz, connected, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision }: {
   post: CsPost; deck?: CsDeck; warn?: string; tz: number; connected: boolean; busy: boolean;
-  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void;
+  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void;
 }) {
+  const [note, setNote] = useState("");
   const [i, setI] = useState(0);
   const [replay, setReplay] = useState(0);
   const slides = deck?.slides.length ?? 0;
@@ -88,11 +89,26 @@ function ReviewCard({ post, deck, warn, tz, connected, busy, onApprove, onDraft,
         {post.hashtags.length > 0 && <p className="mt-2 break-words text-fg/50">{post.hashtags.join(" ")}</p>}
       </details>
 
+      {post.revision ? (
+        <div className="grid gap-2 rounded-xl border border-sky-500/40 bg-sky-500/10 p-3 text-xs">
+          <p className="font-bold text-sky-700 dark:text-sky-300">Revisi diminta</p>
+          <p className="whitespace-pre-wrap text-fg/80">{post.revision.text}</p>
+          <p className="text-[11px] text-fg/50">Post ini tertahan sebagai draf sampai revisi dikerjakan. Minta Claude mengerjakannya di sesi, atau batalkan permintaan.</p>
+          {!busy && <div><button className={btnGhost} onClick={() => onRevision("")}>Batalkan permintaan</button></div>}
+        </div>
+      ) : (
+        <details className="rounded-xl bg-fg/5 p-3 text-xs">
+          <summary className="cursor-pointer font-semibold">Minta revisi</summary>
+          <textarea rows={3} maxLength={1000} className="mt-2 w-full rounded-lg border border-fg/15 bg-fg/5 px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Mis. hook kurang tajam, ganti tema ke senja, caption terlalu panjang" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="mt-2 flex items-center gap-2"><button className={btnPrimary} disabled={busy || !note.trim()} onClick={() => { onRevision(note); setNote(""); }}>Kirim catatan</button><span className="text-[11px] text-fg/50">Post kembali jadi draf dan tidak tayang.</span></div>
+        </details>
+      )}
+
       <p className="text-[11px] text-fg/50">{goesOut}</p>
 
       <div className="flex flex-wrap gap-2">
         {busy && <span className="py-1.5 text-xs text-fg/50">Sedang diproses…</span>}
-        {!busy && post.status === "draft" && <button className={btnAccent} onClick={onApprove}>Setujui</button>}
+        {!busy && post.status === "draft" && <button className={btnAccent} disabled={!!post.revision} title={post.revision ? "Selesaikan atau batalkan revisi dulu" : undefined} onClick={onApprove}>Setujui</button>}
         {!busy && (post.status === "scheduled" || post.status === "ready") && <button className={btnGhost} onClick={onDraft}>Kembalikan ke draf</button>}
         {!busy && (post.status === "scheduled" || post.status === "ready") && <button className={btnPrimary} onClick={onSendNow}>{post.mode === "auto" ? "Kirim sekarang" : "Siapkan sekarang"}</button>}
         {!busy && <button className={btnGhost} onClick={onEdit}>Edit di Kalender</button>}
@@ -116,7 +132,8 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
   const review = useMemo(() => posts.filter((p) => p.status === "draft" || p.status === "failed").sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)), [posts]);
   const upcoming = useMemo(() => posts.filter((p) => ["scheduled", "preparing", "ready", "posting"].includes(p.status)).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)), [posts]);
   const list = show === "tinjau" ? review : upcoming;
-  const drafts = posts.filter((p) => p.status === "draft").length;
+  const drafts = posts.filter((p) => p.status === "draft" && !p.revision).length;
+  const revisions = posts.filter((p) => p.revision).length;
 
   const run = async (id: string, fn: () => Promise<unknown>, ok?: string) => {
     setBusyId(id); setN(null);
@@ -129,6 +146,7 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
         {([["tinjau", `Perlu ditinjau ${review.length}`], ["jadwal", `Terjadwal ${upcoming.length}`]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setShow(id)} className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${show === id ? "bg-fg text-canvas" : "bg-fg/10 text-fg/70"}`}>{label}</button>
         ))}
+        {revisions > 0 && <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-bold text-sky-700 dark:text-sky-300">Revisi diminta {revisions}</span>}
         {show === "tinjau" && drafts > 1 && <button className={`${btnAccent} ml-auto`} onClick={() => { if (window.confirm(`Setujui ${drafts} draf? Yang bermode Auto akan tayang sesuai jadwal masing-masing.`)) void run("all", () => contentStudioApi.approvePosts(), `${drafts} draf disetujui.`); }}>Setujui semua ({drafts})</button>}
       </div>
       <NoticeLine n={n} />
@@ -148,6 +166,7 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
           onDraft={() => void run(p.id, () => contentStudioApi.patchPost(p.id, { status: "draft" }), "Dikembalikan ke draf.")}
           onSendNow={() => { if (window.confirm(p.mode === "auto" ? "Kirim post ini ke Instagram sekarang?" : "Siapkan file post ini sekarang?")) void run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik sampai menit." : "Disiapkan."); }}
           onDelete={() => { if (window.confirm("Hapus post ini dari kalender?")) void run(p.id, () => contentStudioApi.deletePost(p.id)); }}
+          onRevision={(text) => void run(p.id, () => contentStudioApi.patchPost(p.id, { revision: text }), text.trim() ? "Catatan revisi tersimpan. Post ditahan sebagai draf." : "Permintaan revisi dibatalkan.")}
           onEdit={() => go("kalender")} />
       ))}
     </div>

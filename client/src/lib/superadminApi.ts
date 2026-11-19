@@ -779,9 +779,10 @@ export type CsFeature = { id: string; name: string; pillar: string; since: strin
 export type CsPostStatus = "draft" | "scheduled" | "preparing" | "ready" | "posting" | "posted" | "failed" | "skipped";
 export type CsPost = {
   id: string; deckId: string; title: string; format: "carousel" | "reel"; featureId?: string; scheduledAt: string; mode: "auto" | "manual"; status: CsPostStatus;
-  caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string;
+  caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string; revision?: { text: string; at: string };
   attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; postedAt?: string; createdAt: string; log: string[];
 };
+export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
   tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; prepLeadMin: number; maxPerDay: number;
   autopilot: boolean; autoApprove: boolean; horizonDays: number; lastRefillAt?: string;
@@ -827,10 +828,13 @@ export type CsTeaser = { logoStyle: "silver" | "squircle-white" | "squircle-dark
 export const contentStudioApi = {
   features: () => request<{ pillars: string[]; features: CsFeature[] }>("/content-studio/features"),
   captionVariants: (featureId: string) => request<{ captions: string[] }>(`/content-studio/features/${encodeURIComponent(featureId)}/captions`),
-  generate: (featureIds: string[], formats: ("carousel" | "reel")[], variant = 0) => request<CsDeck[]>("/content-studio/generate", { method: "POST", body: JSON.stringify({ featureIds, formats, variant }) }),
+  generate: (featureIds: string[], formats: ("carousel" | "reel")[], variant = 0, material?: { photos?: string[]; strips?: string[] }) => request<CsDeck[]>("/content-studio/generate", { method: "POST", body: JSON.stringify({ featureIds, formats, variant, ...material }) }),
+  sourceTenants: () => request<{ id: string; name: string }[]>("/content-studio/source/tenants"),
+  sourceSessions: (tenantId: string, all: boolean, before?: string) => request<{ sessions: CsSourceSession[]; next: string | null }>(`/content-studio/source/sessions?tenantId=${encodeURIComponent(tenantId)}${all ? "&all=1" : ""}${before ? `&before=${encodeURIComponent(before)}` : ""}`),
+  sourceImport: (body: { sessionId: string; photoIndexes?: number[]; strip?: boolean; confirmedConsent?: boolean }) => request<{ photos: string[]; strip?: string }>("/content-studio/source/import", { method: "POST", body: JSON.stringify(body) }),
   queue: () => request<CsQueue>("/content-studio/queue"),
   schedule: (body: { deckId: string; scheduledAt: string; mode?: "auto" | "manual"; status?: "draft" | "scheduled" }) => request<CsPost>("/content-studio/queue", { method: "POST", body: JSON.stringify(body) }),
-  patchPost: (id: string, patch: Partial<Pick<CsPost, "scheduledAt" | "mode" | "status" | "caption" | "hashtags" | "carouselMedia">>) => request<CsPost>(`/content-studio/queue/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  patchPost: (id: string, patch: Partial<Pick<CsPost, "scheduledAt" | "mode" | "status" | "caption" | "hashtags" | "carouselMedia">> & { revision?: string }) => request<CsPost>(`/content-studio/queue/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deletePost: (id: string) => request<{ ok: boolean }>(`/content-studio/queue/${id}`, { method: "DELETE" }),
   approvePosts: (ids?: string[]) => request<{ approved: number }>("/content-studio/queue/approve", { method: "POST", body: JSON.stringify({ ids }) }),
   postNow: (id: string) => request<CsPost>(`/content-studio/queue/${id}/post-now`, { method: "POST" }),

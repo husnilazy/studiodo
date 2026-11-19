@@ -30,7 +30,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [shown, tz]);
   const today = dayKey(new Date().toISOString(), tz);
-  const drafts = posts.filter((p) => p.status === "draft").length;
+  const drafts = posts.filter((p) => p.status === "draft" && !p.revision).length;
 
   // keep the list fresh while something is rendering/posting
   const busyServer = posts.some((p) => p.status === "preparing" || p.status === "posting");
@@ -93,7 +93,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     {busy && <span className="text-[11px] text-fg/50">sedang diproses…</span>}
-                    {!busy && p.status === "draft" && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.approvePosts([p.id]))}>Setujui</button>}
+                    {!busy && p.status === "draft" && <button className={btnAccent} disabled={!!p.revision} title={p.revision ? "Revisi diminta, selesaikan dulu" : undefined} onClick={() => run(p.id, () => contentStudioApi.approvePosts([p.id]))}>Setujui</button>}
                     {!busy && (p.status === "scheduled" || p.status === "ready") && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik–menit." : "Disiapkan sekarang.")}>{p.mode === "auto" ? "Kirim sekarang" : "Siapkan sekarang"}</button>}
                     {!busy && p.status === "ready" && (p.files ?? []).map((f) => <button key={f} className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.downloadPostFile(p.id, f))}>{(p.files ?? []).length > 1 ? `↓ ${f.replace(/.*-(\d+)\.\w+$/, "slide $1")}` : "↓ Unduh"}</button>)}
                     {!busy && (p.status === "ready" || p.status === "scheduled") && p.mode === "manual" && <button className={btnPrimary} onClick={() => run(p.id, () => contentStudioApi.markPosted(p.id))}>Tandai terposting</button>}

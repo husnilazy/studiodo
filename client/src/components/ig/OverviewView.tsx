@@ -4,7 +4,7 @@ import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, Statu
 
 // Ringkasan: what needs attention, what posts next, and the Autopilot switch.
 
-export type Tab = "tinjau" | "ringkasan" | "generator" | "kalender" | "studio" | "aset" | "pengaturan";
+export type Tab = "tinjau" | "bahan" | "ringkasan" | "generator" | "kalender" | "studio" | "aset" | "pengaturan";
 
 function Stat({ value, label, tone, onClick }: { value: number | string; label: string; tone?: string; onClick?: () => void }) {
   return (

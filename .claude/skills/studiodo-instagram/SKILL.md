@@ -25,6 +25,16 @@ Mesin ada di `server/lib/contentStudio/`, UI di `client/src/components/ig/`, dok
 
 Prasyarat posting nyata (cek, jangan asumsikan): `IG_USER_ID`, `IG_ACCESS_TOKEN`, `CS_MEDIA_BASE_URL` atau `PUBLIC_BASE_URL` (Instagram mengambil media dari URL publik), Chrome dan ffmpeg di PC server, lalu `POST /ig/test` ("Tes koneksi"). Posting nyata pertama harus diawasi user. Per 2026-11-19 alur publish baru diuji ke API palsu.
 
+## Catatan revisi dari HP (tab Tinjau)
+User bisa menulis "Minta revisi" di kartu post. Server menyimpannya di `post.revision = { text, at }` dan menahan post sebagai `draft` (`approvable()` menolak persetujuan sampai catatan dihapus). Di awal sesi atau saat user menyebut revisi:
+1. Baca antrean: `GET /queue` (perlu sesi superadmin), atau bila server berjalan di PC ini, `storage/content-studio/queue.json`. Cari post dengan `revision`.
+2. Kerjakan sesuai catatan: ubah hook di `hooks.ts`, tema/komposisi, caption (`PATCH /queue/:id` dengan `caption`/`hashtags`), atau deck di Studio. Perubahan kode butuh build + rilis agar muncul di server produksi; sampaikan itu.
+3. Cek hasilnya secara visual, lalu bersihkan catatan: `PATCH /queue/:id` dengan `{ "revision": "" }`. Post tetap draf; user yang menyetujui lagi di Tinjau.
+4. Jangan menghapus catatan sebelum revisinya benar-benar selesai, dan jangan menyetujui atas nama user.
+
+## Foto dari booth sendiri
+Tab **Bahan foto** mengambil foto sesi tenant lewat server (`/source/*`); jangan membaca database produksi atau mengunduh foto customer di luar alat itu. Hanya sesi ber-`publishConsent` yang dipakai; sesi tanpa izin butuh konfirmasi user bahwa izin didapat di luar aplikasi. Setelah user memilih, generator menerima `photos`/`strips` (`withPhotos`). Cek hasil render: wajah tidak terpotong dan foto portrait di sampul tetap terbaca.
+
 ## Hook (cover dan 3 detik pertama reel)
 Satu hook per fitur di `hooks.ts`; tes mewajibkan semua fitur punya hook unik. Tulis dari sudut pemilik booth, bukan dari nama fitur:
 - **Pertanyaan rasa sakit**: "Customer mau bayar, kamu masih *cek mutasi?*"

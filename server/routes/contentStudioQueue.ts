@@ -2,11 +2,11 @@ import { Router } from "express";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { FEATURES, PILLARS, featureById } from "../lib/contentStudio/features.js";
-import { CAPTION_VARIANTS, captionFor, featureDeck } from "../lib/contentStudio/generator.js";
+import { CAPTION_VARIANTS, captionFor, featureDeck, withPhotos } from "../lib/contentStudio/generator.js";
 import { checkConnection, clearConnection, loadConnection, mask, saveConnection } from "../lib/contentStudio/instagram.js";
 import { createPost, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
 import { listDecks, saveDeck } from "../lib/contentStudio/render.js";
-import { getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
+import { approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
 // Superadmin → Konten Instagram: feature generator, posting calendar, autopilot and the Instagram connection.
@@ -28,11 +28,17 @@ contentQueueRouter.post("/generate", async (req, res) => {
   const ids: string[] = Array.isArray(req.body?.featureIds) ? req.body.featureIds.map(String).slice(0, 60) : [];
   const formats: ("carousel" | "reel")[] = (Array.isArray(req.body?.formats) ? req.body.formats : ["carousel"]).filter((f: unknown) => f === "carousel" || f === "reel");
   if (!ids.length || !formats.length) return res.status(400).json({ error: "Pilih fitur dan format" });
+  const assetNames = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)).filter(Boolean).slice(0, 8) : []);
+  const photos = assetNames(req.body?.photos);
+  const strips = assetNames(req.body?.strips);
   const decks: Deck[] = [];
   for (const id of ids) {
     const f = featureById(id);
     if (!f) continue;
-    for (const format of formats) decks.push(await saveDeck(featureDeck(f, format, Number(req.body?.variant) || 0)));
+    for (const format of formats) {
+      const base = featureDeck(f, format, Number(req.body?.variant) || 0);
+      decks.push(await saveDeck(photos.length || strips.length ? withPhotos(base, photos, strips) : base));
+    }
   }
   res.json(decks);
 });
@@ -64,7 +70,7 @@ contentQueueRouter.post("/queue", async (req, res) => {
 
 contentQueueRouter.post("/queue/approve", async (req, res) => {
   const ids = new Set<string>(Array.isArray(req.body?.ids) ? req.body.ids.map(cleanId) : []);
-  const approved = await mutatePosts((posts) => { let c = 0; for (const p of posts) if (p.status === "draft" && (!ids.size || ids.has(p.id))) { p.status = "scheduled"; c++; } return c; });
+  const approved = await mutatePosts((posts) => { let c = 0; for (const p of posts) if (approvable(p) && (!ids.size || ids.has(p.id))) { p.status = "scheduled"; c++; } return c; });
   res.json({ approved });
 });
 
@@ -86,6 +92,7 @@ contentQueueRouter.patch("/queue/:id", async (req, res) => {
     patch.status = b.status;
     if (b.status === "scheduled") { patch.attempts = 0; patch.error = undefined; patch.nextTryAt = undefined; }
   }
+  if (b.revision !== undefined) Object.assign(patch, revisionPatch(b.revision, new Date().toISOString()));
   if (typeof b.caption === "string") patch.caption = b.caption.slice(0, 2200);
   if (Array.isArray(b.hashtags)) patch.hashtags = b.hashtags.map(String).slice(0, 30);
   if (b.carouselMedia === "image" || b.carouselMedia === "video") {

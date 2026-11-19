@@ -68,6 +68,25 @@ export function featureDeck(f: Feature, format: "carousel" | "reel", variant = 0
   };
 }
 
+/**
+ * Puts real photos into a deck. `photos` are single shots (the first becomes the full-bleed cover photo, the second a dimmed
+ * backdrop on the next slide); `strips` are finished photo strips, used inside the mockups that show prints. Names are
+ * Content Studio asset file names. Pure: returns a new deck.
+ */
+export function withPhotos(deck: Deck, photos: string[], strips: string[] = []): Deck {
+  const ref = (n: string) => `asset:${n}`;
+  const mockImages = [...strips, ...photos].slice(0, 6).map(ref);
+  let backdrop = photos[1];
+  const slides = deck.slides.map((s, i) => {
+    let next = s;
+    if (i === 0 && photos[0] && (s.kind === "cover" || s.kind === "hook")) next = { ...next, bgImage: ref(photos[0]) };
+    else if (backdrop && i === 1 && s.kind !== "cover") { next = { ...next, bgImage: ref(backdrop) }; backdrop = ""; }
+    if (mockImages.length && next.mockup && next.mockup !== "none") next = { ...next, images: mockImages };
+    return next;
+  });
+  return { ...deck, slides };
+}
+
 // ---------------------------------------------------------------- autopilot ----
 
 export type AutopilotOptions = {

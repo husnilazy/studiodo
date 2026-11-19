@@ -15,6 +15,7 @@ export type ScheduledPost = {
   format: "carousel" | "reel";
   featureId?: string;
   scheduledAt: string; // ISO (UTC)
+  revision?: { text: string; at: string }; // note asked from the review screen; the post stays a draft until it is cleared
   mode: PostMode;
   status: PostStatus;
   caption: string;
@@ -159,3 +160,15 @@ export function retryDelayMs(attempts: number): number | null {
 }
 
 export const localDayKey = (iso: string, tzOffsetMin: number) => new Date(t(iso) + tzOffsetMin * 60_000).toISOString().slice(0, 10);
+
+/** A draft may be approved only when no revision is pending. */
+export const approvable = (p: Pick<ScheduledPost, "status" | "revision">) => p.status === "draft" && !p.revision;
+
+/**
+ * Patch for a revision note from the review screen. Asking for a revision always pulls the post back to "draft", so nothing that
+ * is still being discussed can go out; an empty note clears the request (the post stays a draft, approving is a separate step).
+ */
+export function revisionPatch(text: unknown, nowIso: string): Partial<ScheduledPost> {
+  const t = typeof text === "string" ? text.trim().slice(0, 1000) : "";
+  return t ? { revision: { text: t, at: nowIso }, status: "draft", attempts: 0, nextTryAt: undefined } : { revision: undefined };
+}

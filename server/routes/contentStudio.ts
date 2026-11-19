@@ -7,9 +7,11 @@ import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, pr
 import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
 import { THEMES, type Deck } from "../lib/contentStudio/types.js";
 import { contentQueueRouter } from "./contentStudioQueue.js";
+import { contentSourceRouter } from "./contentSource.js";
 
 // Superadmin → Konten Instagram: mounted under /api/superadmin/content-studio (auth applied by the parent router).
 export const contentStudioAdminRouter = Router();
+contentStudioAdminRouter.use(contentSourceRouter); // photo material from our own booths
 contentStudioAdminRouter.use(contentQueueRouter); // feature generator, calendar, autopilot, Instagram connection
 
 const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge", "hook", "chat", "note"];

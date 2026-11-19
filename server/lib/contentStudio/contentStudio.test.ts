@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FEATURES } from "./features.js";
-import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots } from "./generator.js";
+import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots, withPhotos } from "./generator.js";
+import { displayUrls } from "./sourcePhotos.js";
 import { buildCaption, publishPost, type Fetcher } from "./instagram.js";
-import { duePrepare, duePublish, localDayKey, retryDelayMs, type ScheduledPost } from "./schedule.js";
+import { approvable, duePrepare, duePublish, localDayKey, retryDelayMs, revisionPatch, type ScheduledPost } from "./schedule.js";
 import { HOOKS, CTA_KEYWORD } from "./hooks.js";
 import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
 import { buildKacaReelDoc, buildKacaSlideDoc } from "./styleKaca.js";
@@ -145,6 +146,48 @@ describe("queue rules", () => {
 
   it("backs off 5 and 20 minutes, then gives up", () => {
     expect([retryDelayMs(1), retryDelayMs(2), retryDelayMs(3)]).toEqual([300_000, 1_200_000, null]);
+  });
+});
+
+describe("photo material", () => {
+  it("puts photos on the cover, a backdrop on slide 2 and strips in the mockups", () => {
+    const d = withPhotos(featureDeck(FEATURES.find((f) => f.mockup === "strip")!, "carousel"), ["a.jpg", "b.jpg"], ["s.png"]);
+    expect(d.slides[0].bgImage).toBe("asset:a.jpg");
+    expect(d.slides[1].bgImage).toBe("asset:b.jpg");
+    expect(d.slides[0].images).toEqual(["asset:s.png", "asset:a.jpg", "asset:b.jpg"]);
+    expect(buildKacaSlideDoc({ ...d, slides: [{ ...d.slides[0], bgImage: "data:image/png;base64,AAAA" }] }, 0)).toContain("cvP");
+  });
+  it("leaves a deck untouched without photos", () => {
+    const d = featureDeck(FEATURES[0], "reel");
+    expect(withPhotos(d, [], [])).toEqual(d);
+  });
+  it("prefers Drive previews and makes stored paths absolute", () => {
+    process.env.PUBLIC_BASE_URL = "https://qr.example";
+    const r = displayUrls({ photoUrls: ["/storage/t/f/1.jpg", "https://r2/x.jpg"], drivePhotoIds: [], stripUrl: "/storage/t/f/s.jpg", driveStripId: null });
+    expect(r.photos).toEqual(["https://qr.example/storage/t/f/1.jpg", "https://r2/x.jpg"]);
+    expect(r.strip).toBe("https://qr.example/storage/t/f/s.jpg");
+    const d = displayUrls({ photoUrls: ["u"], drivePhotoIds: [{ fileId: "f", viewUrl: "", downloadUrl: "", previewUrl: "https://drive/p" }], stripUrl: null, driveStripId: "sid" });
+    expect(d.photos).toEqual(["https://drive/p"]);
+    expect(d.strip).toContain("id=sid");
+  });
+});
+
+describe("revision notes", () => {
+  it("pulls the post back to draft and blocks approval until cleared", () => {
+    const patch = revisionPatch("  hook kurang tajam  ", "2026-11-19T10:00:00.000Z");
+    expect(patch.revision).toEqual({ text: "hook kurang tajam", at: "2026-11-19T10:00:00.000Z" });
+    expect(patch.status).toBe("draft");
+    const scheduled = post({ status: "scheduled" });
+    expect(approvable({ ...scheduled, ...patch })).toBe(false);
+    expect(approvable(post({ status: "draft" }))).toBe(true);
+  });
+  it("clears the request on an empty note without changing the status", () => {
+    const patch = revisionPatch("   ", "2026-11-19T10:00:00.000Z");
+    expect(patch).toEqual({ revision: undefined });
+    expect(approvable({ ...post({ status: "draft" }), ...patch })).toBe(true);
+  });
+  it("caps very long notes", () => {
+    expect(revisionPatch("x".repeat(5000), "t").revision?.text.length).toBe(1000);
   });
 });
 
