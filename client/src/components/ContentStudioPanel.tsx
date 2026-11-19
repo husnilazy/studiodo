@@ -6,6 +6,7 @@ import { TriptychPanel } from "@/components/TriptychPanel";
 import { CalendarView } from "@/components/ig/CalendarView";
 import { GeneratorView } from "@/components/ig/GeneratorView";
 import { OverviewView, type Tab } from "@/components/ig/OverviewView";
+import { ReviewView } from "@/components/ig/ReviewView";
 import { ScheduleDialog } from "@/components/ig/ScheduleDialog";
 import { SettingsView } from "@/components/ig/SettingsView";
 import { StudioView } from "@/components/ig/StudioView";
@@ -13,18 +14,18 @@ import { errText, type Notice, NoticeLine } from "@/components/ig/shared";
 import { contentStudioApi, type CsDeck, type CsIdea, type CsQueue } from "@/lib/superadminApi";
 
 // Superadmin → Konten Instagram.
-// Ringkasan (status + Autopilot) · Generator (fitur → konten) · Kalender (jadwal & auto-post) · Studio (edit desain)
+// Tinjau (HP: preview + setujui) · Ringkasan (status + Autopilot) · Generator (fitur → konten) · Kalender (jadwal & auto-post) · Studio (edit desain)
 // · Aset profil (Pembuka Feed, Teaser, Logo, checklist peluncuran) · Pengaturan (koneksi Instagram, jadwal default).
 // Rendering runs on the server PC (Chrome + ffmpeg): see server/lib/contentStudio.
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "ringkasan", label: "Ringkasan" }, { id: "generator", label: "Generator" }, { id: "kalender", label: "Kalender" },
+  { id: "tinjau", label: "Tinjau" }, { id: "ringkasan", label: "Ringkasan" }, { id: "generator", label: "Generator" }, { id: "kalender", label: "Kalender" },
   { id: "studio", label: "Studio desain" }, { id: "aset", label: "Aset profil" }, { id: "pengaturan", label: "Pengaturan" },
 ];
 const ASSETS = [["trio", "Pembuka Feed (3 tile)"], ["teaser", "Teaser Reel"], ["icon", "Logo"], ["plan", "Checklist peluncuran"]] as const;
 
 export function ContentStudioPanel() {
-  const [tab, setTab] = useState<Tab>("ringkasan");
+  const [tab, setTab] = useState<Tab>("tinjau");
   const [asset, setAsset] = useState<(typeof ASSETS)[number][0]>("trio");
   const [decks, setDecks] = useState<CsDeck[] | null>(null);
   const [ideas, setIdeas] = useState<CsIdea[]>([]);
@@ -46,10 +47,10 @@ export function ContentStudioPanel() {
 
   if (!decks || !queue) return <div className="grid gap-3"><p className="text-sm text-fg/50">Memuat…</p><NoticeLine n={toast} /></div>;
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <nav className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-fg/10 p-1 text-xs font-bold" aria-label="Bagian Konten Instagram">
         {TABS.map((t) => {
-          const badge = t.id === "kalender" ? queue.posts.filter((p) => p.status === "draft" || p.status === "failed").length : 0;
+          const badge = t.id === "tinjau" ? queue.posts.filter((p) => p.status === "draft" || p.status === "failed").length : 0;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} className={`flex shrink-0 items-center gap-2 rounded-full px-5 py-2 transition ${tab === t.id ? "bg-fg text-canvas" : "text-fg/60 hover:text-fg"}`}>
               {t.label}{badge > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-black text-black">{badge}</span>}
@@ -59,6 +60,7 @@ export function ContentStudioPanel() {
       </nav>
       <NoticeLine n={toast} />
 
+      {tab === "tinjau" && <ReviewView queue={queue} decks={decks} onChange={loadQueue} go={setTab} />}
       {tab === "ringkasan" && <OverviewView queue={queue} onChange={loadQueue} go={setTab} />}
       {tab === "generator" && <GeneratorView decks={decks} onGenerated={async () => { await loadDecks(); }} onOpenDeck={openDeck} onSchedule={setScheduleDeck} />}
       {tab === "kalender" && <CalendarView queue={queue} decks={decks} onChange={loadQueue} onOpenDeck={openDeck} />}
