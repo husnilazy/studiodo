@@ -3,7 +3,7 @@ import { IDEA_BACKLOG } from "../lib/contentStudio/decks.js";
 import { buildIconPreviewDoc } from "../lib/contentStudio/appicon.js";
 import { buildTeaserDoc, sanitizeTeaser } from "../lib/contentStudio/teaser.js";
 import { buildTriptychDoc, DEFAULT_TRIPTYCH, sanitizeTriptych } from "../lib/contentStudio/triptych.js";
-import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTeaserRender, startTriptychRender } from "../lib/contentStudio/render.js";
+import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, readAsset, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTeaserRender, startTriptychRender } from "../lib/contentStudio/render.js";
 import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
 import { THEMES, type Deck } from "../lib/contentStudio/types.js";
 import { contentQueueRouter } from "./contentStudioQueue.js";
@@ -87,6 +87,12 @@ contentStudioAdminRouter.get("/assets", async (_req, res) => res.json(await list
 contentStudioAdminRouter.post("/assets", async (req, res) => {
   try { res.json({ name: await saveAsset(String(req.body?.name ?? ""), String(req.body?.dataUrl ?? "")) }); }
   catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyimpan" }); }
+});
+contentStudioAdminRouter.get("/assets/:name/file", async (req, res) => {
+  const a = await readAsset(req.params.name);
+  if (!a || !a.mime.startsWith("image/")) return res.status(404).json({ error: "File tidak ditemukan" });
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.type(a.mime).send(a.buf);
 });
 contentStudioAdminRouter.delete("/assets/:name", async (req, res) => { await deleteAsset(req.params.name); res.json({ ok: true }); });
 

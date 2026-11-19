@@ -873,6 +873,14 @@ export const contentStudioApi = {
   preview: (deck: CsDeck, index: number) => request<{ html: string }>("/content-studio/preview", { method: "POST", body: JSON.stringify({ deck, index }) }),
   render: (deck: CsDeck, mode: "png" | "mp4" | "mp4-slides") => request<CsJob>("/content-studio/render", { method: "POST", body: JSON.stringify({ deck, mode }) }),
   job: (id: string) => request<CsJob>(`/content-studio/jobs/${id}`),
+  assets: () => request<{ name: string; size: number }[]>("/content-studio/assets"),
+  deleteAsset: (name: string) => request<{ ok: boolean }>(`/content-studio/assets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  /** Image bytes need the Bearer header, so thumbnails are fetched as blobs and shown through object URLs. */
+  async assetBlobUrl(name: string): Promise<string> {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin/content-studio/assets/${encodeURIComponent(name)}/file`, { headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {} });
+    if (!res.ok) throw new Error("Gagal memuat gambar");
+    return URL.createObjectURL(await res.blob());
+  },
   uploadAsset: (name: string, dataUrl: string) => request<{ name: string }>("/content-studio/assets", { method: "POST", body: JSON.stringify({ name, dataUrl }) }),
   /** Downloads need the Bearer header, so fetch as a blob and click a temporary link. */
   async download(jobId: string, name: string) {
