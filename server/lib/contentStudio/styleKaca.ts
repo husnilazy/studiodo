@@ -161,7 +161,7 @@ ${THEMES.map((t) => `.kc-${t}{${THEME_VARS[t]}}`).join("\n")}
 .kw{display:inline-flex;align-items:center;gap:14px;margin-top:26px;padding:16px 34px;border:1.5px dashed rgba(255,255,255,.55);border-radius:99px;font-size:30px;font-weight:700;letter-spacing:.04em}
 .kw b{font-family:"Bricolage",sans-serif;font-weight:800;color:var(--c3);letter-spacing:.1em}
 .k_ctaLogo{height:84px;align-self:center;animation:kfade .8s ease both;animation-delay:calc(var(--s0,0s) + .2s)}
-.k_rows{position:absolute;inset:-60px -120px;z-index:1;display:grid;align-content:center;gap:8px;transform:rotate(-8deg);opacity:.16;pointer-events:none}
+.k_rows{position:absolute;inset:-60px -120px;z-index:1;display:grid;align-content:center;gap:8px;transform:rotate(-8deg);opacity:.06;pointer-events:none}
 .k_rows div{display:flex;width:max-content;font-family:"Bricolage",sans-serif;font-weight:800;font-size:150px;line-height:1;white-space:nowrap;animation:kmq 24s linear infinite}
 .k_rows div:nth-child(even){animation-direction:reverse}.k_rows span{padding:0 40px}
 
