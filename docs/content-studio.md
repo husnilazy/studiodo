@@ -141,3 +141,26 @@ Tata letak tab Studio desain: tombol "+ Carousel / + Reel / Impor deck (JSON)" a
 ## Animasi masuk mockup
 
 Hanya mockup berbentuk kertas yang "keluar dari printer": `qris`, `strip`, `print-l`. Mockup lain punya animasi masuk sendiri (atribut `in` di `MOCKS`, `templates.ts`): dashboard naik+blur, gallery miring 3D, booth zoom-bounce, queue geser dari kanan, hub berputar, qris-l jatuh memantul, booth-l flip, gallery-l mengayun.
+
+## Generator, Kalender & Auto-post (2026-11-19)
+
+Tab baru: **Ringkasan · Generator · Kalender · Studio desain · Aset profil · Pengaturan** (komponen di `client/src/components/ig/`).
+
+- **Katalog fitur** (`server/lib/contentStudio/features.ts`): 40 fitur STUDIODO ditulis sebagai bahan konten (hook, masalah/solusi, langkah, mockup, tip). Fitur bertanda `check` (kamera SDK, live view, multi-kamera, GIF/video, DOKU, login Google, POS) menampilkan peringatan "cek klaim" karena belum terbukti di perangkat/akun nyata.
+- **Generator** (`generator.ts`): satu fitur -> carousel 5 slide + reel 5 scene, gaya **Contact Sheet**, 3 variasi caption, hashtag per pilar. Deterministik, tanpa AI; deck tersimpan dengan id `ft-<fitur>-c|r`.
+- **Gaya Contact Sheet** (`styleContact.ts`, `deck.style = "kontak"`): kertas/tinta/kobalt/kuning/blush, pita film bergulir + penghitung frame, judul Fraunces yang naik per baris, stabilo, cap karet, "print" ditempel stop-motion, strike-through animasi, marquee, kilat shutter antar scene. Font: Fraunces + Space Grotesk (`server/assets/fonts`). Deck lama tetap "klasik".
+- **Kalender / antrean** (`schedule.ts`, `storage/content-studio/queue.json` + `settings.json`, tanpa migrasi DB): status draft -> scheduled -> preparing -> ready -> posting -> posted (atau failed/skipped). Mode **Auto** (server kirim ke Instagram) atau **Manual** (file disiapkan, unduh lalu "Tandai terposting"). Draf hasil Autopilot harus disetujui dulu kecuali "Setujui otomatis" dinyalakan.
+- **Worker** (`publisher.ts`, tiap 60 dtk, hanya di server PC): render `prepLeadMin` menit sebelum tayang (carousel = JPEG, Instagram tidak menerima PNG; reel = MP4 + cover), kirim lewat Graph API, retry 5 menit lalu 20 menit lalu gagal, batas posting per hari, pemulihan setelah restart (post yang sedang "posting" ditandai gagal, bukan diulang, supaya tidak dobel).
+- **Instagram** (`instagram.ts`): container -> tunggu FINISHED -> `media_publish`. Kredensial dari `.env` (`IG_USER_ID`, `IG_ACCESS_TOKEN`, opsional `IG_GRAPH_HOST`, `IG_API_VERSION`) atau diisi di Pengaturan (disimpan di `storage/content-studio/ig-connection.json`). Instagram mengunduh media dari `GET /api/public/cs-media/:token/:file` (token acak per post, hanya aktif saat siap/sedang dikirim); alamat dasar = `CS_MEDIA_BASE_URL` > `PUBLIC_BASE_URL` > `APP_BASE_URL`. "Tes koneksi" di Pengaturan memeriksa token dan keterjangkauan alamat publik.
+- **Autopilot**: mengisi kalender dari katalog (pilar bergantian, tiap fitur sekali per format, reel tiap N post) sepanjang `horizonDays`; tombol "Isi kalender sekarang" atau otomatis tiap 6 jam bila dinyalakan.
+
+Go-live: `npm run build:server` + `build:client`, restart service StudiodoServer, isi kredensial Instagram, jalankan "Tes koneksi", coba satu post.
+
+## Gaya "Kaca" dan hook (2026-11-19)
+- **Gaya resmi sekarang `kaca`** (`styleKaca.ts`): dasar gelap, aurora warna, rusuk kaca bergalur, panel kaca buram, pil outline, judul Bricolage Grotesque dengan satu kata aksen Instrument Serif miring. Logo = wordmark STUDIODO yang sudah ada, tanpa slogan. Contact Sheet (`kontak`) dan Klasik tetap ada dan bisa dipilih per deck.
+- **Tema warna** (`deck.theme`): biru, ungu, rose, senja, tosca. Generator memutar tema per fitur supaya feed tidak jadi satu warna. Tidak ada hijau neon.
+- **Susunan berbeda tiap konten**: tiap jenis slide punya beberapa komposisi (sampul 3 + foto, bandingkan 2, langkah 2, catatan 2, penutup 2). Pilihan ditentukan dari id deck, jadi hasilnya stabil tapi antar-deck berbeda.
+- **Foto sendiri**: foto latar penuh di sampul otomatis memakai komposisi foto (Ken Burns); foto latar di slide lain dipakai redup. Video unggahan belum didukung.
+- **Hook** ada di `hooks.ts`, satu per fitur, dari sudut pandang pemilik booth (pertanyaan, rasa sakit, POV). Aturan: dramatis boleh, klaim harus tetap benar. Tes memastikan setiap fitur punya hook sendiri.
+- **Ajakan komentar**: semua caption berisi `Komen "COBA"`. Belum ada balasan otomatis, jadi komentar harus dibalas manual (atau lewat integrasi DM nanti).
+- Font woff2 (Bricolage, Instrument Serif, Inter) ada di `server/assets/fonts`; lisensi OFL.

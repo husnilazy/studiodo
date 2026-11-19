@@ -1,0 +1,200 @@
+import { describe, expect, it } from "vitest";
+import { FEATURES } from "./features.js";
+import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots } from "./generator.js";
+import { buildCaption, publishPost, type Fetcher } from "./instagram.js";
+import { duePrepare, duePublish, localDayKey, retryDelayMs, type ScheduledPost } from "./schedule.js";
+import { HOOKS, CTA_KEYWORD } from "./hooks.js";
+import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
+import { buildKacaReelDoc, buildKacaSlideDoc } from "./styleKaca.js";
+import { THEMES } from "./types.js";
+
+const MOCKUPS = ["none", "dashboard", "macbook", "qris", "gallery", "booth", "queue", "hub", "strip", "qris-l", "booth-l", "gallery-l", "print-l"];
+
+describe("feature catalog + generator", () => {
+  it("has unique ids and complete copy for every feature", () => {
+    expect(new Set(FEATURES.map((f) => f.id)).size).toBe(FEATURES.length);
+    for (const f of FEATURES) {
+      expect(f.pain).toHaveLength(3);
+      expect(f.gain).toHaveLength(3);
+      expect(f.how.length).toBeGreaterThanOrEqual(3);
+      expect(MOCKUPS).toContain(f.mockup);
+      expect(f.hook.split("*").length % 2).toBe(1); // balanced highlight markers
+    }
+  });
+
+  it("builds a valid carousel and reel for every feature, within Instagram limits", () => {
+    for (const f of FEATURES) {
+      for (const format of ["carousel", "reel"] as const) {
+        const d = featureDeck(f, format, 1);
+        expect(d.style).toBe("kaca");
+        expect(THEMES).toContain(d.theme);
+        expect(d.featureId).toBe(f.id);
+        expect(d.slides.length).toBeGreaterThanOrEqual(2);
+        expect(d.slides.length).toBeLessThanOrEqual(10);
+        expect(d.caption.length).toBeLessThanOrEqual(2200);
+        expect(d.hashtags.length).toBeLessThanOrEqual(30);
+        const html = format === "reel" ? buildKacaReelDoc(d).html : buildKacaSlideDoc(d, 0);
+        expect(html).toContain("kc-");
+      }
+    }
+  });
+
+  it("renders every slide kind in the Contact Sheet style without throwing", () => {
+    const deck = featureDeck(FEATURES[0], "carousel");
+    for (let i = 0; i < deck.slides.length; i++) expect(buildContactSlideDoc(deck, i)).toContain("<section");
+    expect(buildContactSlideDoc({ ...deck, slides: [{ kind: "chat", title: "Tanya", chat: [{ from: "them", text: "Halo" }, { from: "us", text: "Hai" }] }, { kind: "note", title: "Catatan", items: ["a", "b"] }, { kind: "hook", title: "Hei *kamu*", emoji: "👋" }] }, 0)).toContain("kchat");
+  });
+
+  it("has a distinct, balanced hook for every feature and a comment CTA in every caption", () => {
+    for (const f of FEATURES) {
+      const h = HOOKS[f.id];
+      expect(h, f.id).toBeTruthy();
+      expect(h.split("*").length % 2).toBe(1);
+      expect(h.split("|").length).toBeLessThanOrEqual(2);
+      for (let v = 0; v < CAPTION_VARIANTS; v++) expect(captionFor(f, v)).toContain(`Komen "${CTA_KEYWORD}"`);
+    }
+    expect(new Set(Object.values(HOOKS)).size).toBe(FEATURES.length);
+    expect(Object.keys(HOOKS).sort()).toEqual(FEATURES.map((f) => f.id).sort());
+  });
+
+  it("renders every slide kind and every composition in the Kaca style", () => {
+    const kinds = [
+      { kind: "cover", title: "Hai *kamu*", body: "b", mockup: "booth" }, { kind: "hook", title: "Hei *kamu*", emoji: "👋" },
+      { kind: "steps", title: "Cara", items: ["a", "b", "c"] }, { kind: "stat", title: "Fakta", stat: { value: 4, label: "mode" } },
+      { kind: "compare", title: "Beda", itemsBefore: ["x"], items: ["y"] }, { kind: "note", title: "Catatan", items: ["a", "b"] },
+      { kind: "chat", title: "Tanya", chat: [{ from: "them", text: "Halo" }] }, { kind: "cta", title: "Yuk *mulai*" }, { kind: "feature", title: "Fitur", mockup: "qris" },
+    ] as const;
+    const seen = new Set<string>();
+    for (let n = 0; n < 40; n++) {
+      const deck = { ...featureDeck(FEATURES[0], "carousel"), id: `x${n}`, slides: kinds.map((k) => ({ ...k })) as any };
+      for (let i = 0; i < kinds.length; i++) {
+        const html = buildKacaSlideDoc(deck, i);
+        expect(html).toContain("<section");
+        for (const m of html.matchAll(/class="ks kc-\w+ (\w*)/g)) seen.add(`${kinds[i].kind}:${m[1]}`);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(kinds.length); // at least one kind has several compositions
+    const photo = buildKacaSlideDoc({ ...featureDeck(FEATURES[0], "carousel"), slides: [{ kind: "cover", title: "Foto", bgImage: "data:image/png;base64,AAAA" }] }, 0);
+    expect(photo).toContain("cvP");
+  });
+
+  it("rotates caption voices and never exceeds the variant count", () => {
+    const f = FEATURES[0];
+    const caps = new Set(Array.from({ length: CAPTION_VARIANTS }, (_, i) => captionFor(f, i)));
+    expect(caps.size).toBe(CAPTION_VARIANTS);
+    expect(captionFor(f, CAPTION_VARIANTS)).toBe(captionFor(f, 0));
+    expect(captionFor(f, -1)).toBe(captionFor(f, CAPTION_VARIANTS - 1));
+  });
+});
+
+describe("autopilot planning", () => {
+  const base = { startDate: "2026-11-23", weeks: 4, days: [1, 3, 5, 0], times: ["19:00"], reelEvery: 3, tzOffsetMin: 420, used: [] as { featureId: string; format: "carousel" | "reel" }[] };
+
+  it("converts WIB wall-clock to UTC", () => {
+    expect(localToIso("2026-11-23", "19:00", 420)).toBe("2026-11-23T12:00:00.000Z");
+    expect(localToIso("2026-11-23", "03:30", 420)).toBe("2026-11-22T20:30:00.000Z");
+  });
+
+  it("only uses the chosen weekdays, in time order", () => {
+    const slots = postingSlots(base);
+    expect(slots).toHaveLength(16);
+    expect(slots[0].date).toBe("2026-11-23"); // a Monday
+    expect(slots.map((s) => s.date + s.time)).toEqual([...slots].map((s) => s.date + s.time).sort());
+  });
+
+  it("never repeats a feature+format and mixes pillars and formats", () => {
+    const plan = planAutopilot(base);
+    expect(plan).toHaveLength(16);
+    expect(new Set(plan.map((p) => `${p.featureId}:${p.format}`)).size).toBe(plan.length);
+    expect(plan.filter((p) => p.format === "reel")).toHaveLength(5); // every 3rd of 16
+    const pillar = (id: string) => FEATURES.find((f) => f.id === id)!.pillar;
+    for (let i = 1; i < plan.length; i++) expect(pillar(plan[i].featureId)).not.toBe(pillar(plan[i - 1].featureId));
+  });
+
+  it("skips what is already queued and stops when the catalog is used up", () => {
+    const used = FEATURES.flatMap((f) => [{ featureId: f.id, format: "carousel" as const }, { featureId: f.id, format: "reel" as const }]);
+    expect(planAutopilot({ ...base, used })).toHaveLength(0);
+    const one = planAutopilot({ ...base, used: used.slice(1), weeks: 8 });
+    expect(one).toHaveLength(1);
+    expect(one[0].featureId).toBe(FEATURES[0].id);
+  });
+});
+
+const post = (over: Partial<ScheduledPost>): ScheduledPost => ({
+  id: "p", deckId: "d", title: "t", format: "carousel", scheduledAt: "2026-11-23T12:00:00.000Z", mode: "auto", status: "scheduled", caption: "", hashtags: [],
+  carouselMedia: "image", token: "x".repeat(36), attempts: 0, createdAt: "2026-11-01T00:00:00.000Z", log: [], ...over,
+});
+
+describe("queue rules", () => {
+  const now = new Date("2026-11-23T11:45:00.000Z");
+  it("prepares posts inside the lead window only, honouring retry waits", () => {
+    const list = [post({ id: "a" }), post({ id: "b", scheduledAt: "2026-11-24T12:00:00.000Z" }), post({ id: "c", nextTryAt: "2026-11-23T11:50:00.000Z" }), post({ id: "d", status: "draft" })];
+    expect(duePrepare(list, now, 30).map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("publishes only due, rendered, auto posts and respects the daily cap", () => {
+    const day = (iso: string) => localDayKey(iso, 420);
+    const at = new Date("2026-11-23T13:00:00.000Z");
+    const list = [
+      post({ id: "r1", status: "ready" }), post({ id: "r2", status: "ready" }), post({ id: "manual", status: "ready", mode: "manual" }),
+      post({ id: "future", status: "ready", scheduledAt: "2026-11-23T20:00:00.000Z" }), post({ id: "done", status: "posted", postedAt: "2026-11-23T05:00:00.000Z" }),
+    ];
+    expect(duePublish(list, at, 5, day).map((p) => p.id)).toEqual(["r1", "r2"]);
+    expect(duePublish(list, at, 2, day).map((p) => p.id)).toEqual(["r1"]); // one already posted today
+  });
+
+  it("backs off 5 and 20 minutes, then gives up", () => {
+    expect([retryDelayMs(1), retryDelayMs(2), retryDelayMs(3)]).toEqual([300_000, 1_200_000, null]);
+  });
+});
+
+describe("Instagram publishing", () => {
+  const conn = { userId: "1789", token: "T".repeat(30), host: "https://graph.example", version: "v21.0" };
+  function fake(): { f: Fetcher; calls: { url: string; body: URLSearchParams }[] } {
+    const calls: { url: string; body: URLSearchParams }[] = [];
+    let n = 0;
+    const f: Fetcher = async (url, init) => {
+      const body = new URLSearchParams(init?.body ?? url.split("?")[1] ?? "");
+      calls.push({ url: url.split("?")[0], body });
+      const json = url.includes("fields=status_code") ? { status_code: "FINISHED" } : url.includes("fields=permalink") ? { permalink: "https://instagram.com/p/abc" } : { id: `id${++n}` };
+      return { ok: true, status: 200, json: async () => json };
+    };
+    return { f, calls };
+  }
+  const noSleep = async () => undefined;
+
+  it("publishes a carousel: items, container, publish", async () => {
+    const { f, calls } = fake();
+    const r = await publishPost(conn, { type: "images", urls: ["https://x/1.jpg", "https://x/2.jpg"], caption: "hi" }, f, noSleep);
+    const posts = calls.filter((c) => c.body.has("is_carousel_item") || c.body.get("media_type") === "CAROUSEL" || c.url.endsWith("media_publish"));
+    expect(posts.map((c) => c.url.split("/").pop())).toEqual(["media", "media", "media", "media_publish"]);
+    expect(posts[2].body.get("children")).toBe("id1,id2");
+    expect(posts[2].body.get("caption")).toBe("hi");
+    expect(posts[3].body.get("creation_id")).toBe("id3");
+    expect(r).toEqual({ id: "id4", permalink: "https://instagram.com/p/abc" });
+  });
+
+  it("publishes a reel with cover and share_to_feed", async () => {
+    const { f, calls } = fake();
+    await publishPost(conn, { type: "reel", urls: ["https://x/r.mp4"], coverUrl: "https://x/c.jpg", caption: "c" }, f, noSleep);
+    expect(calls[0].body.get("media_type")).toBe("REELS");
+    expect(calls[0].body.get("video_url")).toBe("https://x/r.mp4");
+    expect(calls[0].body.get("cover_url")).toBe("https://x/c.jpg");
+    expect(calls[0].body.get("share_to_feed")).toBe("true");
+  });
+
+  it("surfaces Instagram errors and processing failures", async () => {
+    const bad: Fetcher = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: "Invalid token", code: 190 } }) });
+    await expect(publishPost(conn, { type: "images", urls: ["https://x/1.jpg"], caption: "" }, bad, noSleep)).rejects.toThrow(/Invalid token.*190/);
+    let step = 0;
+    const err: Fetcher = async () => ({ ok: true, status: 200, json: async () => (step++ === 0 ? { id: "c1" } : { status_code: "ERROR", status: "bad video" }) });
+    await expect(publishPost(conn, { type: "reel", urls: ["https://x/r.mp4"], caption: "" }, err, noSleep)).rejects.toThrow(/ERROR/);
+    await expect(publishPost(conn, { type: "images", urls: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"], caption: "" }, fake().f, noSleep)).rejects.toThrow(/2 sampai 10/);
+  });
+
+  it("trims captions to Instagram's limits", () => {
+    expect(buildCaption("hi", ["#a", "#b"])).toBe("hi\n\n#a #b");
+    expect(buildCaption("x".repeat(3000), []).length).toBe(2200);
+    expect(buildCaption("hi", Array.from({ length: 40 }, (_, i) => `#t${i}`)).split(" ").length).toBeLessThanOrEqual(31);
+  });
+});

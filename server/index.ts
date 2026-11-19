@@ -32,6 +32,8 @@ import { posRouter } from "./routes/pos.js";
 import { publicInvoiceRouter } from "./routes/publicInvoice.js";
 import { crmRouter } from "./routes/crm.js";
 import { accountEmailRouter } from "./routes/accountEmail.js";
+import { contentMediaRouter } from "./routes/contentMedia.js";
+import { startContentPublisher } from "./lib/contentStudio/publisher.js";
 import { notificationsTenantRouter } from "./routes/notifications.js";
 import { liveRouter } from "./routes/live.js";
 import { publicBlogRouter } from "./routes/blog.js";
@@ -115,6 +117,7 @@ app.use("/api/tenant-applications", tenantApplicationsRouter);
 app.use("/api/public", publicPlansRouter);
 app.use("/api/public", publicContentRouter);
 app.use("/api/public", accountEmailRouter);
+app.use("/api/public/cs-media", contentMediaRouter); // Instagram auto-post: media Instagram downloads (random per-post token)
 app.use("/api/public", publicBlogRouter);
 app.use("/api/public", publicMarketplaceRouter);
 app.use("/api/public", publicCreatorsRouter);
@@ -245,6 +248,7 @@ if (!process.env.VERCEL) {
     startKeepDbWarm();
     startNotificationRules();
     startLeadReminders();
+    startContentPublisher(); // Instagram scheduler (renders with Chrome, so only on the PC-hosted server)
   });
 }
 

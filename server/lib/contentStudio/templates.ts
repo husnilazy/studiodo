@@ -214,7 +214,7 @@ const MOCKS: Record<Exclude<Mockup, "none">, { html: (s: Slide, reel: boolean) =
   "print-l": { html: (s) => mockPrintL(s.images), fit: "fit", k: 0.6, in: "print" },
 };
 
-const stage = (s: Slide, reel: boolean, d = 0.36) => {
+export const stage = (s: Slide, reel: boolean, d = 0.36) => {
   if (!s.mockup || s.mockup === "none") return "";
   const m = MOCKS[s.mockup];
   return `<div class="stage" data-fit="${m.fit}" data-k="${m.k}" data-in="${m.in}" style="--d:${d}s;--k:${m.k}"><div class="paper">${m.html(s, reel)}</div></div>`;
@@ -306,7 +306,7 @@ function slideHtml(s: Slide, deck: Deck, ctx: RenderCtx): string {
 }
 
 // Runs in the page: fit "fit"-type mockups inside their stage; "crop" ones keep natural size, top-anchored, fading out at the bottom.
-const FIT_SCRIPT = `
+export const FIT_SCRIPT = `
 (()=>{
   const run=()=>{document.querySelectorAll('.stage').forEach(st=>{
     const m=st.querySelector('.mock'); if(!m) return; const reel=document.querySelector('.stagebox').classList.contains('reel');

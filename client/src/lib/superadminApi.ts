@@ -774,7 +774,21 @@ export type CsSlide = {
   items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
   images?: string[]; bgImage?: string; icon?: string; emoji?: string; chat?: { from: "them" | "us"; text: string }[]; seconds?: number;
 };
-export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
+export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; style?: "klasik" | "kontak" | "kaca"; theme?: "biru" | "ungu" | "rose" | "senja" | "tosca"; featureId?: string; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
+export type CsFeature = { id: string; name: string; pillar: string; since: string; hook: string; tagline: string; emoji: string; pain: string[]; gain: string[]; how: string[]; mockup: CsMockup; tip: string; stat?: { value: number; prefix?: string; suffix?: string; label: string }; check?: string };
+export type CsPostStatus = "draft" | "scheduled" | "preparing" | "ready" | "posting" | "posted" | "failed" | "skipped";
+export type CsPost = {
+  id: string; deckId: string; title: string; format: "carousel" | "reel"; featureId?: string; scheduledAt: string; mode: "auto" | "manual"; status: CsPostStatus;
+  caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string;
+  attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; postedAt?: string; createdAt: string; log: string[];
+};
+export type CsSettings = {
+  tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; prepLeadMin: number; maxPerDay: number;
+  autopilot: boolean; autoApprove: boolean; horizonDays: number; lastRefillAt?: string;
+};
+export type CsQueue = { posts: CsPost[]; settings: CsSettings; connected: boolean; mediaBase: string };
+export type CsIgStatus = { connected: boolean; source: "env" | "file" | null; userId: string | null; token: string | null; mediaBase: string };
+export type CsIgTest = { account?: string; accountError?: string; urlOk: boolean; urlError?: string; mediaBase: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
 export type CsJob = { id: string; deckId: string; mode: "png" | "mp4" | "mp4-slides" | "trio-png" | "trio-mp4" | "icon" | "teaser"; status: "running" | "done" | "error"; progress: number; label: string; files: { name: string; size: number }[]; error?: string };
 
@@ -811,6 +825,32 @@ export type CsTriptych = { seam: "panorama" | "grid"; logoStyle: "silver" | "squ
 export type CsTeaser = { logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; beats: string; headline: string; features: string; cta: string };
 
 export const contentStudioApi = {
+  features: () => request<{ pillars: string[]; features: CsFeature[] }>("/content-studio/features"),
+  captionVariants: (featureId: string) => request<{ captions: string[] }>(`/content-studio/features/${encodeURIComponent(featureId)}/captions`),
+  generate: (featureIds: string[], formats: ("carousel" | "reel")[], variant = 0) => request<CsDeck[]>("/content-studio/generate", { method: "POST", body: JSON.stringify({ featureIds, formats, variant }) }),
+  queue: () => request<CsQueue>("/content-studio/queue"),
+  schedule: (body: { deckId: string; scheduledAt: string; mode?: "auto" | "manual"; status?: "draft" | "scheduled" }) => request<CsPost>("/content-studio/queue", { method: "POST", body: JSON.stringify(body) }),
+  patchPost: (id: string, patch: Partial<Pick<CsPost, "scheduledAt" | "mode" | "status" | "caption" | "hashtags" | "carouselMedia">>) => request<CsPost>(`/content-studio/queue/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deletePost: (id: string) => request<{ ok: boolean }>(`/content-studio/queue/${id}`, { method: "DELETE" }),
+  approvePosts: (ids?: string[]) => request<{ approved: number }>("/content-studio/queue/approve", { method: "POST", body: JSON.stringify({ ids }) }),
+  postNow: (id: string) => request<CsPost>(`/content-studio/queue/${id}/post-now`, { method: "POST" }),
+  retryPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/retry`, { method: "POST" }),
+  markPosted: (id: string, permalink?: string) => request<CsPost>(`/content-studio/queue/${id}/mark-posted`, { method: "POST", body: JSON.stringify({ permalink }) }),
+  async downloadPostFile(id: string, name: string) {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin/content-studio/queue/${id}/files/${encodeURIComponent(name)}`, { headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {} });
+    if (!res.ok) throw new Error("Gagal mengunduh file");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+  autopilotRun: (weeks: number) => request<CsPost[]>("/content-studio/autopilot/run", { method: "POST", body: JSON.stringify({ weeks }) }),
+  settings: () => request<CsSettings>("/content-studio/settings"),
+  saveSettings: (s: CsSettings) => request<CsSettings>("/content-studio/settings", { method: "PUT", body: JSON.stringify(s) }),
+  igStatus: () => request<CsIgStatus>("/content-studio/ig/status"),
+  igConnect: (userId: string, token: string) => request<{ ok: boolean; username: string }>("/content-studio/ig/connect", { method: "POST", body: JSON.stringify({ userId, token }) }),
+  igDisconnect: () => request<{ ok: boolean }>("/content-studio/ig/connect", { method: "DELETE" }),
+  igTest: () => request<CsIgTest>("/content-studio/ig/test", { method: "POST" }),
   teaserPreview: (options: CsTeaser) => request<{ html: string }>("/content-studio/teaser/preview", { method: "POST", body: JSON.stringify({ options }) }),
   teaserRender: (options: CsTeaser) => request<CsJob>("/content-studio/teaser/render", { method: "POST", body: JSON.stringify({ options }) }),
   iconPreview: () => request<{ html: string }>("/content-studio/icon/preview"),

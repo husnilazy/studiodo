@@ -6,7 +6,9 @@ import path from "node:path";
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { resolveFfmpeg } from "../ffmpeg.js";
 import { BUILTIN_DECKS } from "./decks.js";
-import { buildReelDoc, buildSlideDoc, SLIDE_SETTLE_MS } from "./templates.js";
+import { buildReelDoc as classicReelDoc, buildSlideDoc as classicSlideDoc, SLIDE_SETTLE_MS } from "./templates.js";
+import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
+import { buildKacaReelDoc, buildKacaSlideDoc } from "./styleKaca.js";
 import { buildIconDoc, type FileKind } from "./appicon.js";
 import { buildTeaserDoc, sanitizeTeaser, TEASER_COVER_SEC, TEASER_DURATION_SEC, TEASER_H, TEASER_W, type TeaserOptions } from "./teaser.js";
 import { buildTriptychDoc, COVER_SEC, DURATION_SEC, geometry, sanitizeTriptych, TILE_H, TILE_W, type Seam, type TriptychOptions } from "./triptych.js";
@@ -17,6 +19,11 @@ const root = () => path.join(process.cwd(), "storage", "content-studio");
 const assetsDir = () => path.join(root(), "assets");
 const jobsDir = () => path.join(root(), "jobs");
 const decksFile = () => path.join(root(), "decks.json");
+
+// Highlight covers always use the classic builder (icon covers); every other deck follows its style.
+const styled = (d: Deck, style: Deck["style"]) => d.style === style && d.format !== "highlight";
+const buildSlideDoc = (d: Deck, i: number) => (styled(d, "kaca") ? buildKacaSlideDoc(d, i) : styled(d, "kontak") ? buildContactSlideDoc(d, i) : classicSlideDoc(d, i));
+const buildReelDoc = (d: Deck) => (styled(d, "kaca") ? buildKacaReelDoc(d) : styled(d, "kontak") ? buildContactReelDoc(d) : classicReelDoc(d));
 
 // ---- decks (built-ins + saved edits; an edit with the same id shadows the built-in) ----
 async function readSaved(): Promise<Deck[]> {
@@ -174,7 +181,7 @@ async function finish(job: Job, dir: string) {
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "deck";
 
-async function renderPng(job: Job, deck: Deck, dir: string) {
+async function renderPng(job: Job, deck: Deck, dir: string, ext: "png" | "jpg" = "png") {
   const { width, height } = FORMATS[deck.format];
   const browser = await launch();
   try {
@@ -185,7 +192,9 @@ async function renderPng(job: Job, deck: Deck, dir: string) {
       await page.setContent(buildSlideDoc(deck, i), { waitUntil: "load" });
       await page.waitForFunction("window.__ready === true", { timeout: 20000 });
       await page.evaluate(`window.__seek(${SLIDE_SETTLE_MS})`);
-      await page.screenshot({ path: path.join(dir, deck.format === "highlight" ? `sorotan-${String(i + 1).padStart(2, "0")}-${slug(deck.slides[i].title)}.png` : `${slug(deck.title)}-${String(i + 1).padStart(2, "0")}.png`), type: "png" });
+      const file = deck.format === "highlight" ? `sorotan-${String(i + 1).padStart(2, "0")}-${slug(deck.slides[i].title)}.${ext}` : `${slug(deck.title)}-${String(i + 1).padStart(2, "0")}.${ext}`;
+      if (ext === "jpg") await page.screenshot({ path: path.join(dir, file), type: "jpeg", quality: 95 });
+      else await page.screenshot({ path: path.join(dir, file), type: "png" });
       job.progress = (i + 1) / deck.slides.length;
     }
   } finally {
@@ -474,3 +483,40 @@ export async function startRender(deckIn: Deck, mode: "png" | "mp4" | "mp4-slide
   })();
   return job;
 }
+
+
+/**
+ * Renders the media for an Instagram post into `dir` (used by the scheduler, not the studio UI).
+ * Instagram's API only accepts JPEG images, so carousel slides come out as .jpg; reels as one .mp4 (+ a cover .jpg).
+ * Waits for any running studio render first and holds the global render slot while working.
+ */
+export async function renderForPublish(deckIn: Deck, dir: string, carouselMedia: "image" | "video"): Promise<{ type: "reel" | "images" | "videos"; files: string[]; cover?: string }> {
+  if (!deckIn.slides.length) throw new Error("Deck belum punya slide");
+  for (let waited = 0; [...jobs.values()].some((j) => j.status === "running"); waited += 2000) {
+    if (waited > 20 * 60_000) throw new Error("Render lain terlalu lama berjalan");
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  const reel = deckIn.format === "reel";
+  const mode: Job["mode"] = reel ? "mp4" : carouselMedia === "video" ? "mp4-slides" : "png";
+  const deck = await inlineAssets(deckIn);
+  const job: Job = { id: crypto.randomUUID(), deckId: deck.id, mode, status: "running", progress: 0, label: "Render untuk posting", files: [], startedAt: Date.now() };
+  jobs.set(job.id, job);
+  try {
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    if (reel) await renderMp4(job, deck, dir);
+    else if (carouselMedia === "video") await renderMp4Slides(job, deck, dir);
+    else await renderPng(job, deck, dir, "jpg");
+    const names = (await readdir(dir)).sort();
+    const videos = names.filter((n) => n.endsWith(".mp4"));
+    const images = names.filter((n) => n.endsWith(".jpg") && !n.endsWith("-cover.jpg"));
+    return reel
+      ? { type: "reel", files: videos, cover: names.find((n) => n.endsWith("-cover.jpg")) }
+      : carouselMedia === "video" ? { type: "videos", files: videos } : { type: "images", files: images };
+  } finally {
+    job.status = "done";
+    setTimeout(() => jobs.delete(job.id), 60_000);
+  }
+}
+
+export const contentRoot = root;

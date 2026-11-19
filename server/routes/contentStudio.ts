@@ -5,10 +5,12 @@ import { buildTeaserDoc, sanitizeTeaser } from "../lib/contentStudio/teaser.js";
 import { buildTriptychDoc, DEFAULT_TRIPTYCH, sanitizeTriptych } from "../lib/contentStudio/triptych.js";
 import { deleteAsset, deleteDeck, getJob, jobFilePath, listAssets, listDecks, previewDoc, renderEnvironment, saveAsset, saveDeck, startIconRender, startRender, startTeaserRender, startTriptychRender } from "../lib/contentStudio/render.js";
 import { loadPlan, parsePlan, reschedule, savePlan } from "../lib/contentStudio/plan.js";
-import type { Deck } from "../lib/contentStudio/types.js";
+import { THEMES, type Deck } from "../lib/contentStudio/types.js";
+import { contentQueueRouter } from "./contentStudioQueue.js";
 
 // Superadmin → Konten Instagram: mounted under /api/superadmin/content-studio (auth applied by the parent router).
 export const contentStudioAdminRouter = Router();
+contentStudioAdminRouter.use(contentQueueRouter); // feature generator, calendar, autopilot, Instagram connection
 
 const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge", "hook", "chat", "note"];
 const TONES = ["light", "dark", "indigo", "mint", "peach"];
@@ -29,6 +31,9 @@ function parseDeck(input: any): Deck | string {
     handle: String(input.handle ?? "studiodo.id").replace(/^@/, "").slice(0, 60),
     caption: String(input.caption ?? "").slice(0, 2200),
     hashtags: Array.isArray(input.hashtags) ? input.hashtags.map(String).slice(0, 30) : [],
+    style: input.style === "kontak" ? "kontak" : input.style === "kaca" ? "kaca" : undefined,
+    theme: THEMES.includes(input.theme) ? input.theme : undefined,
+    featureId: typeof input.featureId === "string" ? input.featureId.replace(/[^a-z0-9-]/gi, "").slice(0, 60) || undefined : undefined,
     slides: input.slides,
   };
 }

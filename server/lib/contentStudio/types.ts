@@ -3,6 +3,11 @@
 export type Mockup = "none" | "dashboard" | "macbook" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
 export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
 export type Tone = "light" | "dark" | "indigo" | "mint" | "peach";
+/** Visual language of a deck: "klasik" = the original glass/indigo look, "kontak" = Contact Sheet (paper, film strip, stop-motion). */
+export type DeckStyle = "klasik" | "kontak" | "kaca";
+/** Colour theme of the "kaca" style (dark base + three luminous hues). Other styles ignore it. */
+export const THEMES = ["biru", "ungu", "rose", "senja", "tosca"] as const;
+export type ThemeName = (typeof THEMES)[number];
 
 export type Slide = {
   kind: SlideKind;
@@ -33,6 +38,9 @@ export type Deck = {
   handle: string; // shown on the closing slide
   caption: string;
   hashtags: string[];
+  style?: DeckStyle; // default "klasik"
+  theme?: ThemeName; // "kaca" only; default biru
+  featureId?: string; // set when the deck was generated from the feature catalog
   slides: Slide[];
   builtin?: boolean;
   updatedAt?: string;
