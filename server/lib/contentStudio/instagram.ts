@@ -62,6 +62,36 @@ export async function checkConnection(c: IgConnection, f: Fetcher = defaultFetch
   return { username: String(j.username ?? ""), mediaCount: typeof j.media_count === "number" ? j.media_count : undefined };
 }
 
+export type IgCandidate = { igUserId: string; username: string; pageName: string; pageToken: string };
+
+/**
+ * Turns a short-lived user token (from the Graph API Explorer) into what auto-post needs: exchanges it for a long-lived user
+ * token, lists the Facebook Pages it manages and keeps the ones with a linked Instagram professional account. The token used for
+ * publishing is the PAGE token: a page token obtained from a long-lived user token does not expire. App id/secret are used for
+ * the exchange only and are never stored or returned.
+ */
+export async function discoverAccounts(shortToken: string, app: { id: string; secret: string }, f: Fetcher = defaultFetch, host = "https://graph.facebook.com", version = "v21.0"): Promise<IgCandidate[]> {
+  const get = async (p: string, params: Record<string, string>) => {
+    const res = await f(`${host}/${version}/${p}?${new URLSearchParams(params)}`);
+    let json: any = null;
+    try { json = await res.json(); } catch { /* non-JSON body */ }
+    if (!res.ok || json?.error) {
+      const e = json?.error;
+      throw new Error(e ? `Meta: ${e.message}${e.code ? ` (kode ${e.code})` : ""}` : `Meta menjawab HTTP ${res.status}`);
+    }
+    return json;
+  };
+  const long = await get("oauth/access_token", { grant_type: "fb_exchange_token", client_id: app.id, client_secret: app.secret, fb_exchange_token: shortToken });
+  if (!long?.access_token) throw new Error("Meta tidak mengembalikan token jangka panjang");
+  const pages = await get("me/accounts", { fields: "name,access_token,instagram_business_account{id,username}", limit: "50", access_token: String(long.access_token) });
+  const out: IgCandidate[] = [];
+  for (const pg of pages?.data ?? []) {
+    const ig = pg?.instagram_business_account;
+    if (ig?.id && pg?.access_token) out.push({ igUserId: String(ig.id), username: String(ig.username ?? ""), pageName: String(pg.name ?? ""), pageToken: String(pg.access_token) });
+  }
+  return out;
+}
+
 /** Caption + hashtags, trimmed to Instagram's limits (2200 characters, 30 hashtags). */
 export function buildCaption(caption: string, hashtags: string[]): string {
   const tags = hashtags.slice(0, 30).join(" ");

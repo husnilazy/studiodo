@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FEATURES } from "./features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots, withPhotos } from "./generator.js";
 import { displayUrls } from "./sourcePhotos.js";
-import { buildCaption, publishPost, type Fetcher } from "./instagram.js";
+import { buildCaption, discoverAccounts, publishPost, type Fetcher } from "./instagram.js";
 import { approvable, duePrepare, duePublish, localDayKey, retryDelayMs, revisionPatch, type ScheduledPost } from "./schedule.js";
 import { HOOKS, CTA_KEYWORD } from "./hooks.js";
 import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
@@ -188,6 +188,34 @@ describe("revision notes", () => {
   });
   it("caps very long notes", () => {
     expect(revisionPatch("x".repeat(5000), "t").revision?.text.length).toBe(1000);
+  });
+});
+
+describe("Instagram account discovery", () => {
+  const app = { id: "123456", secret: "s".repeat(32) };
+  function meta(pages: unknown, fail?: { code: number; message: string }): { f: Fetcher; urls: string[] } {
+    const urls: string[] = [];
+    const f: Fetcher = async (url) => {
+      urls.push(url);
+      if (fail) return { ok: false, status: 400, json: async () => ({ error: fail }) };
+      return { ok: true, status: 200, json: async () => (url.includes("oauth/access_token") ? { access_token: "LONG" + "x".repeat(30) } : { data: pages }) };
+    };
+    return { f, urls };
+  }
+  it("exchanges the token and returns the page token for pages with an Instagram account", async () => {
+    const { f, urls } = meta([{ name: "STUDIODO", access_token: "PAGE" + "y".repeat(30), instagram_business_account: { id: "17841", username: "studiodo.id" } }, { name: "Tanpa IG", access_token: "p" }]);
+    const r = await discoverAccounts("SHORT" + "z".repeat(30), app, f);
+    expect(r).toEqual([{ igUserId: "17841", username: "studiodo.id", pageName: "STUDIODO", pageToken: "PAGE" + "y".repeat(30) }]);
+    expect(urls[0]).toContain("grant_type=fb_exchange_token");
+    expect(urls[1]).toContain("access_token=LONG");
+  });
+  it("returns an empty list when no page has an Instagram account", async () => {
+    expect(await discoverAccounts("t".repeat(30), app, meta([{ name: "A", access_token: "p" }]).f)).toEqual([]);
+  });
+  it("surfaces Meta errors without echoing the app secret", async () => {
+    const { f } = meta([], { code: 190, message: "Invalid OAuth access token" });
+    await expect(discoverAccounts("t".repeat(30), app, f)).rejects.toThrow(/Invalid OAuth access token \(kode 190\)/);
+    await expect(discoverAccounts("t".repeat(30), app, f)).rejects.not.toThrow(new RegExp(app.secret));
   });
 });
 

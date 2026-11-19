@@ -10,6 +10,10 @@ export function SettingsView({ settings, onChange }: { settings: CsSettings; onC
   const [ig, setIg] = useState<CsIgStatus | null>(null);
   const [userId, setUserId] = useState("");
   const [token, setToken] = useState("");
+  const [appId, setAppId] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [short, setShort] = useState("");
+  const [choose, setChoose] = useState<{ igUserId: string; username: string; pageName: string }[] | null>(null);
   const [test, setTest] = useState<CsIgTest | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [n, setN] = useState<Notice>(null);
@@ -29,6 +33,16 @@ export function SettingsView({ settings, onChange }: { settings: CsSettings; onC
       const r = await contentStudioApi.igConnect(userId.trim(), token.trim());
       setN({ ok: true, text: `Tersambung ke @${r?.username ?? "akun Instagram"}.` });
       setToken(""); setUserId("");
+      setIg((await contentStudioApi.igStatus()) ?? null); await onChange();
+    } catch (e) { setN({ ok: false, text: errText(e) }); } finally { setBusy(null); }
+  };
+  const connectQuick = async (igUserId?: string) => {
+    setBusy("quick"); setN(null);
+    try {
+      const r = await contentStudioApi.igConnectToken({ token: short.trim(), appId: appId.trim() || undefined, appSecret: appSecret.trim() || undefined, igUserId });
+      if (r?.choose) { setChoose(r.choose); setN({ ok: true, text: "Ada lebih dari satu akun Instagram. Pilih yang dipakai." }); return; }
+      setChoose(null); setShort(""); setAppSecret("");
+      setN({ ok: true, text: `Tersambung ke @${r?.username ?? "akun Instagram"}. Tekan "Tes koneksi" berikutnya.` });
       setIg((await contentStudioApi.igStatus()) ?? null); await onChange();
     } catch (e) { setN({ ok: false, text: errText(e) }); } finally { setBusy(null); }
   };
@@ -56,9 +70,25 @@ export function SettingsView({ settings, onChange }: { settings: CsSettings; onC
             </div>
           ) : (
             <div className="grid gap-3">
+              <div className="grid gap-2 rounded-xl border border-accent/30 bg-accent/5 p-3">
+                <p className="text-xs font-bold">Cara cepat: dari token Graph API Explorer</p>
+                <p className="text-[11px] text-fg/55">Server menukar token ke jangka panjang, mencari akun Instagram yang tertaut ke Halaman Facebook Anda, dan menyimpan token Halaman (tidak kedaluwarsa). ID aplikasi dan App Secret hanya dipakai sekali dan tidak disimpan.</p>
+                <Field label="ID aplikasi Meta (angka)"><input className={inputClass} inputMode="numeric" value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="1489447149793572" /></Field>
+                <Field label="App Secret"><input className={inputClass} type="password" autoComplete="off" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} /></Field>
+                <Field label="Token dari Graph API Explorer"><input className={inputClass} type="password" autoComplete="off" value={short} onChange={(e) => setShort(e.target.value)} placeholder="EAAB…" /></Field>
+                <button className={btnPrimary} disabled={busy === "quick" || short.trim().length < 20} onClick={() => void connectQuick()}>{busy === "quick" ? "Menghubungkan…" : "Cari akun & sambungkan"}</button>
+                {choose && (
+                  <div className="grid gap-1.5">
+                    {choose.map((c) => <button key={c.igUserId} className={btnGhost} disabled={busy === "quick"} onClick={() => void connectQuick(c.igUserId)}>@{c.username || c.igUserId} · Halaman {c.pageName}</button>)}
+                  </div>
+                )}
+              </div>
+              <details className="text-xs text-fg/60"><summary className="cursor-pointer font-semibold text-fg/80">Atau isi ID dan token sendiri</summary>
+              <div className="mt-2 grid gap-3">
               <Field label="ID akun Instagram (angka)"><input className={inputClass} inputMode="numeric" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="17841400000000000" /></Field>
               <Field label="Access token (long-lived)"><input className={inputClass} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="EAAB…" /></Field>
               <button className={btnPrimary} disabled={busy === "connect" || !userId || !token} onClick={connect}>{busy === "connect" ? "Memeriksa…" : "Sambungkan & periksa"}</button>
+              </div></details>
               <button className={`${btnGhost} justify-self-start`} disabled={busy === "test"} onClick={runTest}>Tes alamat publik saja</button>
             </div>
           )}

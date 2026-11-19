@@ -853,6 +853,7 @@ export const contentStudioApi = {
   saveSettings: (s: CsSettings) => request<CsSettings>("/content-studio/settings", { method: "PUT", body: JSON.stringify(s) }),
   igStatus: () => request<CsIgStatus>("/content-studio/ig/status"),
   igConnect: (userId: string, token: string) => request<{ ok: boolean; username: string }>("/content-studio/ig/connect", { method: "POST", body: JSON.stringify({ userId, token }) }),
+  igConnectToken: (body: { token: string; appId?: string; appSecret?: string; igUserId?: string }) => request<{ ok?: boolean; username?: string; choose?: { igUserId: string; username: string; pageName: string }[] }>("/content-studio/ig/connect-token", { method: "POST", body: JSON.stringify(body) }),
   igDisconnect: () => request<{ ok: boolean }>("/content-studio/ig/connect", { method: "DELETE" }),
   igTest: () => request<CsIgTest>("/content-studio/ig/test", { method: "POST" }),
   teaserPreview: (options: CsTeaser) => request<{ html: string }>("/content-studio/teaser/preview", { method: "POST", body: JSON.stringify({ options }) }),

@@ -175,3 +175,9 @@ Go-live: `npm run build:server` + `build:client`, restart service StudiodoServer
 - Rute: `GET /content-studio/source/tenants`, `GET /source/sessions?tenantId=&all=1&before=`, `POST /source/import`; `POST /generate` menerima `photos` dan `strips`. Impor membaca file lokal `/storage/...`, URL R2, atau unduhan Google Drive; sumber yang bukan gambar ditolak.
 - Belum diuji terhadap data tenant nyata (butuh server yang sudah dirilis dan sesi berfoto).
 - **Foto saya** (bagian atas tab Bahan foto): unggah foto dari galeri HP/komputer, di luar kiosk. Foto dikecilkan ke JPEG maks 2000 px di perangkat sebelum dikirim (`POST /assets`), disimpan sebagai aset Studio, bisa dipilih bersama foto sesi, dan dihapus lewat tombol ×. Pratinjau memakai `GET /assets/:name/file` (butuh login). Hanya gambar JPG/PNG/WebP; video dan HEIC belum didukung. Tanggung jawab izin ada di pengunggah.
+
+## Menyambungkan Instagram (cara cepat)
+- Tab **Pengaturan → Koneksi Instagram → Cara cepat**: isi ID aplikasi Meta, App Secret, dan token pengguna dari Graph API Explorer. Server (`POST /ig/connect-token`, `discoverAccounts`) menukar token ke jangka panjang, mencari akun Instagram profesional yang tertaut ke Halaman Facebook, lalu menyimpan **token Halaman** (tidak kedaluwarsa bila berasal dari token pengguna jangka panjang). App Secret hanya dipakai sekali dan tidak disimpan; `META_APP_ID` / `META_APP_SECRET` di `.env` bisa dipakai sebagai gantinya.
+- Izin token: `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`, `business_management`. Bila ada beberapa akun, UI meminta memilih.
+- Harus dijalankan di **PC server** (`qr.studiodo.id`): file koneksi ditulis ke `storage/content-studio/ig-connection.json`, yang tidak bisa dilakukan Vercel.
+- Belum diuji dengan Meta sungguhan (hanya dengan fetcher palsu).

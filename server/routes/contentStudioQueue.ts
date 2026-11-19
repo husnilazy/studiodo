@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { FEATURES, PILLARS, featureById } from "../lib/contentStudio/features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, withPhotos } from "../lib/contentStudio/generator.js";
-import { checkConnection, clearConnection, loadConnection, mask, saveConnection } from "../lib/contentStudio/instagram.js";
+import { checkConnection, clearConnection, discoverAccounts, loadConnection, mask, saveConnection } from "../lib/contentStudio/instagram.js";
 import { createPost, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
 import { listDecks, saveDeck } from "../lib/contentStudio/render.js";
 import { approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
@@ -158,6 +158,29 @@ contentQueueRouter.post("/ig/connect", async (req, res) => {
     res.json({ ok: true, username: who.username });
   } catch (e) {
     await clearConnection().catch(() => undefined); // do not keep a token that does not work
+    res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyambungkan" });
+  }
+});
+// POST { token, igUserId?, appId?, appSecret? } -> { ok, username } | { choose: [...] }. The token is a short-lived user token from the Graph API
+// Explorer; the server exchanges it, finds the Instagram account and stores the non-expiring page token. App id/secret come from the
+// request (not stored) or META_APP_ID / META_APP_SECRET in .env.
+contentQueueRouter.post("/ig/connect-token", async (req, res) => {
+  const shortToken = String(req.body?.token ?? "").trim();
+  const appId = String(req.body?.appId ?? process.env.META_APP_ID ?? "").trim();
+  const appSecret = String(req.body?.appSecret ?? process.env.META_APP_SECRET ?? "").trim();
+  if (shortToken.length < 20) return res.status(400).json({ error: "Tempel token dari Graph API Explorer" });
+  if (!/^\d{5,25}$/.test(appId) || appSecret.length < 16) return res.status(400).json({ error: "ID aplikasi (angka) dan App Secret diperlukan. Keduanya ada di Meta for Developers → Pengaturan aplikasi → Dasar. Tidak disimpan." });
+  try {
+    const found = await discoverAccounts(shortToken, { id: appId, secret: appSecret });
+    if (!found.length) return res.status(400).json({ error: "Tidak ada akun Instagram profesional yang tertaut ke Halaman Facebook di token ini. Pastikan izin pages_show_list sudah dicentang saat membuat token dan akun Instagram tertaut ke sebuah Halaman." });
+    const wanted = String(req.body?.igUserId ?? "");
+    const pick = wanted ? found.find((c) => c.igUserId === wanted) : found.length === 1 ? found[0] : undefined;
+    if (!pick) return res.json({ choose: found.map(({ igUserId, username, pageName }) => ({ igUserId, username, pageName })) });
+    await saveConnection(pick.igUserId, pick.pageToken);
+    const who = await checkConnection((await loadConnection())!);
+    res.json({ ok: true, username: who.username || pick.username });
+  } catch (e) {
+    await clearConnection().catch(() => undefined);
     res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menyambungkan" });
   }
 });
