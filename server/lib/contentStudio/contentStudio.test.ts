@@ -3,7 +3,7 @@ import { FEATURES } from "./features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots, withPhotos } from "./generator.js";
 import { displayUrls } from "./sourcePhotos.js";
 import { buildCaption, discoverAccounts, publishPost, type Fetcher } from "./instagram.js";
-import { approvable, duePrepare, duePublish, localDayKey, retryDelayMs, revisionPatch, type ScheduledPost } from "./schedule.js";
+import { approvable, capStatus, duePrepare, duePublish, localDayKey, retryDelayMs, revisionPatch, type ScheduledPost } from "./schedule.js";
 import { HOOKS, CTA_KEYWORD } from "./hooks.js";
 import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
 import { buildKacaReelDoc, buildKacaSlideDoc } from "./styleKaca.js";
@@ -142,6 +142,18 @@ describe("queue rules", () => {
     ];
     expect(duePublish(list, at, 5, day).map((p) => p.id)).toEqual(["r1", "r2"]);
     expect(duePublish(list, at, 2, day).map((p) => p.id)).toEqual(["r1"]); // one already posted today
+  });
+
+  it("lets a forced post through even when the daily cap is used up, and reports the cap", () => {
+    const day = (iso: string) => localDayKey(iso, 420);
+    const at = new Date("2026-11-23T13:00:00.000Z");
+    const posted = [1, 2].map((i) => post({ id: `d${i}`, status: "posted", postedAt: "2026-11-23T05:00:00.000Z" }));
+    const list = [...posted, post({ id: "auto", status: "ready" }), post({ id: "asked", status: "ready", force: true })];
+    expect(duePublish(list, at, 2, day).map((p) => p.id)).toEqual(["asked"]); // cap of 2 already used: only the forced one goes
+    expect(duePublish(list, at, 3, day).map((p) => p.id)).toEqual(["asked"]); // the forced post counts: 2 posted + 1 = 3
+    expect(duePublish(list, at, 4, day).map((p) => p.id)).toEqual(["asked", "auto"]);
+    expect(capStatus(list, at, 2, day)).toEqual({ postedToday: 2, reached: true });
+    expect(capStatus(list, at, 5, day)).toEqual({ postedToday: 2, reached: false });
   });
 
   it("backs off 5 and 20 minutes, then gives up", () => {

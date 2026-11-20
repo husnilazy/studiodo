@@ -15,6 +15,7 @@ export type ScheduledPost = {
   format: "carousel" | "reel";
   featureId?: string;
   scheduledAt: string; // ISO (UTC)
+  force?: boolean; // "Kirim sekarang" pressed: a person asked for this one, so the per-day safety cap does not hold it back
   revision?: { text: string; at: string }; // note asked from the review screen; the post stays a draft until it is cleared
   mode: PostMode;
   status: PostStatus;
@@ -146,8 +147,9 @@ export function duePrepare(posts: ScheduledPost[], now: Date, leadMin: number): 
 export function duePublish(posts: ScheduledPost[], now: Date, maxPerDay: number, localDay: (iso: string) => string): ScheduledPost[] {
   const today = localDay(now.toISOString());
   let postedToday = posts.filter((p) => p.status === "posted" && p.postedAt && localDay(p.postedAt) === today).length;
-  const out: ScheduledPost[] = [];
-  for (const p of posts.filter((x) => x.status === "ready" && x.mode === "auto" && t(x.scheduledAt) <= now.getTime() && (!x.nextTryAt || t(x.nextTryAt) <= now.getTime()))) {
+  const ready = posts.filter((x) => x.status === "ready" && x.mode === "auto" && t(x.scheduledAt) <= now.getTime() && (!x.nextTryAt || t(x.nextTryAt) <= now.getTime()));
+  const out: ScheduledPost[] = ready.filter((x) => x.force); // asked for by a person: the cap is a guard for automation, not for them
+  for (const p of ready.filter((x) => !x.force)) {
     if (postedToday + out.length >= maxPerDay) break;
     out.push(p);
   }
@@ -171,4 +173,11 @@ export const approvable = (p: Pick<ScheduledPost, "status" | "revision">) => p.s
 export function revisionPatch(text: unknown, nowIso: string): Partial<ScheduledPost> {
   const t = typeof text === "string" ? text.trim().slice(0, 1000) : "";
   return t ? { revision: { text: t, at: nowIso }, status: "draft", attempts: 0, nextTryAt: undefined } : { revision: undefined };
+}
+
+/** How many posts went out today (local day) and whether the safety cap is used up. */
+export function capStatus(posts: Pick<ScheduledPost, "status" | "postedAt">[], now: Date, maxPerDay: number, localDay: (iso: string) => string): { postedToday: number; reached: boolean } {
+  const today = localDay(now.toISOString());
+  const postedToday = posts.filter((p) => p.status === "posted" && p.postedAt && localDay(p.postedAt) === today).length;
+  return { postedToday, reached: postedToday >= maxPerDay };
 }

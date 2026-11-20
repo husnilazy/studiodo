@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { contentStudioApi, type CsDeck, type CsPost, type CsQueue } from "@/lib/superadminApi";
-import { btnAccent, btnGhost, btnPrimary, dayKey, dayLabel, errText, type Notice, NoticeLine, StatusChip, timeOf } from "./shared";
+import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, type Notice, NoticeLine, StatusChip, timeOf } from "./shared";
 import type { Tab } from "./OverviewView";
 
 // Tinjau: phone-first review of what is waiting to go out. One post per card with the real slide preview (the same HTML the
@@ -40,8 +40,8 @@ function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: number; re
   );
 }
 
-function ReviewCard({ post, deck, warn, tz, connected, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision }: {
-  post: CsPost; deck?: CsDeck; warn?: string; tz: number; connected: boolean; busy: boolean;
+function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision }: {
+  post: CsPost; deck?: CsDeck; warn?: string; tz: number; connected: boolean; capFull?: string; busy: boolean;
   onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void;
 }) {
   const [note, setNote] = useState("");
@@ -105,6 +105,7 @@ function ReviewCard({ post, deck, warn, tz, connected, busy, onApprove, onDraft,
       )}
 
       <p className="text-[11px] text-fg/50">{goesOut}</p>
+      {capFull && post.status === "ready" && post.mode === "auto" && !post.force && <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">{capFull}</p>}
 
       <div className="flex flex-wrap gap-2">
         {busy && <span className="py-1.5 text-xs text-fg/50">Sedang diproses…</span>}
@@ -133,6 +134,7 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
   const upcoming = useMemo(() => posts.filter((p) => ["scheduled", "preparing", "ready", "posting"].includes(p.status)).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)), [posts]);
   const list = show === "tinjau" ? review : upcoming;
   const drafts = posts.filter((p) => p.status === "draft" && !p.revision).length;
+  const cap = capToday(posts, settings.maxPerDay, settings.tzOffsetMin);
   const revisions = posts.filter((p) => p.revision).length;
 
   const run = async (id: string, fn: () => Promise<unknown>, ok?: string) => {
@@ -160,7 +162,7 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
       )}
 
       {list.map((p) => (
-        <ReviewCard key={p.id} post={p} deck={decks.find((d) => d.id === p.deckId)} warn={p.featureId ? checks[p.featureId] : undefined} tz={settings.tzOffsetMin} connected={connected}
+        <ReviewCard key={p.id} post={p} deck={decks.find((d) => d.id === p.deckId)} warn={p.featureId ? checks[p.featureId] : undefined} tz={settings.tzOffsetMin} connected={connected} capFull={cap.reached ? `Menunggu: batas ${cap.maxPerDay} post per hari sudah tercapai (${cap.postedToday}/${cap.maxPerDay}). Post ini tayang besok, atau tekan Kirim sekarang untuk mengirimnya sekarang.` : undefined}
           busy={busyId === p.id || p.status === "preparing" || p.status === "posting"}
           onApprove={() => void run(p.id, () => contentStudioApi.approvePosts([p.id]), "Disetujui.")}
           onDraft={() => void run(p.id, () => contentStudioApi.patchPost(p.id, { status: "draft" }), "Dikembalikan ke draf.")}

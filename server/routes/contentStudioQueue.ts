@@ -85,6 +85,7 @@ contentQueueRouter.patch("/queue/:id", async (req, res) => {
     const at = new Date(String(b.scheduledAt));
     if (Number.isNaN(at.getTime())) return res.status(400).json({ error: "Waktu posting tidak valid" });
     patch.scheduledAt = at.toISOString();
+    patch.force = undefined; // a new time means it follows the normal rules again
     if (cur.status === "ready" || cur.status === "failed") { patch.status = "scheduled"; patch.attempts = 0; }
   }
   if (b.mode === "auto" || b.mode === "manual") patch.mode = b.mode;
@@ -113,7 +114,7 @@ contentQueueRouter.delete("/queue/:id", async (req, res) => {
 contentQueueRouter.post("/queue/:id/post-now", async (req, res) => {
   const cur = await getPost(cleanId(req.params.id));
   if (!cur || ["posted", "posting", "preparing", "draft", "skipped"].includes(cur.status)) return res.status(409).json({ error: "Post tidak bisa dikirim sekarang (setujui draf dulu)" });
-  const post = await patchPost(cur.id, { scheduledAt: new Date().toISOString(), attempts: 0, nextTryAt: undefined, error: undefined, status: cur.status === "ready" ? "ready" : "scheduled" }, "kirim sekarang");
+  const post = await patchPost(cur.id, { scheduledAt: new Date().toISOString(), attempts: 0, nextTryAt: undefined, error: undefined, force: true, status: cur.status === "ready" ? "ready" : "scheduled" }, "kirim sekarang");
   void tick();
   res.json(post);
 });

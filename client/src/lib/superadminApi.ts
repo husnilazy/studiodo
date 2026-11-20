@@ -779,7 +779,7 @@ export type CsFeature = { id: string; name: string; pillar: string; since: strin
 export type CsPostStatus = "draft" | "scheduled" | "preparing" | "ready" | "posting" | "posted" | "failed" | "skipped";
 export type CsPost = {
   id: string; deckId: string; title: string; format: "carousel" | "reel"; featureId?: string; scheduledAt: string; mode: "auto" | "manual"; status: CsPostStatus;
-  caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string; revision?: { text: string; at: string };
+  caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string; force?: boolean; revision?: { text: string; at: string };
   attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; postedAt?: string; createdAt: string; log: string[];
 };
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };

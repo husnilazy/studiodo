@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { contentStudioApi, type CsDeck, type CsPost, type CsPostStatus, type CsQueue } from "@/lib/superadminApi";
 import { ScheduleDialog } from "./ScheduleDialog";
-import { btnAccent, btnGhost, btnPrimary, dayKey, dayLabel, errText, fromLocalInput, inputClass, StatusChip, timeOf, toLocalInput, type Notice, NoticeLine, Field } from "./shared";
+import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, fromLocalInput, inputClass, StatusChip, timeOf, toLocalInput, type Notice, NoticeLine, Field } from "./shared";
 
 // Kalender: every queued post by day, with the actions that make sense for its status.
 
@@ -30,6 +30,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [shown, tz]);
   const today = dayKey(new Date().toISOString(), tz);
+  const cap = capToday(posts, settings.maxPerDay, tz);
   const drafts = posts.filter((p) => p.status === "draft" && !p.revision).length;
 
   // keep the list fresh while something is rendering/posting
@@ -86,6 +87,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                       <StatusChip post={p} />
                       <span className="rounded-full bg-fg/10 px-2.5 py-1 text-[11px] font-semibold text-fg/60">{p.mode === "auto" ? "Auto-post" : "Manual"}</span>
                       {p.status === "ready" && p.mode === "auto" && !connected && <span className="text-[11px] text-amber-600">menunggu koneksi Instagram</span>}
+                      {p.status === "ready" && p.mode === "auto" && connected && cap.reached && !p.force && <span className="text-[11px] text-amber-600">menunggu: batas {cap.maxPerDay} post/hari tercapai ({cap.postedToday}/{cap.maxPerDay}). Tayang besok, atau tekan Kirim sekarang.</span>}
                       {p.status === "ready" && p.mode === "manual" && <span className="text-[11px] text-fg/50">unduh file lalu posting sendiri</span>}
                       {p.permalink && <a className="text-[11px] font-semibold text-accent underline" href={p.permalink} target="_blank" rel="noreferrer">Lihat di Instagram</a>}
                     </div>

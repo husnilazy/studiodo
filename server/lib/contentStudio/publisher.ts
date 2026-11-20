@@ -69,7 +69,7 @@ async function publish(p: ScheduledPost): Promise<void> {
       type: p.mediaType, urls: p.files.map((f) => mediaUrl(p.token, f)), coverUrl: p.coverFile ? mediaUrl(p.token, p.coverFile) : undefined,
       caption: buildCaption(p.caption, p.hashtags),
     });
-    await patchPost(p.id, { status: "posted", igMediaId: res.id, permalink: res.permalink, postedAt: new Date().toISOString(), error: undefined }, "terposting");
+    await patchPost(p.id, { status: "posted", igMediaId: res.id, permalink: res.permalink, postedAt: new Date().toISOString(), error: undefined, force: undefined }, "terposting");
   } catch (e) {
     const attempts = p.attempts + 1;
     const wait = retryDelayMs(attempts);

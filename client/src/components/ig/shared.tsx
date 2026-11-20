@@ -39,6 +39,13 @@ export const STATUS: Record<CsPostStatus, { label: string; cls: string }> = {
   skipped: { label: "Dilewati", cls: "bg-fg/10 text-fg/40" },
 };
 
+/** Posts published today (local day) against the per-day safety cap: an auto post that is ready waits while this is full. */
+export function capToday(posts: Pick<CsPost, "status" | "postedAt">[], maxPerDay: number, tzMin: number) {
+  const today = dayKey(new Date().toISOString(), tzMin);
+  const postedToday = posts.filter((p) => p.status === "posted" && p.postedAt && dayKey(p.postedAt, tzMin) === today).length;
+  return { postedToday, maxPerDay, reached: postedToday >= maxPerDay };
+}
+
 export function StatusChip({ post }: { post: Pick<CsPost, "status"> }) {
   const s = STATUS[post.status];
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${s.cls}`}>{s.label}</span>;
