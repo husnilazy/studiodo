@@ -13,10 +13,12 @@ const PING_INTERVAL_MS = 15_000; // re-check every 15s
 // blow past localStorage's ~5-10MB quota.
 
 const DB_NAME = "studiodo-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_SESSIONS = "pendingSessions";
 const STORE_PHOTOS = "pendingPhotos";
 const STORE_STRIPS = "pendingStrips";
+const STORE_OPS = "pendingOps"; // small session updates made while offline (frame choice, customer details, event-free mark)
+const STORE_KV = "kv"; // offline copies of things fetched while online (frame list, frame images)
 
 export interface PendingSessionMeta {
   offlineId: string;
@@ -24,6 +26,17 @@ export interface PendingSessionMeta {
   orientation: string;
   selectedExtras: { id: string; name: string; price: number }[];
   printQty?: number;
+  /** Set the moment the server created the real session: a retry after a crash must not create a second one. */
+  realId?: string;
+  createdAt: number;
+}
+
+export type PendingOpKind = "patch" | "eventFree" | "customer";
+export interface PendingOp {
+  id: string;
+  sessionId: string;
+  kind: PendingOpKind;
+  payload: Record<string, unknown>;
   createdAt: number;
 }
 
@@ -53,6 +66,8 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_SESSIONS)) db.createObjectStore(STORE_SESSIONS, { keyPath: "offlineId" });
       if (!db.objectStoreNames.contains(STORE_PHOTOS)) db.createObjectStore(STORE_PHOTOS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(STORE_STRIPS)) db.createObjectStore(STORE_STRIPS, { keyPath: "sessionId" });
+      if (!db.objectStoreNames.contains(STORE_OPS)) db.createObjectStore(STORE_OPS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(STORE_KV)) db.createObjectStore(STORE_KV, { keyPath: "key" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -87,6 +102,10 @@ interface OfflineState {
   pendingSessionCount: number;
   pendingPhotoCount: number;
   pendingStripCount: number;
+  pendingOpCount: number;
+  /** The offline queue could not save something (storage full / unavailable): the crew must know. */
+  queueFailed: boolean;
+  storageLow: boolean;
 
   setOnline: (value: boolean) => void;
   setSyncInProgress: (v: boolean) => void;
@@ -100,6 +119,9 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   pendingSessionCount: 0,
   pendingPhotoCount: 0,
   pendingStripCount: 0,
+  pendingOpCount: 0,
+  queueFailed: false,
+  storageLow: false,
 
   setOnline: (isOnline) => {
     const prev = get().isOnline;
@@ -116,15 +138,18 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
 
 async function refreshPendingCounts() {
   try {
-    const [sessions, photos, strips] = await Promise.all([
+    const [sessions, photos, strips, ops] = await Promise.all([
       getAllRecords<PendingSessionMeta>(STORE_SESSIONS),
       getAllRecords<PendingPhoto>(STORE_PHOTOS),
       getAllRecords<PendingStrip>(STORE_STRIPS),
+      getAllRecords<PendingOp>(STORE_OPS),
     ]);
     useOfflineStore.setState({
-      pendingSessionCount: sessions.length,
+      // a session the server already created (kept only until its photos are remapped) is not "pending" for the crew
+      pendingSessionCount: sessions.filter((s) => !s.realId).length,
       pendingPhotoCount: photos.length,
       pendingStripCount: strips.length,
+      pendingOpCount: ops.length,
     });
   } catch {
     // IndexedDB unavailable (private mode, locked-down profile, etc.) — the
@@ -133,6 +158,34 @@ async function refreshPendingCounts() {
 }
 
 void refreshPendingCounts();
+
+/** Saves to the queue; if that fails (storage full / blocked) the kiosk shows a crew warning instead of failing silently. */
+async function queuePut<T>(storeName: string, record: T) {
+  try {
+    await putRecord(storeName, record);
+  } catch (error) {
+    useOfflineStore.setState({ queueFailed: true });
+    console.error("Antrean offline gagal menyimpan data (penyimpanan penuh atau tidak tersedia)", error);
+    throw error;
+  }
+}
+
+// Ask the browser not to evict the queue under storage pressure, and watch free space while anything is waiting to sync.
+if (typeof navigator !== "undefined" && navigator.storage?.persist) void navigator.storage.persist().catch(() => undefined);
+async function checkStorage() {
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est?.quota && est.usage !== undefined) useOfflineStore.setState({ storageLow: est.usage / est.quota > 0.85 });
+  } catch { /* not available: nothing to warn about */ }
+}
+
+// Offline copies of small things fetched while online (key/value, JSON or Blob).
+export async function kvGet<T>(key: string): Promise<T | undefined> {
+  try { return (await runTx<{ key: string; value: T } | undefined>(STORE_KV, "readonly", (store) => store.get(key) as IDBRequest<{ key: string; value: T } | undefined>))?.value; } catch { return undefined; }
+}
+export async function kvPut(key: string, value: unknown) {
+  try { await putRecord(STORE_KV, { key, value }); } catch { /* a cache that cannot be written is simply absent */ }
+}
 
 // ─── Public queue API ────────────────────────────────────────────────────────
 
@@ -145,21 +198,37 @@ export function isOfflineSessionId(id: string | null | undefined): boolean {
 }
 
 export async function addPendingSession(meta: Omit<PendingSessionMeta, "createdAt">) {
-  await putRecord(STORE_SESSIONS, { ...meta, createdAt: Date.now() });
+  await queuePut(STORE_SESSIONS, { ...meta, createdAt: Date.now() });
   await refreshPendingCounts();
 }
 
 export async function addPendingPhoto(sessionId: string, slotIndex: number, blob: Blob) {
   const entry: PendingPhoto = { id: crypto.randomUUID(), sessionId, slotIndex, blob, createdAt: Date.now() };
-  await putRecord(STORE_PHOTOS, entry);
+  await queuePut(STORE_PHOTOS, entry);
+  void checkStorage();
   await refreshPendingCounts();
 }
 
 export async function addPendingStrip(sessionId: string, blob: Blob, shareUrl: string) {
   // put() overwrites any strip already queued for this session — only the
   // latest render (e.g. a retry after editing stickers) is worth keeping.
-  await putRecord(STORE_STRIPS, { sessionId, blob, shareUrl, createdAt: Date.now() });
+  await queuePut(STORE_STRIPS, { sessionId, blob, shareUrl, createdAt: Date.now() });
   await refreshPendingCounts();
+}
+
+/**
+ * Sends a small session update (frame choice, customer details, event-free mark) now when online; otherwise — or if the
+ * request fails — keeps it in the queue so it reaches the server once the session exists there and the network is back.
+ * Resolves true when it was sent, false when it was queued.
+ */
+export async function sendSessionOp(sessionId: string, kind: PendingOpKind, payload: Record<string, unknown>): Promise<boolean> {
+  const run = () => (kind === "patch" ? api.patchSession(sessionId, payload) : kind === "eventFree" ? api.markEventFree(sessionId, payload.eventName as string | undefined) : api.updateCustomer(sessionId, payload as Parameters<typeof api.updateCustomer>[1]));
+  if (isBrowserOnline() && !isOfflineSessionId(sessionId)) {
+    try { await run(); return true; } catch (error) { console.warn("Perubahan sesi ditunda untuk sinkronisasi", kind, error); }
+  }
+  await queuePut(STORE_OPS, { id: crypto.randomUUID(), sessionId, kind, payload, createdAt: Date.now() } satisfies PendingOp);
+  await refreshPendingCounts();
+  return false;
 }
 
 // ─── Sync pending sessions/photos/strips when back online ──────────────────
@@ -185,8 +254,12 @@ const noteSuccess = (key: string) => { retryState.delete(key); };
 
 export async function syncOfflineData() {
   if (_syncing) return;
-  const { pendingSessionCount, pendingPhotoCount, pendingStripCount } = useOfflineStore.getState();
-  if (pendingSessionCount === 0 && pendingPhotoCount === 0 && pendingStripCount === 0) return;
+  const { pendingSessionCount, pendingPhotoCount, pendingStripCount, pendingOpCount } = useOfflineStore.getState();
+  // (a session kept only so late photos can be remapped has realId set and is not counted, but still gets its cleanup pass)
+  if (pendingSessionCount === 0 && pendingPhotoCount === 0 && pendingStripCount === 0 && pendingOpCount === 0) {
+    const kept = await getAllRecords<PendingSessionMeta>(STORE_SESSIONS).catch(() => []);
+    if (kept.length === 0) return;
+  }
 
   _syncing = true;
   useOfflineStore.getState().setSyncInProgress(true);
@@ -195,23 +268,53 @@ export async function syncOfflineData() {
     //    any photos/strip already queued under the old client-only id.
     const sessions = await getAllRecords<PendingSessionMeta>(STORE_SESSIONS);
     for (const meta of sessions) {
+      if (meta.realId) continue; // already created on the server; only waiting for its cleanup pass below
       if (!dueForRetry(`s:${meta.offlineId}`)) continue;
       try {
         const real = await api.createSession({ packageId: meta.packageId, orientation: meta.orientation, selectedExtras: meta.selectedExtras, printQty: meta.printQty, offline: true });
         if (!real?.id) continue;
+        // Write the server id down FIRST: if the app dies right after this, the retry must not create a second session.
+        meta.realId = real.id;
+        await putRecord(STORE_SESSIONS, meta);
         await remapSessionId(meta.offlineId, real.id);
-        await deleteRecord(STORE_SESSIONS, meta.offlineId);
-        // If this offline session is still the kiosk's active session (the
-        // customer hasn't finished yet), point it at the real id so later
-        // calls (customer save, additional print, strip upload) target a
-        // session that actually exists server-side.
+        // If this offline session is still the kiosk's active session (the customer hasn't finished yet), point it at the
+        // real id so later calls (customer save, additional print, strip upload) target a session that exists server-side.
         if (useKioskSession.getState().sessionId === meta.offlineId) {
           useKioskSession.getState().setSessionId(real.id);
         }
       } catch (err) {
         noteFailure(`s:${meta.offlineId}`);
         console.warn("[offline-sync] Gagal membuat sesi server untuk", meta.offlineId, err);
-        // leave it queued — retried on the next sync pass
+        // leave it queued, retried on the next sync pass
+      }
+    }
+
+    // 1b. Late arrivals: a photo/strip/update queued under the old id while the id was being swapped is remapped on every
+    //     pass, and the old record is dropped only when nothing references it any more (and it is not the active session).
+    const created = (await getAllRecords<PendingSessionMeta>(STORE_SESSIONS)).filter((m) => m.realId);
+    for (const meta of created) {
+      await remapSessionId(meta.offlineId, meta.realId!);
+      if (useKioskSession.getState().sessionId === meta.offlineId) { useKioskSession.getState().setSessionId(meta.realId!); continue; }
+      if (Date.now() - meta.createdAt < 10 * 60_000) continue;
+      const [photos, strips, ops] = await Promise.all([getAllRecords<PendingPhoto>(STORE_PHOTOS), getAllRecords<PendingStrip>(STORE_STRIPS), getAllRecords<PendingOp>(STORE_OPS)]);
+      const stillUsed = photos.some((x) => x.sessionId === meta.offlineId) || strips.some((x) => x.sessionId === meta.offlineId) || ops.some((x) => x.sessionId === meta.offlineId);
+      if (!stillUsed) await deleteRecord(STORE_SESSIONS, meta.offlineId);
+    }
+
+    // 1c. Small updates made offline (frame choice, customer details, event-free mark), once their session exists server-side.
+    const queuedOps = (await getAllRecords<PendingOp>(STORE_OPS)).sort((a, b) => a.createdAt - b.createdAt);
+    for (const op of queuedOps) {
+      if (isOfflineSessionId(op.sessionId)) continue;
+      if (!dueForRetry(`o:${op.id}`)) continue;
+      try {
+        if (op.kind === "patch") await api.patchSession(op.sessionId, op.payload);
+        else if (op.kind === "eventFree") await api.markEventFree(op.sessionId, op.payload.eventName as string | undefined);
+        else await api.updateCustomer(op.sessionId, op.payload as Parameters<typeof api.updateCustomer>[1]);
+        await deleteRecord(STORE_OPS, op.id);
+        noteSuccess(`o:${op.id}`);
+      } catch (err) {
+        noteFailure(`o:${op.id}`);
+        console.warn("[offline-sync] Gagal mengirim perubahan sesi", op.kind, err);
       }
     }
 
@@ -260,6 +363,10 @@ async function remapSessionId(oldId: string, newId: string) {
     if (photo.sessionId !== oldId) continue;
     await putRecord(STORE_PHOTOS, { ...photo, sessionId: newId });
   }
+  const ops = await getAllRecords<PendingOp>(STORE_OPS);
+  for (const op of ops) {
+    if (op.sessionId === oldId) await putRecord(STORE_OPS, { ...op, sessionId: newId });
+  }
   const strip = await runTx<PendingStrip | undefined>(STORE_STRIPS, "readonly", (store) => store.get(oldId) as IDBRequest<PendingStrip | undefined>);
   if (strip) {
     await deleteRecord(STORE_STRIPS, oldId);
@@ -299,8 +406,10 @@ export function startNetworkMonitor() {
     if (reachable) void syncOfflineData();
   };
 
-  window.addEventListener("online", () => updateStatus("online"));
-  window.addEventListener("offline", () => updateStatus("offline"));
+  const onOnline = () => updateStatus("online");
+  const onOffline = () => updateStatus("offline");
+  window.addEventListener("online", onOnline);
+  window.addEventListener("offline", onOffline);
 
   // Periodic ping — doubles as the retry loop for anything still queued
   // (syncOfflineData no-ops immediately once the queue is empty).
@@ -311,8 +420,8 @@ export function startNetworkMonitor() {
 
   return () => {
     clearInterval(interval);
-    window.removeEventListener("online", () => updateStatus("online"));
-    window.removeEventListener("offline", () => updateStatus("offline"));
+    window.removeEventListener("online", onOnline);
+    window.removeEventListener("offline", onOffline);
     _monitorStarted = false;
   };
 }

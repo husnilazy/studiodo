@@ -18,7 +18,7 @@ import { buildStickerAssets, useEmojiVersion } from "@/lib/builtinStickers";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
 import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
 import { Icon } from "@/components/kiosk/Icons";
-import { addPendingStrip, cachePublicBaseUrl, isBrowserOnline, isOfflineSessionId, readCachedPublicBaseUrl } from "@/lib/offlineStore";
+import { sendSessionOp, addPendingStrip, cachePublicBaseUrl, isBrowserOnline, isOfflineSessionId, readCachedPublicBaseUrl } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
@@ -423,7 +423,7 @@ export default function Hasil() {
     setConsent(value);
     setConsentAnswered(true);
     // Stored right away (not only on "Simpan biodata"), with whatever contact details exist so far since the endpoint replaces them.
-    if (sessionId) void api.updateCustomer(sessionId, { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: value }).catch(() => undefined);
+    if (sessionId) void sendSessionOp(sessionId, "customer", { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: value }).catch(() => undefined);
   };
 
   const saveCustomer = async () => {
@@ -431,7 +431,7 @@ export default function Hasil() {
     setSavingCustomer(true);
     setCustomerSaved(false);
     try {
-      await api.updateCustomer(sessionId, { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: consent });
+      await sendSessionOp(sessionId, "customer", { whatsapp: whatsapp.trim() || undefined, email: email.trim() || undefined, publishConsent: consent });
       setCustomerSaved(true);
     } finally {
       setSavingCustomer(false);

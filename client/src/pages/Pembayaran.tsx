@@ -9,7 +9,7 @@ import { useKioskSession } from "@/lib/sessionStore";
 import { usePaidGuard } from "@/lib/usePaidGuard";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
-import { addPendingSession, createOfflineSessionId, isBrowserOnline } from "@/lib/offlineStore";
+import { sendSessionOp, addPendingSession, createOfflineSessionId, isBrowserOnline } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
@@ -109,20 +109,20 @@ export default function Pembayaran() {
         .then((s) => {
           setSessionId(s.id);
           if (eventFreeEntryActive) {
-            api.markEventFree(s.id, boothConfig.eventName).catch(() => undefined);
+            sendSessionOp(s.id, "eventFree", { eventName: boothConfig.eventName }).catch(() => undefined);
           }
         })
         .catch((err) => {
           creatingSessionRef.current = false;
           if (offlineModeEnabled && !isBrowserOnline()) {
             const offlineId = createOfflineSessionId();
-            void addPendingSession({
+            addPendingSession({
               offlineId,
               packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
               orientation,
               selectedExtras,
               printQty: selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0,
-            });
+            }).catch(() => undefined);
             setSessionId(offlineId);
           } else setError(err instanceof Error ? err.message : "Gagal membuat sesi. Coba lagi.");
         });
@@ -160,7 +160,7 @@ export default function Pembayaran() {
   const startQris = async () => {
     if (eventFreeEntryActive) {
       if (sessionId) {
-        await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
+        await sendSessionOp(sessionId, "eventFree", { eventName: boothConfig.eventName }).catch(() => undefined);
       }
       leavePayment();
       return;
@@ -267,7 +267,7 @@ export default function Pembayaran() {
   // A package priced at Rp 0 needs no payment step at all — offering "Bayar dengan QRIS" for Rp 0 only confuses people.
   const isFreePackage = totalAmount === 0 && !eventFreeEntryActive;
   const startFree = async () => {
-    if (sessionId) await api.markEventFree(sessionId, selectedPackage?.name ? `Gratis · ${selectedPackage.name}` : "Gratis").catch(() => undefined);
+    if (sessionId) await sendSessionOp(sessionId, "eventFree", { eventName: selectedPackage?.name ? `Gratis · ${selectedPackage.name}` : "Gratis" }).catch(() => undefined);
     leavePayment();
   };
 
@@ -300,13 +300,13 @@ export default function Pembayaran() {
     if (!offlineModeEnabled || isBrowserOnline() || !selectedPackage) return;
     if (!sessionId) {
       const offlineId = createOfflineSessionId();
-      void addPendingSession({
+      addPendingSession({
         offlineId,
         packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
         orientation,
         selectedExtras,
         printQty: selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0,
-      });
+      }).catch(() => undefined);
       setSessionId(offlineId);
     }
     leavePayment();
@@ -315,7 +315,7 @@ export default function Pembayaran() {
   const redeemVoucher = async (codeOverride?: string) => {
     if (eventFreeEntryActive) {
       if (sessionId) {
-        await api.markEventFree(sessionId, boothConfig.eventName).catch(() => undefined);
+        await sendSessionOp(sessionId, "eventFree", { eventName: boothConfig.eventName }).catch(() => undefined);
       }
       leavePayment();
       return;

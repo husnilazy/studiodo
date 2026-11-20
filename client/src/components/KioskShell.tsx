@@ -16,6 +16,7 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
   const isOnline = useOfflineStore((s) => s.isOnline);
   const pendingCount = useOfflineStore((s) => s.pendingSessionCount + s.pendingPhotoCount + s.pendingStripCount);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
+  const queueProblem = useOfflineStore((s) => s.queueFailed || s.storageLow);
   const [showStatus, setShowStatus] = useState(false);
 
   // Crew shortcut: five quick taps on the bottom-left corner open the admin (see lib/adminEntry.ts).
@@ -94,6 +95,13 @@ export default function KioskShell({ children }: { children: React.ReactNode }) 
         <div className="absolute right-4 top-4 z-50 flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] text-amber-700 backdrop-blur-sm">
           <span className="h-1 w-1 rounded-full bg-amber-400/70" />
           Offline
+        </div>
+      )}
+
+      {/* The offline queue cannot be trusted: photos taken now might not survive until the internet is back. */}
+      {queueProblem && (
+        <div role="alert" className="absolute left-1/2 top-3 z-[60] -translate-x-1/2 rounded-full border border-red-400/50 bg-red-500/90 px-4 py-1.5 text-xs font-semibold text-white shadow-lg">
+          Penyimpanan offline bermasalah (penuh/tidak tersedia). Hubungi crew.
         </div>
       )}
 

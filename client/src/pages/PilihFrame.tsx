@@ -8,7 +8,7 @@ import { useBoothConfig } from "@/lib/boothConfigStore";
 import { getNextRoute, getPreviousRoute } from "@/lib/kioskFlow";
 import { CUSTOM_FRAME_LOCK, OUTPUT_PRESETS, presetSize, useTemplateLibrary, type LocalTemplate } from "@/lib/templateStore";
 import { useFrameCategories, hydrateFrameCategoriesFromServer } from "@/lib/frameCategoryStore";
-import { isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
+import { sendSessionOp } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import Positionable from "@/components/Positionable";
 import StepProgress from "@/components/kiosk/StepProgress";
@@ -198,8 +198,9 @@ export default function PilihFrame() {
     // the choice to the server is just for admin/record-keeping, so it
     // shouldn't hold up the customer waiting on a Neon/tunnel round-trip
     // before the "pilih frame" tap visibly does anything.
-    if (sessionId && isBrowserOnline() && !isOfflineSessionId(sessionId)) {
-      api.patchSession(sessionId, { frameId: resolvedSelected?.id ?? null, layout: outputPreset })
+    // Offline (or a failed request): queued and sent once the session exists on the server.
+    if (sessionId) {
+      sendSessionOp(sessionId, "patch", { frameId: resolvedSelected?.id ?? null, layout: outputPreset })
         .catch((error) => console.warn("Gagal menyimpan pilihan frame ke server", error));
     }
     navigate(getNextRoute("frame", kioskFlow));
