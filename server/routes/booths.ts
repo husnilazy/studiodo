@@ -6,6 +6,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { sanitizeOverrides, sanitizePackageOverrides } from "../lib/boothSettings.js";
+import { normalizeBoothMode } from "../lib/events.js";
 
 // Per-booth settings for the tenant dashboard (mounted at /api/booths): every kiosk key (= one booth) can have its own package
 // prices / availability and its own look. All queries are scoped to the signed-in tenant; kiosks read the result through
@@ -16,7 +17,7 @@ boothsRouter.param("id", validateUuidParam("Booth tidak ditemukan"));
 boothsRouter.use(requireAdminAuth);
 
 async function ownBooth(tenantId: string, id: string) {
-  const [booth] = await db.select({ id: kioskKeys.id, label: kioskKeys.label }).from(kioskKeys)
+  const [booth] = await db.select({ id: kioskKeys.id, label: kioskKeys.label, boothMode: kioskKeys.boothMode }).from(kioskKeys)
     .where(and(eq(kioskKeys.id, id), eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt)));
   return booth ?? null;
 }
@@ -25,7 +26,7 @@ async function ownBooth(tenantId: string, id: string) {
 boothsRouter.get("/", async (req, res) => {
   const tenantId = req.tenantId!;
   const [booths, settings] = await Promise.all([
-    db.select({ id: kioskKeys.id, label: kioskKeys.label, lastUsedAt: kioskKeys.lastUsedAt, appVersion: kioskKeys.appVersion, createdAt: kioskKeys.createdAt })
+    db.select({ id: kioskKeys.id, label: kioskKeys.label, boothMode: kioskKeys.boothMode, lastUsedAt: kioskKeys.lastUsedAt, appVersion: kioskKeys.appVersion, createdAt: kioskKeys.createdAt })
       .from(kioskKeys).where(and(eq(kioskKeys.tenantId, tenantId), isNull(kioskKeys.revokedAt))).orderBy(asc(kioskKeys.createdAt)),
     db.select().from(boothSettings).where(eq(boothSettings.tenantId, tenantId)),
   ]);
@@ -54,6 +55,19 @@ boothsRouter.get("/:id", async (req, res) => {
   });
 });
 
+// PATCH /api/booths/:id/mode — { boothMode } the one-tap switch on the kiosk list (standard <-> event only)
+boothsRouter.patch("/:id/mode", async (req, res) => {
+  const tenantId = req.tenantId!;
+  const booth = await ownBooth(tenantId, String(req.params.id));
+  if (!booth) return res.status(404).json({ error: "Booth tidak ditemukan" });
+  const mode = normalizeBoothMode(req.body?.boothMode);
+  if (mode !== booth.boothMode) {
+    await db.update(kioskKeys).set({ boothMode: mode, boothModeAt: new Date() }).where(and(eq(kioskKeys.id, booth.id), eq(kioskKeys.tenantId, tenantId)));
+    logEvent({ tenantId, category: "kiosk", action: "booth_mode.changed", message: `Booth "${booth.label ?? booth.id.slice(0, 8)}" ${mode === "event_only" ? "diubah menjadi khusus event" : "kembali ke mode standar"}`, actorType: "tenant_admin" });
+  }
+  res.json({ ok: true, boothMode: mode });
+});
+
 // PUT /api/booths/:id — { label?, overrides?, packageOverrides? } replaces this booth's overrides (an empty object = follow the main settings)
 boothsRouter.put("/:id", async (req, res) => {
   const tenantId = req.tenantId!;
@@ -71,6 +85,14 @@ boothsRouter.put("/:id", async (req, res) => {
     if (!label) return res.status(400).json({ error: "Nama booth tidak boleh kosong." });
     if (label !== booth.label) await db.update(kioskKeys).set({ label }).where(and(eq(kioskKeys.id, booth.id), eq(kioskKeys.tenantId, tenantId)));
   }
+  // Booth mode: a booth subscribed for events only runs while one of its events is live (enforced when a session starts).
+  if (req.body?.boothMode !== undefined) {
+    const mode = normalizeBoothMode(req.body.boothMode);
+    if (mode !== booth.boothMode) {
+      await db.update(kioskKeys).set({ boothMode: mode, boothModeAt: new Date() }).where(and(eq(kioskKeys.id, booth.id), eq(kioskKeys.tenantId, tenantId)));
+      logEvent({ tenantId, category: "kiosk", action: "booth_mode.changed", message: `Booth "${booth.label ?? booth.id.slice(0, 8)}" ${mode === "event_only" ? "diubah menjadi khusus event" : "kembali ke mode standar"}`, actorType: "tenant_admin" });
+    }
+  }
   await db.insert(boothSettings).values({ kioskKeyId: booth.id, tenantId, overrides: overrides.value, packageOverrides: packageOverrides.value })
     .onConflictDoUpdate({ target: boothSettings.kioskKeyId, set: { overrides: overrides.value, packageOverrides: packageOverrides.value, updatedAt: new Date() } });
   logEvent({
@@ -78,5 +100,5 @@ boothsRouter.put("/:id", async (req, res) => {
     message: `Pengaturan booth "${booth.label ?? booth.id.slice(0, 8)}" diubah (${Object.keys(packageOverrides.value).length} paket khusus, ${Object.keys(overrides.value).length} pengaturan tampilan khusus)`,
     actorType: "tenant_admin",
   });
-  res.json({ ok: true, overrides: overrides.value, packageOverrides: packageOverrides.value });
+  res.json({ ok: true, overrides: overrides.value, packageOverrides: packageOverrides.value, boothMode: normalizeBoothMode(req.body?.boothMode ?? booth.boothMode) });
 });

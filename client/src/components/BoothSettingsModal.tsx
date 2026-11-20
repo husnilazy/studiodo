@@ -30,6 +30,7 @@ export default function BoothSettingsModal({ boothId, onClose, onSaved }: { boot
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<Record<string, boolean>>({});
   const [look, setLook] = useState<Record<string, string>>({});
+  const [eventOnly, setEventOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,6 +43,7 @@ export default function BoothSettingsModal({ boothId, onClose, onSaved }: { boot
       setPrices(Object.fromEntries(Object.entries(r.packageOverrides).filter(([, o]) => o.price !== undefined).map(([id, o]) => [id, String(o.price)])));
       setHidden(Object.fromEntries(Object.entries(r.packageOverrides).filter(([, o]) => o.active === false).map(([id]) => [id, true])));
       setLook(r.overrides);
+      setEventOnly(r.booth.boothMode === "event_only");
     }).catch((err) => setError(err instanceof Error ? err.message : "Gagal memuat pengaturan booth"));
     return () => { cancelled = true; };
   }, [boothId]);
@@ -58,7 +60,7 @@ export default function BoothSettingsModal({ boothId, onClose, onSaved }: { boot
         if (hidden[p.id]) entry.active = false;
         if (Object.keys(entry).length > 0) packageOverrides[p.id] = entry;
       }
-      await api.saveBooth(boothId, { label: label.trim() || undefined, overrides: look, packageOverrides });
+      await api.saveBooth(boothId, { label: label.trim() || undefined, boothMode: eventOnly ? "event_only" : "standard", overrides: look, packageOverrides });
       pushToast({ type: "success", title: "Pengaturan booth disimpan", sub: "Kiosk memakainya saat sesi berikutnya dimulai." });
       onSaved();
       onClose();
@@ -89,6 +91,20 @@ export default function BoothSettingsModal({ boothId, onClose, onSaved }: { boot
                 <h4 className="font-semibold">1. Nama booth</h4>
                 <p className="text-xs text-fg/50">Nama yang kamu lihat di dashboard, misalnya lokasinya.</p>
                 <input className={inputClass} value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} placeholder="mis. Booth Mall Jakarta" />
+              </section>
+
+              <section>
+                <h4 className="font-semibold">Mode booth</h4>
+                <p className="text-xs text-fg/50">Mode ini bisa diganti kapan saja tanpa memengaruhi langganan booth. <b>Standar</b>: berjualan seperti biasa, plus menjalankan event yang dipilihkan untuknya. <b>Khusus event</b>: hanya bisa dipakai saat salah satu event-nya sedang berlangsung.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {([[false, "Standar", "Berjualan normal, plus event kalau ada."], [true, "Khusus event", "Terkunci di luar jadwal event. Cocok untuk booth yang disewakan atau dibawa ke acara."]] as const).map(([value, title, hint]) => (
+                    <label key={title} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 text-sm ${eventOnly === value ? "border-accent bg-accent/5" : "border-fg/10"}`}>
+                      <input type="radio" name="boothMode" checked={eventOnly === value} onChange={() => setEventOnly(value)} className="mt-0.5 accent-[var(--accent,#7c6cff)]" />
+                      <span><span className="font-medium">{title}</span><span className="block text-xs text-fg/50">{hint}</span></span>
+                    </label>
+                  ))}
+                </div>
+                {eventOnly && <p className="mt-2 text-xs text-fg/50">Atur jadwal dan booth-nya di menu Event. Tanpa event yang berlangsung, layar kiosk menampilkan "Booth ini khusus event".</p>}
               </section>
 
               <section>

@@ -16,6 +16,7 @@ import { authRouter } from "./routes/auth.js";
 import { authAltRouter } from "./routes/authAlt.js";
 import { kioskKeysRouter } from "./routes/kioskKeys.js";
 import { boothsRouter } from "./routes/booths.js";
+import { eventsRouter } from "./routes/events.js";
 import { superadminRouter } from "./routes/superadmin.js";
 import { publicLeadsRouter } from "./routes/publicLeads.js";
 import { instantSignupRouter } from "./routes/instantSignup.js";
@@ -84,7 +85,7 @@ const keepRawBody = (req: unknown, _res: unknown, buf: Buffer) => { (req as { ra
 // server buffer 30 MB per request.
 const largeJson = express.json({ limit: "30mb", verify: keepRawBody });
 const smallJson = express.json({ limit: "512kb", verify: keepRawBody });
-const LARGE_JSON_PREFIXES = ["/api/packages", "/api/frames", "/api/config", "/api/superadmin", "/api/creator"];
+const LARGE_JSON_PREFIXES = ["/api/packages", "/api/frames", "/api/config", "/api/superadmin", "/api/creator", "/api/events"];
 app.use((req, res, next) => {
   const large = LARGE_JSON_PREFIXES.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`));
   (large ? largeJson : smallJson)(req, res, next);
@@ -111,6 +112,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/auth", authAltRouter);
 app.use("/api/kiosk-keys", kioskKeysRouter);
 app.use("/api/booths", boothsRouter);
+app.use("/api/events", eventsRouter);
 app.use("/api/superadmin", superadminRouter);
 app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/tenant-applications", tenantApplicationsRouter);

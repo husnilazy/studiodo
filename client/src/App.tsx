@@ -25,7 +25,7 @@ import { useKioskSession } from "@/lib/sessionStore";
 import { clearKioskPairing, getDeviceToken, getHardwareDeviceId, isKioskPaired, setBoundDeviceId, setDeviceToken } from "@/lib/apiConfig";
 import { api } from "@/lib/api";
 import { prefetchFrames } from "@/lib/framesCache";
-import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
+import { refreshActiveEvent, syncBoothConfigFromServer } from "@/lib/boothConfigStore";
 import { useLicenseLocked } from "@/lib/subscriptionLockStore";
 import SubscriptionLockedScreen from "@/components/SubscriptionLockedScreen";
 import DeviceMismatchScreen from "@/components/DeviceMismatchScreen";
@@ -194,6 +194,20 @@ export default function App() {
       window.removeEventListener("studiodo-kiosk-pairing-required", onPairingRequired);
     };
   }, []);
+
+  // Events start and end on the server's schedule while the kiosk stays open: re-ask which one is live, but only while the kiosk
+  // is idle, so a customer in the middle of a session never has the timer or price rules change under them.
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  useEffect(() => {
+    if (IS_KIOSK_PREVIEW || !paired) return;
+    const tick = () => {
+      const path = locationRef.current;
+      if ((path === "/" || path === "") && !document.hidden) void refreshActiveEvent();
+    };
+    const timer = window.setInterval(tick, 45_000);
+    return () => window.clearInterval(timer);
+  }, [paired]);
 
   useEffect(() => {
     if (IS_KIOSK_PREVIEW || !isKioskPaired()) {

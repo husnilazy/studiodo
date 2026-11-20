@@ -400,6 +400,13 @@
       "when": 1794369140066,
       "tag": "0056_package_paper_items",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1794455540066,
+      "tag": "0057_events_per_booth",
+      "breakpoints": true
     }
   ]
 }

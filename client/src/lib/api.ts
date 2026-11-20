@@ -489,8 +489,20 @@ export const api = {
   // Per-booth settings (one kiosk key = one booth)
   getBooths: () => request<BoothSummary[]>("/booths"),
   getBooth: (id: string) => request<BoothDetail>(`/booths/${id}`),
-  saveBooth: (id: string, body: { label?: string; overrides: Record<string, string>; packageOverrides: Record<string, { price?: number; active?: boolean }> }) =>
+  saveBooth: (id: string, body: { label?: string; boothMode?: "standard" | "event_only"; overrides: Record<string, string>; packageOverrides: Record<string, { price?: number; active?: boolean }> }) =>
     request<{ ok: boolean }>(`/booths/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  setBoothMode: (id: string, boothMode: "standard" | "event_only") => request<{ ok: boolean; boothMode: string }>(`/booths/${id}/mode`, { method: "PATCH", body: JSON.stringify({ boothMode }) }),
+  // Events (Acara)
+  getEvents: () => request<{ booths: { id: string; label: string | null; boothMode: string }[]; events: EventItem[] }>("/events"),
+  saveEvent: (id: string | null, body: EventForm) =>
+    request<{ event: EventItem }>(id ? `/events/${id}` : "/events", { method: id ? "PUT" : "POST", body: JSON.stringify(body) }),
+  setEventEnabled: (id: string, enabled: boolean) => request<{ ok: boolean }>(`/events/${id}/enabled`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  deleteEvent: (id: string) => request<{ ok: boolean }>(`/events/${id}`, { method: "DELETE" }),
+  getEventFrames: () => request<EventFrameOption[]>("/events/frames"),
+  getEventGallery: (id: string, before?: string | null) => request<{ items: EventGalleryItem[]; next: string | null }>(`/events/${id}/gallery?limit=48${before ? `&before=${encodeURIComponent(before)}` : ""}`),
+  getEventStats: (id: string) => request<EventStats>(`/events/${id}/stats`),
+  getEventContacts: (id: string) => request<{ eventName: string; contacts: EventContact[] }>(`/events/${id}/contacts`),
+  getActiveEvent: () => request<{ event: KioskActiveEvent | null; boothMode: "standard" | "event_only" }>("/events/active"),
   // Help chat with the STUDIODO team ("Bantuan")
   getSupport: () => request<SupportChat>("/portal/support"),
   sendSupport: (body: string, attachments: SupportAttachment[] = []) => request<SupportChat>("/portal/support", { method: "POST", body: JSON.stringify({ body, attachments }) }),
@@ -567,9 +579,35 @@ export const api = {
 };
 
 export interface ReadinessCheck { id: string; title: string; status: "ok" | "warn" | "error"; message: string; action?: { label: string; target: string } }
-export interface BoothSummary { id: string; label: string | null; lastUsedAt: string | null; appVersion: string | null; customPrices: number; hiddenPackages: number; customLook: number }
+export interface BoothSummary { id: string; label: string | null; boothMode?: "standard" | "event_only"; lastUsedAt: string | null; appVersion: string | null; customPrices: number; hiddenPackages: number; customLook: number }
+export type EventState = "live" | "scheduled" | "ended" | "off" | "full";
+export interface EventItem {
+  id: string; name: string; description: string; imageUrl: string | null; enabled: boolean;
+  startsAt: string | null; endsAt: string | null; freeEntry: boolean; timerEnabled: boolean; sessionTimerMinutes: number; maxPhotos: number;
+  hasGif: boolean; hasVideo: boolean; sessionCap: number | null; kioskKeyIds: string[]; frameIds: string[]; revertToStandard: boolean; branding: Record<string, string>; state: EventState; sessionCount: number;
+}
+export type EventForm = Omit<EventItem, "id" | "state" | "sessionCount" | "imageUrl"> & { imageUrl?: string | null };
+export interface EventStats {
+  event: EventItem;
+  totals: { sessions: number; completed: number; photos: number; gifs: number; videos: number; contacts: number; consents: number; free: number; paid: number; revenue: number };
+  perBooth: { kioskKeyId: string | null; label: string; sessions: number; photos: number }[];
+  timeline: { hour: string; count: number }[];
+  recent: { id: string; createdAt: string; booth: string | null; shareUrl: string | null; thumb: string }[];
+}
+export interface EventGalleryItem { id: string; createdAt: string; orientation: string; shareUrl: string | null; booth: string | null; stripUrl: string | null; photoUrls: string[]; gifUrl: string | null; videoUrl: string | null }
+export interface EventContact { at: string; whatsapp: string | null; email: string | null; consent: boolean; feedback: string | null; booth: string }
+export interface KioskActiveEvent {
+  id: string; name: string; description: string; imageUrl: string | null; startsAt: string; endsAt: string; freeEntry: boolean;
+  timerEnabled: boolean; sessionTimerMinutes: number; maxPhotos: number; hasGif: boolean; hasVideo: boolean;
+  /** How many frames this event offers; > 0 = the picker lists only those. */
+  frameCount: number;
+  /** Look of this event (colours, texts, logo / cover / banner) laid over the booth's own while it is live. */
+  branding: Record<string, string>;
+  version: string;
+}
+export interface EventFrameOption { id: string; name: string; orientation: string; eventOnly: boolean; imageUrl: string | null; slots: { x: number; y: number; w: number; h: number; rotation?: number }[]; canvasWidth: number; canvasHeight: number; outputPreset: string }
 export interface BoothDetail {
-  booth: { id: string; label: string | null };
+  booth: { id: string; label: string | null; boothMode?: "standard" | "event_only" };
   overrides: Record<string, string>;
   packageOverrides: Record<string, { price?: number; active?: boolean }>;
   packages: { id: string; name: string; price: number; active: boolean; photoCount: number }[];

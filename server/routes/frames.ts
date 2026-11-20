@@ -9,6 +9,7 @@ import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { saveUploadedFile } from "../storage.js";
 import { resolveFrameUrl } from "../lib/frameUrl.js";
 import { CUSTOM_FRAME_CATEGORY } from "../lib/pos.js";
+import { EVENT_FRAME_CATEGORY, loadEventFrameIds, resolveActiveEvent } from "../lib/events.js";
 
 export const framesRouter = Router();
 framesRouter.param("id", validateUuidParam("Frame tidak ditemukan"));
@@ -106,7 +107,7 @@ framesRouter.get("/manage", requireAdminAuth, async (req, res) => {
     }).from(frameOverlays).where(eq(frameOverlays.tenantId, tenantId)).orderBy(frameOverlays.createdAt),
   ]);
   res.json([
-    ...custom.map((t) => ({ ...t, kind: "template" as const, imageUrl: t.imageUrl ? resolveFrameUrl(t.imageUrl) : null, stopMotion: t.category === STOP_MOTION_CATEGORY })),
+    ...custom.filter((t) => t.category !== EVENT_FRAME_CATEGORY).map((t) => ({ ...t, kind: "template" as const, imageUrl: t.imageUrl ? resolveFrameUrl(t.imageUrl) : null, stopMotion: t.category === STOP_MOTION_CATEGORY })),
     ...overlays.map((o) => ({ ...o, kind: "overlay" as const, imageUrl: o.imageUrl ? resolveFrameUrl(o.imageUrl) : null, category: "overlay", style: "Overlay", outputPreset: "", slotCount: 0, stopMotion: false })),
   ]);
 });
@@ -128,9 +129,17 @@ framesRouter.get("/", requireKioskAuth, async (req, res) => {
       .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category, style: t.style, outputPreset: t.outputPreset })));
   }
 
+  // While an event with its own frames is live on this booth, the picker offers ONLY those frames.
+  const activeEvent = await resolveActiveEvent(tenantId, req.kioskKeyId);
+  const eventFrameIds = activeEvent ? new Set((await loadEventFrameIds([activeEvent.id])).get(activeEvent.id) ?? []) : new Set<string>();
+  if (eventFrameIds.size > 0) {
+    const linked = customTemplates.filter((t) => eventFrameIds.has(t.id));
+    return res.json(linked.filter((t) => t.orientation === orientation).map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category === EVENT_FRAME_CATEGORY ? "custom" : t.category, style: t.style, outputPreset: t.outputPreset })));
+  }
+
   const merged = [
     ...customTemplates
-      .filter((t) => t.orientation === orientation && t.category !== STOP_MOTION_CATEGORY && t.category !== CUSTOM_FRAME_CATEGORY)
+      .filter((t) => t.orientation === orientation && t.category !== STOP_MOTION_CATEGORY && t.category !== CUSTOM_FRAME_CATEGORY && t.category !== EVENT_FRAME_CATEGORY)
       .map((t) => ({ id: t.id, kind: "template" as const, name: t.name, imageUrl: resolveFrameUrl(t.frameImageUrl), slots: t.slots, canvasWidth: t.canvasWidth, canvasHeight: t.canvasHeight, orientation: t.orientation, category: t.category, style: t.style, outputPreset: t.outputPreset })),
     ...overlays
       .filter((o) => o.orientation === orientation)
