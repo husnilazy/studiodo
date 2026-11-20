@@ -40,6 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "traffic", since: "0.1.40", section: "traffic", title: "Traffic", body: "Jumlah sesi dan performa booth per hari, supaya kamu tahu jam ramai dan paket yang paling laku." },
   { id: "media", since: "0.1.40", section: "media", title: "Database Foto & Video", body: "Semua foto, GIF, dan video dari setiap sesi. Unduh, cetak ulang, atau kirim ulang ke customer." },
   { id: "frames", since: "0.1.40", section: "monitor", title: "Kelola Frame", body: "Menu “Kelola Frame” di sidebar adalah tempat mengunggah dan menyusun frame (bingkai foto) yang dipilih customer." },
+  { id: "offline-mode", since: "0.1.40", section: "kiosk", kioskSubtab: "printer", title: "Internet putus? Sesi tetap jalan", body: "Foto disimpan di komputer booth lalu dikirim otomatis saat internet kembali. Pembayaran tunai saat offline butuh PIN petugas, jadi atur PIN di Kiosk → Akses operator. Sesi offline tampil sebagai “Offline (cek manual)” di Transaksi. Pengaturannya ada di Kiosk → Printer → Offline Mode." },
   { id: "phone", since: "0.1.40", section: "monitor", title: "Admin di HP", body: "Tombol “Luncurkan di HP” di menu samping membuat QR sekali pakai. Pindai dengan HP dan Admin langsung terbuka tanpa login, lalu HP itu tetap masuk selama 30 hari." },
 ];
 
