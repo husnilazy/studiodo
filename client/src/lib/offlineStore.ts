@@ -4,6 +4,7 @@ import { api } from "./api";
 import { useKioskSession } from "./sessionStore";
 
 const PACKAGE_CACHE_KEY = "studiodo-offline-packages";
+const PUBLIC_BASE_KEY = "studiodo-public-base-url";
 const PING_INTERVAL_MS = 15_000; // re-check every 15s
 
 // ─── IndexedDB-backed offline queue ─────────────────────────────────────────
@@ -22,6 +23,7 @@ export interface PendingSessionMeta {
   packageId?: string;
   orientation: string;
   selectedExtras: { id: string; name: string; price: number }[];
+  printQty?: number;
   createdAt: number;
 }
 
@@ -195,7 +197,7 @@ export async function syncOfflineData() {
     for (const meta of sessions) {
       if (!dueForRetry(`s:${meta.offlineId}`)) continue;
       try {
-        const real = await api.createSession({ packageId: meta.packageId, orientation: meta.orientation, selectedExtras: meta.selectedExtras });
+        const real = await api.createSession({ packageId: meta.packageId, orientation: meta.orientation, selectedExtras: meta.selectedExtras, printQty: meta.printQty, offline: true });
         if (!real?.id) continue;
         await remapSessionId(meta.offlineId, real.id);
         await deleteRecord(STORE_SESSIONS, meta.offlineId);
@@ -326,6 +328,14 @@ export function readCachedPackages<T>(): T[] {
     const value = localStorage.getItem(PACKAGE_CACHE_KEY);
     return value ? (JSON.parse(value) as T[]) : [];
   } catch { return [] as T[]; }
+}
+
+/** The public address galleries live at (QR links). Remembered while online so an offline kiosk never falls back to file://. */
+export function readCachedPublicBaseUrl(): string | null {
+  try { return localStorage.getItem(PUBLIC_BASE_KEY); } catch { return null; }
+}
+export function cachePublicBaseUrl(url: string) {
+  try { localStorage.setItem(PUBLIC_BASE_KEY, url); } catch { /* ignore */ }
 }
 
 export function cachePackages<T>(packages: T[]) {

@@ -18,7 +18,7 @@ import { buildStickerAssets, useEmojiVersion } from "@/lib/builtinStickers";
 import VirtualKeyboard from "@/components/VirtualKeyboard";
 import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
 import { Icon } from "@/components/kiosk/Icons";
-import { addPendingStrip, isBrowserOnline, isOfflineSessionId } from "@/lib/offlineStore";
+import { addPendingStrip, cachePublicBaseUrl, isBrowserOnline, isOfflineSessionId, readCachedPublicBaseUrl } from "@/lib/offlineStore";
 import { ScreenLayoutBoundary } from "@/lib/screenBuilder/ScreenLayoutBoundary";
 import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext";
 import Positionable from "@/components/Positionable";
@@ -330,7 +330,9 @@ export default function Hasil() {
         Promise.race([promise, new Promise<T>((resolve) => window.setTimeout(() => resolve(fallback), ms))]);
 
       const publicConfig = await withTimeout(api.getPublicConfig(sessionId).catch(() => undefined), 4000, undefined);
-      const publicBaseUrl = publicConfig?.baseUrl || window.location.origin;
+      if (publicConfig?.baseUrl) cachePublicBaseUrl(publicConfig.baseUrl);
+      // Offline: the last known public address, never "file://" (a QR to it can never open anywhere).
+      const publicBaseUrl = publicConfig?.baseUrl || readCachedPublicBaseUrl() || window.location.origin;
       const localShareUrl = `${publicBaseUrl}/#/share/${sessionId}`;
       if (localShareUrl !== originShareUrl) {
         setShareUrl(localShareUrl);
@@ -733,6 +735,12 @@ export default function Hasil() {
                   {["left-1.5 top-1.5 border-l-[3px] border-t-[3px] rounded-tl-xl", "right-1.5 top-1.5 border-r-[3px] border-t-[3px] rounded-tr-xl", "bottom-1.5 left-1.5 border-b-[3px] border-l-[3px] rounded-bl-xl", "bottom-1.5 right-1.5 border-b-[3px] border-r-[3px] rounded-br-xl"].map((c) => (
                     <span key={c} className={`pointer-events-none absolute h-6 w-6 border-accent ${c}`} />
                   ))}
+                  {isOfflineSessionId(sessionId) && (
+                    <div className="absolute inset-4 z-10 flex flex-col items-center justify-center rounded-lg bg-white px-3 text-center text-black/70">
+                      <span className="text-sm font-bold">Link foto menyusul</span>
+                      <span className="mt-1 text-[11px] leading-snug">Internet sedang terputus. Foto tersimpan dan akan dikirim otomatis saat koneksi kembali. Minta crew mengirim link-nya.</span>
+                    </div>
+                  )}
                   <canvas ref={qrCanvasRef} className="relative block !h-[clamp(100px,min(20vh,34vw),220px)] !w-[clamp(100px,min(20vh,34vw),220px)] rounded-lg" />
                   {config.animationsEnabled && !stripRendering && <span className="k-scan-line pointer-events-none absolute inset-x-4 h-0.5 rounded-full bg-accent/70 shadow-[0_0_14px_var(--accent)]" />}
                 </div>

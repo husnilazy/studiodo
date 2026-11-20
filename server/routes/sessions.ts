@@ -17,6 +17,7 @@ import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireKioskAuth, requireKioskAuthUpload } from "../middleware/kioskAuth.js";
 import { requireActiveSubscription } from "../middleware/requireActiveSubscription.js";
 import { getKeyPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
+import { logEvent } from "../lib/platformEvents.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
 
@@ -67,6 +68,9 @@ const mediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req, res) => {
   const tenantId = req.tenantId!;
   const { packageId, orientation, selectedExtras = [], printQty = 0 } = req.body;
+  // A session the kiosk started while offline (operator-confirmed, payment taken by hand): it is recorded as such and stays
+  // "pending" so it never counts as QRIS revenue; the dashboard shows it as an offline session to reconcile.
+  const offline = req.body?.offline === true;
   const [pkg] = packageId
     ? await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.tenantId, tenantId)))
     : [];
@@ -105,8 +109,10 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
       orientation,
       selectedExtras: canonicalExtras,
       totalAmount: totalAmount != null ? totalAmount.toFixed(2) : undefined,
+      ...(offline ? { paymentMethod: "offline" } : {}),
     })
     .returning();
+  if (offline) logEvent({ tenantId, level: "info", category: "kiosk", action: "session.offline_created", message: `Sesi dibuat saat booth offline (${totalAmount != null ? "Rp " + totalAmount.toLocaleString("id-ID") : "gratis"}), pembayaran manual belum terverifikasi`, actorType: "kiosk", metadata: { sessionId: row.id } });
   res.status(201).json(row);
 });
 

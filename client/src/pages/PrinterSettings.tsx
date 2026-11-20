@@ -246,6 +246,7 @@ export default function PrinterSettings() {
               <input type="checkbox" checked={draft.offlineModeEnabled} onChange={(e) => set("offlineModeEnabled", e.target.checked)} />
               <span className="text-sm text-fg/70">Izinkan Offline Mode (paket terakhir, bayar manual, foto dan print lokal)</span>
             </label>
+            <p className="mt-2 text-xs leading-relaxed text-fg/50">Saat internet putus, sesi tetap jalan dan foto disimpan di komputer ini, lalu dikirim otomatis begitu internet kembali. Sesi berbayar saat offline butuh <strong>PIN petugas</strong> (atur di Kiosk → Akses operator) dan tercatat sebagai &ldquo;Offline&rdquo; di Transaksi agar kamu cek pembayarannya manual. Link/QR foto menyusul setelah online.</p>
             <div className="mt-4 flex items-center gap-3">
               <button type="button" onClick={save} disabled={saving || !dirty} className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40">Simpan</button>
               {dirty && <button type="button" onClick={cancel} className="text-sm text-fg/50 hover:text-fg">Batalkan perubahan</button>}

@@ -311,7 +311,7 @@ const DEFAULT_CONFIG: BoothConfig = {
   operatorPin: "",
   operatorEntryCorner: "bl",
   operatorEntryTaps: 5,
-  offlineModeEnabled: false,
+  offlineModeEnabled: true,
   kioskFlow: DEFAULT_KIOSK_FLOW,
 };
 
@@ -398,6 +398,16 @@ export const useBoothConfig = create<BoothConfigStore>()(
     }
   )
 );
+
+// Offline mode used to be off by default, so an internet outage left a booth showing "Gagal membuat sesi". Existing installs got
+// that stored `false` without ever choosing it: switch it on once (the tenant can still turn it off again; paid offline sessions
+// are protected by the crew PIN, see Pembayaran.tsx).
+try {
+  if (typeof localStorage !== "undefined" && !localStorage.getItem("studiodo-offline-default-v1")) {
+    localStorage.setItem("studiodo-offline-default-v1", "1");
+    if (!useBoothConfig.getState().config.offlineModeEnabled) useBoothConfig.getState().update({ offlineModeEnabled: true });
+  }
+} catch { /* storage unavailable: keep whatever is configured */ }
 
 // Settings that belong to ONE physical booth, not to the tenant: another kiosk of the same tenant may have a different
 // camera or printer, so these stay in this PC's localStorage and are never uploaded or overwritten.

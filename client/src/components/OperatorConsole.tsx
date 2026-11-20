@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { getApiBaseUrl, isKioskPaired } from "@/lib/apiConfig";
 import { checkTetherBridge, type TetherBridgeHealth } from "@/lib/camera";
 import { checkKioskToken, checkCamera, checkNetwork, checkPrinter, type DiagnosticResult } from "@/lib/deviceDiagnostics";
-import type { StudiodoPrinterInfo, StudiodoSystemDiagnostics } from "@/types/electron";
+import type { StudiodoPrinterInfo, StudiodoSystemDiagnostics } from "@/types/electron";
+
 import Select from "@/components/Select";
 
 type TabKey = "diagnostik" | "kamera" | "printer" | "sync" | "sistem" | "riwayat";
@@ -27,7 +28,7 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
  * this runs in public-facing spaces, same "secret combo" model as the existing
  * admin shortcut (Ctrl+Shift+A).
  */
-function PinPad({ pin, onSuccess, onCancel }: { pin: string; onSuccess: () => void; onCancel: () => void }) {
+export function PinPad({ pin, onSuccess, onCancel }: { pin: string; onSuccess: () => void; onCancel: () => void }) {
   const [value, setValueState] = useState("");
   const valueRef = useRef("");
   const setValue = (next: string | ((current: string) => string)) => {

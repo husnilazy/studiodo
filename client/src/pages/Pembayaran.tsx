@@ -15,6 +15,7 @@ import { usePositionableContext } from "@/lib/screenBuilder/PositionableContext"
 import Positionable from "@/components/Positionable";
 import { BackButton, KioskPage, ScreenTitle, Spinner } from "@/components/kiosk/KioskUI";
 import { Icon } from "@/components/kiosk/Icons";
+import { PinPad } from "@/components/OperatorConsole";
 import { useKeyboardAvoid } from "@/lib/useKeyboardAvoid";
 import { CUSTOM_FRAME_LOCK } from "@/lib/templateStore";
 
@@ -120,6 +121,7 @@ export default function Pembayaran() {
               packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
               orientation,
               selectedExtras,
+              printQty: selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0,
             });
             setSessionId(offlineId);
           } else setError(err instanceof Error ? err.message : "Gagal membuat sesi. Coba lagi.");
@@ -278,6 +280,22 @@ export default function Pembayaran() {
     setMode("choose");
   };
 
+  // Offline there is no way to verify a payment, so a PAID package needs the crew PIN (they confirm they took the money);
+  // a free package needs nothing. With no PIN set, offline sessions for paid packages are refused rather than free for all.
+  const [offlinePinOpen, setOfflinePinOpen] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const operatorPin = boothConfig.operatorPin;
+  const hasPin = /^[0-9]{4,8}$/.test(operatorPin ?? "");
+  const requestOffline = () => {
+    if (totalAmount > 0) {
+      if (!hasPin) { setOfflineNotice("Tidak ada koneksi. Pembayaran tunai saat offline butuh PIN petugas — hubungi petugas booth."); return; }
+      setOfflineNotice(null);
+      setOfflinePinOpen(true);
+      return;
+    }
+    continueOffline();
+  };
+
   const continueOffline = () => {
     if (!offlineModeEnabled || isBrowserOnline() || !selectedPackage) return;
     if (!sessionId) {
@@ -287,6 +305,7 @@ export default function Pembayaran() {
         packageId: selectedPackage.id === "event-session" ? undefined : selectedPackage.id,
         orientation,
         selectedExtras,
+        printQty: selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0,
       });
       setSessionId(offlineId);
     }
@@ -409,15 +428,18 @@ export default function Pembayaran() {
                 </button>
               )}
               {offlineModeEnabled && !isBrowserOnline() && (
-                <button type="button" onClick={continueOffline} className={methodCard}>
+                <button type="button" onClick={requestOffline} className={methodCard}>
                   <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/12 text-amber-600"><Icon name="warning" className="h-8 w-8" /></span>
                   <span className="font-display text-2xl font-semibold">Lanjut offline</span>
-                  <span className="text-sm text-muted">Bayar manual di kasir.</span>
+                  <span className="text-sm text-muted">Bayar manual ke petugas. Petugas konfirmasi dengan PIN.</span>
                 </button>
               )}
             </div>
           </Positionable>
         )}
+
+        {offlineNotice && mode === "choose" && <p role="alert" className="max-w-xl text-center text-sm font-semibold text-amber-700">{offlineNotice}</p>}
+        {offlinePinOpen && <PinPad pin={operatorPin} onCancel={() => setOfflinePinOpen(false)} onSuccess={() => { setOfflinePinOpen(false); continueOffline(); }} />}
 
         {mode === "voucher" && (
           <div className="glass-panel w-full max-w-2xl rounded-[2rem] p-6 sm:p-8">

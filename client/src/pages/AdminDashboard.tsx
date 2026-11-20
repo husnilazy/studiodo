@@ -223,7 +223,7 @@ function paymentStatusBadge(status: string, createdAt?: string | null) {
     default: return { label: "Menunggu bayar", className: "bg-amber-300/20 text-amber-600" };
   }
 }
-const paymentMethodLabel = (method?: string | null) => ({ qris: "QRIS", doku: "DOKU QRIS", xendit: "QRIS", voucher: "Voucher", cash: "Cash", event: "Event gratis" } as Record<string, string>)[method ?? ""] ?? "belum dipilih";
+const paymentMethodLabel = (method?: string | null) => ({ qris: "QRIS", doku: "DOKU QRIS", xendit: "QRIS", voucher: "Voucher", cash: "Cash", event: "Event gratis", offline: "Offline (cek manual)" } as Record<string, string>)[method ?? ""] ?? "belum dipilih";
 
 function TrafficMonitor({ sessions, traffic, metrics }: { sessions: any[]; traffic: any[]; metrics: any }) {
   const sortedTraffic = [...traffic].sort((left, right) => left.date.localeCompare(right.date));

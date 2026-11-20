@@ -476,7 +476,7 @@ export const api = {
   getPublicConfig: (sessionId?: string) => request<{ baseUrl: string; brandName?: string; tagline?: string; logoUrl?: string | null; contactWhatsapp?: string | null; socialInstagram?: string | null; socialTiktok?: string | null; socialFacebook?: string | null; websiteUrl?: string | null; address?: string | null; accentColor?: string | null }>(`/config/public${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`),
   updateGalleryProfile: (body: Record<string, unknown>) => request<any>("/config/gallery-profile", { method: "PATCH", body: JSON.stringify(body) }),
   getPackages: () => request<any[]>("/packages"),
-  createSession: (body: { packageId?: string; orientation: string; selectedExtras?: { id: string; name: string; price: number; qty?: number }[]; printQty?: number }) =>
+  createSession: (body: { packageId?: string; orientation: string; selectedExtras?: { id: string; name: string; price: number; qty?: number }[]; printQty?: number; offline?: boolean }) =>
     request<any>("/sessions", { method: "POST", body: JSON.stringify(body) }),
   patchSession: (id: string, body: Record<string, unknown>) =>
     request<any>(`/sessions/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
