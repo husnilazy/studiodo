@@ -132,15 +132,23 @@ export default function PilihFrame() {
     setActiveCategory("__all__");
   };
 
+  const eventFramesOnly = useBoothConfig((s) => s.config.eventFramesOnly);
   const options = useMemo<FrameOption[]>(() => {
     const serverIds = new Set(frames.map((frame) => frame.id));
     return [
       ...frames,
-      ...localTemplates
+      // A live event with its own frames offers only those: this kiosk's local template library stays out of the picker.
+      ...(eventFramesOnly ? [] : localTemplates)
         .filter((template) => !serverIds.has(template.id) && (template.orientation === "landscape" ? "landscape" : "portrait") === orientation)
         .map((template) => ({ id: template.id, kind: "template" as const, orientation: template.orientation, name: template.name, imageUrl: template.frameDataUrl, category: template.category, slots: template.slots, canvasWidth: template.canvasWidth, canvasHeight: template.canvasHeight })),
     ];
-  }, [frames, localTemplates, orientation]);
+  }, [frames, localTemplates, orientation, eventFramesOnly]);
+
+  // An event with a single frame: nothing to choose, so it is already selected and the customer just continues.
+  useEffect(() => {
+    if (eventFramesOnly && options.length === 1 && selectedId === null) setSelectedId(options[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventFramesOnly, options]);
 
   // Overlays have no category of their own (frame_overlays has never had that
   // column) — grouped under "custom" alongside uncategorized templates

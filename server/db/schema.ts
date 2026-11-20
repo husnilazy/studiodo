@@ -12,6 +12,8 @@ import {
   unique,
   customType,
   serial,
+  primaryKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // Postgres bytea <-> Node Buffer (drizzle has no built-in bytea column).
@@ -412,6 +414,10 @@ export const kioskKeys = pgTable("kiosk_keys", {
   // Tenant self-service "Reset device" is capped (see lib/deviceLock.ts) so one paid key can't be rotated across many PCs.
   deviceResetCount: integer("device_reset_count").notNull().default(0),
   deviceResetWindowStart: timestamp("device_reset_window_start"),
+  // What this booth is for. 'standard' = sells normally (and also runs any event assigned to it); 'event_only' = a booth
+  // that is subscribed for events: it refuses to start a session unless one of its events is live right now.
+  boothMode: text("booth_mode").notNull().default("standard"), // 'standard' | 'event_only'
+  boothModeAt: timestamp("booth_mode_at"), // when the mode last changed (an event that ended BEFORE this never switches the booth back)
 }, (table) => [index("kiosk_keys_tenant_id_idx").on(table.tenantId)]);
 
 // A permanent memory of which computers already used a free trial. Unlike kiosk_keys.bound_device_id it is NOT cleared by
@@ -499,6 +505,8 @@ export const sessions = pgTable("sessions", {
   // Which booth (kiosk key) ran this session — what lets the live monitor say "booth X is mid-session". Null on sessions
   // from before this column existed, and when the booth's key is later deleted.
   kioskKeyId: uuid("kiosk_key_id").references(() => kioskKeys.id, { onDelete: "set null" }),
+  // The event that was live on this booth when the session started (lib/events.ts) — what the event dashboard counts.
+  eventId: uuid("event_id").references((): AnyPgColumn => events.id, { onDelete: "set null" }),
   packageId: uuid("package_id").references(() => packages.id),
   orientation: text("orientation").notNull().default("portrait"), // 'portrait' | 'landscape'
   paymentMethod: text("payment_method").notNull().default("qris"), // 'qris' | 'voucher'
@@ -544,7 +552,48 @@ export const sessions = pgTable("sessions", {
 }, (table) => [
   index("sessions_tenant_id_created_at_idx").on(table.tenantId, table.createdAt),
   index("sessions_kiosk_key_id_idx").on(table.kioskKeyId, table.createdAt),
+  index("sessions_event_id_idx").on(table.eventId, table.createdAt),
 ]);
+
+// Events ("Acara"): a tenant runs many, each on its own booths and schedule. An event that lists no booth runs on EVERY booth
+// of the tenant. Whether one is live is decided by lib/events.ts on the server — never by what a kiosk claims.
+export const events = pgTable("events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  imageUrl: text("image_url"),
+  enabled: boolean("enabled").notNull().default(true), // the on/off switch; the schedule below still has to match
+  startsAt: timestamp("starts_at"), // null = no start limit
+  endsAt: timestamp("ends_at"), // null = no end limit
+  freeEntry: boolean("free_entry").notNull().default(true), // sessions need no payment while live
+  timerEnabled: boolean("timer_enabled").notNull().default(true),
+  sessionTimerMinutes: integer("session_timer_minutes").notNull().default(5),
+  maxPhotos: integer("max_photos").notNull().default(0), // 0 = follow the booth's own limit
+  hasGif: boolean("has_gif").notNull().default(false),
+  hasVideo: boolean("has_video").notNull().default(true),
+  sessionCap: integer("session_cap"), // null = unlimited; once reached the event stops being live
+  // When this event has ended and the booth has nothing else live or coming, an event-only booth returns to normal photobooth mode by itself.
+  revertToStandard: boolean("revert_to_standard").notNull().default(false),
+  // Look & text of THIS event only (colours, texts, logo / cover / banner URLs), laid over the booth's normal design while the
+  // event is live and removed again when it ends. Whitelisted by lib/events.ts (sanitizeBranding).
+  branding: jsonb("branding").$type<Record<string, string>>().notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("events_tenant_idx").on(table.tenantId, table.startsAt)]);
+
+// Which booths run an event (no rows = all booths).
+export const eventBooths = pgTable("event_booths", {
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  kioskKeyId: uuid("kiosk_key_id").notNull().references(() => kioskKeys.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.eventId, table.kioskKeyId] }), index("event_booths_key_idx").on(table.kioskKeyId)]);
+
+// The frame templates an event offers. While the event is live, the kiosk's frame picker lists ONLY these (no rows = the
+// booth's normal frames). Frames uploaded from the event screen are templates in the reserved category "__event".
+export const eventFrames = pgTable("event_frames", {
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  templateId: uuid("template_id").notNull().references(() => templates.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.eventId, table.templateId] })]);
 
 // CRM: a customer is not a row of its own — they are derived from the contact details on their sessions (grouped by
 // WhatsApp number, else email). This table only holds what the tenant adds ON TOP of that: a name, notes, tags, and a

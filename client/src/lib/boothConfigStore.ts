@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api, getAdminToken, isViewOnlyAdmin } from "./api";
+import { api, getAdminToken, isViewOnlyAdmin, type KioskActiveEvent } from "./api";
+import { clearFramesCache } from "./framesCache";
 import { DEFAULT_KIOSK_FLOW, type KioskFlowConfig } from "./kioskFlow";
 import { LEGACY_ACCENTS, LEGACY_PALETTES, THEME_PRESETS, type ThemeMode } from "./themePresets";
 import { FONT_PAIRINGS, type FontPairingKey } from "./fontPairings";
@@ -84,6 +85,10 @@ export interface BoothConfig {
   eventMaxPhotosPerSession: number;
   eventHasGif: boolean;
   eventHasVideo: boolean;
+  /** This booth only runs events (set on the server) and none is live right now: the kiosk shows "belum ada event" and starts nothing. */
+  eventRequired: boolean;
+  /** The live event brings its own frames: the picker lists only those (set by the server). */
+  eventFramesOnly: boolean;
   /** Whole-look style (Default / Minimalis / Sinematik / Ceria), see lib/kioskStyles.ts. */
   kioskStyle: KioskStyleId;
   /** "auto" = the layout that belongs to the style. */
@@ -221,6 +226,8 @@ const DEFAULT_CONFIG: BoothConfig = {
   eventMaxPhotosPerSession: 0,
   eventHasGif: false,
   eventHasVideo: true,
+  eventRequired: false,
+  eventFramesOnly: false,
   kioskStyle: "default",
   idleLayout: "auto",
   packageLayout: "auto",
@@ -423,6 +430,71 @@ let boothOverriddenKeys = new Set<string>();
 export type ConfigSyncState = { status: "idle" | "saving" | "saved" | "error"; message?: string };
 export const useConfigSync = create<ConfigSyncState>(() => ({ status: "idle" }));
 
+// The event fields come from the server per booth and are never written back as the tenant's own settings.
+const EVENT_SERVER_KEYS = new Set<string>(["eventEnabled", "eventName", "eventDescription", "eventImageUrl", "eventStartAt", "eventEndAt", "eventFreeEntry", "eventTimerEnabled", "eventSessionTimerMinutes", "eventMaxPhotosPerSession", "eventHasGif", "eventHasVideo", "eventRequired", "eventFramesOnly"]);
+
+// An event brings its own look (colours, texts, logo / cover / banner). Which settings it overrode is remembered on this device, so
+// that when the event ends — even while the app was closed — exactly those settings go back to the booth's normal design.
+const BRANDING_KEYS_STORE = "studiodo-event-branding-keys";
+function readBrandingKeys(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(BRANDING_KEYS_STORE) ?? "[]"); return Array.isArray(v) ? v.filter((k) => typeof k === "string") : []; } catch { return []; }
+}
+function writeBrandingKeys(keys: string[]) {
+  try { localStorage.setItem(BRANDING_KEYS_STORE, JSON.stringify(keys)); } catch { /* private mode: the next sync still re-applies the right state */ }
+}
+// Never pushed back as the tenant's own settings.
+let eventBrandingKeys = new Set<string>(readBrandingKeys());
+
+function eventKey(event: KioskActiveEvent | null | undefined, boothMode: unknown) {
+  return `${boothMode === "event_only" ? "eo" : "st"}|${event ? `${event.id}:${event.frameCount ?? 0}:${event.version ?? ""}` : "none"}`;
+}
+
+/**
+ * The kiosk's event settings for what the server says is live on this booth (nothing live = event off). `base` is what the
+ * sync already decided for the booth's normal design: an ended event's branding only falls back to the default for keys the
+ * normal design does not define.
+ */
+let lastEventKey: string | undefined;
+function eventPatch(event: KioskActiveEvent | null | undefined, boothMode: unknown, base: Record<string, unknown> = {}): Partial<BoothConfig> {
+  // The frame list depends on which event is live, so a change drops the cached list (the next picker visit reloads it).
+  const key = eventKey(event, boothMode);
+  if (lastEventKey !== undefined && lastEventKey !== key) clearFramesCache();
+  lastEventKey = key;
+
+  const branding = (event?.branding ?? {}) as Record<string, string>;
+  const patch: Record<string, unknown> = {};
+  for (const k of readBrandingKeys()) if (!(k in branding) && !(k in base)) patch[k] = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[k];
+  Object.assign(patch, branding);
+  writeBrandingKeys(Object.keys(branding));
+  eventBrandingKeys = new Set(Object.keys(branding));
+
+  if (!event) return { ...patch, eventEnabled: false, eventRequired: boothMode === "event_only", eventFramesOnly: false } as Partial<BoothConfig>;
+  return {
+    ...patch,
+    eventEnabled: true, eventRequired: false, eventFramesOnly: (event.frameCount ?? 0) > 0,
+    eventName: event.name, eventDescription: event.description, eventImageUrl: event.imageUrl,
+    eventStartAt: event.startsAt, eventEndAt: event.endsAt, eventFreeEntry: event.freeEntry,
+    eventTimerEnabled: event.timerEnabled, eventSessionTimerMinutes: event.sessionTimerMinutes, eventMaxPhotosPerSession: event.maxPhotos,
+    eventHasGif: event.hasGif, eventHasVideo: event.hasVideo,
+  } as Partial<BoothConfig>;
+}
+
+/**
+ * Re-asks the server which event is live on this booth (schedules start and end while the kiosk stays open). When the answer
+ * changed, the whole design is re-synced so the event's look is laid over — or lifted off — the booth's normal design.
+ * Offline or failing: keeps what it has.
+ */
+export async function refreshActiveEvent(): Promise<void> {
+  try {
+    const r = await api.getActiveEvent();
+    if (!r) return;
+    if (eventKey(r.event, r.boothMode) === lastEventKey) return;
+    await syncBoothConfigFromServer();
+  } catch {
+    // a failed refresh must never disturb a running session
+  }
+}
+
 /**
  * Loads the paired tenant's design from the server at boot / admin login.
  *
@@ -450,6 +522,8 @@ export async function syncBoothConfigFromServer(): Promise<{ hadServerConfig: bo
   const booth = remote.boothOverrides && typeof remote.boothOverrides === "object" ? (remote.boothOverrides as Record<string, unknown>) : {};
   boothOverriddenKeys = new Set(Object.keys(booth));
   for (const [key, value] of Object.entries(booth)) if (typeof value === "string" && value !== "") patch[key] = value;
+  // Events are decided by the server per booth (Admin -> Event); they replace the old single "Event Gratis" setting saved in the design.
+  Object.assign(patch, eventPatch(remote.activeEvent as KioskActiveEvent | null | undefined, remote.boothMode, patch));
 
   applyingRemote = true;
   try {
@@ -470,7 +544,7 @@ export async function pushConfigNow(): Promise<boolean> {
   const config = useBoothConfig.getState().config as unknown as Record<string, unknown>;
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig) && !boothOverriddenKeys.has(key)) body[key] = value;
+    if (!DEVICE_LOCAL_KEYS.includes(key as keyof BoothConfig) && !boothOverriddenKeys.has(key) && !EVENT_SERVER_KEYS.has(key) && !eventBrandingKeys.has(key)) body[key] = value;
   }
   useConfigSync.setState({ status: "saving", message: undefined });
   try {

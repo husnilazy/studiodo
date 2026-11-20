@@ -87,3 +87,8 @@ export function prefetchFrames() {
       .catch(() => undefined);
   }
 }
+
+/** Forget the cached lists (the offered frames changed, e.g. an event with its own frames started or ended). */
+export function clearFramesCache() {
+  cache.clear();
+}

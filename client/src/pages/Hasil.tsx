@@ -456,9 +456,12 @@ export default function Hasil() {
 
         const bundle = useKioskSession.getState().selectedPackage?.paperItems;
         const paidExtra = useKioskSession.getState().selectedExtras.find((extra) => extra.id === "print-qty")?.qty ?? 0;
-        const jobs = onlyCopies !== undefined
+        const baseJobs = onlyCopies !== undefined
           ? buildPrintJobs(bundle?.slice(0, 1), config).slice(0, 1).map((job) => ({ ...job, copies: onlyCopies }))
           : buildPrintJobs(bundle, config, paidExtra);
+        // A live event with its own frames prints each frame on the paper it was designed for (4R / 2R / A4), whatever the booth's default is.
+        const framePaper = config.eventFramesOnly && !bundle?.length ? ({ "4r": "4r", "2r": "2r", a4: "a4" } as const)[(template?.outputPreset ?? "") as "4r" | "2r" | "a4"] : undefined;
+        const jobs = framePaper ? baseJobs.map((job) => ({ ...job, pageSize: framePaper })) : baseJobs;
         const copies = jobs.reduce((sum, job) => sum + job.copies, 0);
         let result: { ok: boolean; error?: string } = { ok: true };
         for (const job of jobs) {

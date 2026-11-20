@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { db } from "../db/client.js";
-import { packages, sessions, tenantSettings } from "../db/schema.js";
+import { events, packages, sessions, tenantSettings } from "../db/schema.js";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { saveUploadedFile, getStorageDriver } from "../storage.js";
 import { boothPackagePrice, loadBoothSettings } from "../lib/boothSettings.js";
@@ -20,6 +20,7 @@ import { getKeyPlanFeatures, planLockedBody } from "../lib/planFeatures.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { validateUuidParam } from "../middleware/validateUuidParam.js";
 import { expireStalePendingSessions, expireSiblingPendingSessions } from "../lib/sessionHygiene.js";
+import { getBoothMode, isEventInWindow, resolveActiveEvent } from "../lib/events.js";
 
 export const sessionsRouter = Router();
 
@@ -71,6 +72,12 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
   // A session the kiosk started while offline (operator-confirmed, payment taken by hand): it is recorded as such and stays
   // "pending" so it never counts as QRIS revenue; the dashboard shows it as an offline session to reconcile.
   const offline = req.body?.offline === true;
+  // Events: the server (not the kiosk) knows whether one is live on this booth. A booth subscribed for events only refuses to
+  // start anything outside one; every session started during an event is tagged so the event dashboard can count it.
+  const [activeEvent, boothMode] = await Promise.all([resolveActiveEvent(tenantId, req.kioskKeyId), getBoothMode(req.kioskKeyId)]);
+  if (boothMode === "event_only" && !activeEvent) {
+    return res.status(403).json({ error: "Booth ini khusus event dan belum ada event yang sedang berlangsung.", code: "event_required" });
+  }
   const [pkg] = packageId
     ? await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.tenantId, tenantId)))
     : [];
@@ -105,6 +112,7 @@ sessionsRouter.post("/", requireKioskAuth, requireActiveSubscription, async (req
     .values({
       tenantId,
       kioskKeyId: req.kioskKeyId,
+      eventId: activeEvent?.id ?? null,
       packageId,
       orientation,
       selectedExtras: canonicalExtras,
@@ -164,10 +172,15 @@ sessionsRouter.patch("/:id", requireKioskAuth, async (req, res) => {
 // what a leaked kiosk key can be used for to "grant one free session" rather
 // than "rewrite the payment status/amount of any session".
 sessionsRouter.post("/:id/mark-event-free", requireKioskAuth, requireActiveSubscription, async (req, res) => {
-  const eventName = typeof req.body?.eventName === "string" ? req.body.eventName.trim().slice(0, 80) : "";
+  // Verified here now: only while a free-entry event is genuinely live on THIS booth (the name comes from the event, not the kiosk).
+  // The session already counts toward the event's cap, so when it was started inside an event, judge THAT event (not "is it still under the cap").
+  const [current] = await db.select({ eventId: sessions.eventId }).from(sessions).where(and(eq(sessions.id, String(req.params.id)), eq(sessions.tenantId, req.tenantId!)));
+  const own = current?.eventId ? (await db.select().from(events).where(and(eq(events.id, current.eventId), eq(events.tenantId, req.tenantId!))))[0] : undefined;
+  const event = own && isEventInWindow(own) ? own : await resolveActiveEvent(req.tenantId!, req.kioskKeyId);
+  if (!event || !event.freeEntry) return res.status(403).json({ error: "Tidak ada event gratis yang sedang berlangsung di booth ini.", code: "event_not_live" });
   const [row] = await db
     .update(sessions)
-    .set({ paymentStatus: "success", paymentMethod: "event", totalAmount: "0.00", voucherCode: eventName || "EVENT" })
+    .set({ paymentStatus: "success", paymentMethod: "event", totalAmount: "0.00", voucherCode: event.name.slice(0, 80) || "EVENT", eventId: event.id })
     .where(and(eq(sessions.id, String(req.params.id)), eq(sessions.tenantId, req.tenantId!)))
     .returning();
   if (!row) return res.status(404).json({ error: "Sesi tidak ditemukan" });

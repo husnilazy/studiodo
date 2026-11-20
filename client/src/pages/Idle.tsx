@@ -11,7 +11,29 @@ import Positionable from "@/components/Positionable";
 import { Icon } from "@/components/kiosk/Icons";
 import { resolveIdleLayout } from "@/lib/kioskStyles";
 
+// A booth subscribed for events only: until one of its events is live there is nothing to sell, so say so instead of a "start" screen.
+function EventRequiredScreen() {
+  const config = useBoothConfig((s) => s.config);
+  return (
+    <div className="kinetic-page relative flex h-full w-full select-none flex-col items-center justify-center gap-[2.5vh] overflow-hidden px-[8vw] text-center">
+      {config.logoUrl && <img src={config.logoUrl} alt="" className="max-h-[14vh] w-auto max-w-[60vw] object-contain" />}
+      <span className="flex h-[10vh] w-[10vh] items-center justify-center rounded-full bg-accent/10 text-accent"><Icon name="ticket" className="h-[5vh] w-[5vh]" /></span>
+      <h1 className="font-display font-semibold" style={{ fontSize: "clamp(28px, min(6vh, 6vw), 64px)" }}>Booth ini khusus event</h1>
+      <p className="max-w-[min(40rem,84vw)] text-muted" style={{ fontSize: "clamp(16px, min(2.6vh, 3vw), 26px)" }}>
+        Belum ada event yang sedang berlangsung. Booth akan siap dipakai begitu event dimulai.
+      </p>
+    </div>
+  );
+}
+
 export default function Idle() {
+  const eventRequired = useBoothConfig((s) => s.config.eventRequired);
+  const positionable = usePositionableContext();
+  if (eventRequired && !positionable?.editMode) return <EventRequiredScreen />;
+  return <IdleScreen />;
+}
+
+function IdleScreen() {
   const [, navigate] = useLocation();
   const config = useBoothConfig((s) => s.config);
   const resetSession = useKioskSession((s) => s.resetSession);

@@ -14,6 +14,7 @@ import TrendChart from "@/components/TrendChart";
 import WithdrawalPanel from "@/components/WithdrawalPanel";
 import AdminPlaceholder from "./AdminPlaceholder";
 import CrmPanel from "@/components/CrmPanel";
+import EventManager from "@/components/EventManager";
 import LiveMonitorPanel from "@/components/LiveMonitorPanel";
 import ReadinessCard from "@/components/ReadinessCard";
 import GalleryProfile from "./GalleryProfile";
@@ -36,13 +37,14 @@ import AppTour from "@/components/AppTour";
 import { TOUR_STEPS, pendingTour, type TourStep } from "@/lib/tourSteps";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
-type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
+type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "events" | "finance" | "crm" | "traffic" | "media";
 const sections: { id: Section; label: string; icon: string; group: string; hint: string }[] = [
   { id: "monitor", label: "Monitor Booth", icon: "dashboard", group: "Operasional", hint: "Semua booth dalam satu layar: siapa yang sedang sesi, menunggu bayar, atau offline." },
   { id: "control", label: "Kustomisasi Kiosk", icon: "sliders", group: "Tampilan", hint: "Logo, warna, tombol, dan teks kiosk — lihat hasilnya langsung di pratinjau kiosk asli." },
   { id: "gallery", label: "Profil Gallery", icon: "sparkles", group: "Tampilan", hint: "Profil dan tampilan galeri publik hasil foto." },
   { id: "kiosk", label: "Kiosk", icon: "monitor", group: "Operasional", hint: "Kunci kiosk, kamera, dan printer di PC booth." },
   { id: "flow", label: "Flow Kiosk", icon: "shuffle", group: "Operasional", hint: "Urutan layar yang dilalui pelanggan." },
+  { id: "events", label: "Event", icon: "ticket", group: "Operasional", hint: "Atur event per booth, jadwal, dan kuota. Setiap event punya dashboard sendiri." },
   { id: "finance", label: "Finance", icon: "wallet", group: "Bisnis", hint: "Pendapatan, paket, harga, dan voucher." },
   { id: "crm", label: "Pelanggan / CRM", icon: "users", group: "Bisnis", hint: "Semua pelanggan di satu tempat: hubungi lewat WhatsApp, catatan, label, dan riwayat sesi." },
   { id: "traffic", label: "Traffic", icon: "activity", group: "Bisnis", hint: "Jumlah sesi dan performa booth per hari." },
@@ -562,7 +564,7 @@ const FINANCE_SUBTABS = [
   { id: "transactions", label: "Transaksi" },
   { id: "packages", label: "Paket Foto" },
   { id: "gateway", label: "Pembayaran" },
-  { id: "event", label: "Event Gratis" },
+  { id: "event", label: "Event" },
   { id: "promo", label: "Voucher & Promosi" },
   { id: "withdraw", label: "Saldo & Penarikan" },
 ] as const;
@@ -969,6 +971,7 @@ export default function AdminDashboard() {
             </div>
           )}
           {section === "flow" && <KioskFlowSettings />}
+          {section === "events" && <EventManager />}
           {section === "finance" && (
             <div className="flex h-full min-h-0 flex-col gap-3">
               <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
@@ -993,7 +996,14 @@ export default function AdminDashboard() {
                 {financeSubtab === "transactions" && <TransactionsPanel sessions={sessions} />}
                 {financeSubtab === "packages" && <PaymentSettings view="packages" />}
                 {financeSubtab === "gateway" && <PaymentSettings view="gateway" />}
-                {financeSubtab === "event" && <PaymentSettings view="event" />}
+                {financeSubtab === "event" && (
+                  <div className="rounded-3xl border border-fg/10 bg-surface p-8 text-center shadow-glass">
+                    <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Icon name="ticket" className="h-7 w-7" /></span>
+                    <h3 className="mt-4 font-display text-lg font-semibold">Event pindah ke menu sendiri</h3>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-fg/55">Event sekarang diatur per booth, dengan jadwal, kuota, dan dashboard untuk setiap event.</p>
+                    <button type="button" onClick={() => setSection("events")} className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white">Buka menu Event</button>
+                  </div>
+                )}
                 {financeSubtab === "promo" && <VoucherManagement />}
                 {financeSubtab === "withdraw" && <WithdrawalPanel />}
               </div>

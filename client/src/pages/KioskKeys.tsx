@@ -79,6 +79,14 @@ export default function KioskKeys() {
   const [editingBooth, setEditingBooth] = useState<string | null>(null);
   const loadBoothSummary = () => api.getBooths().then((rows) => setBoothSummary(Object.fromEntries((rows ?? []).map((b) => [b.id, b])))).catch(() => undefined);
   useEffect(() => { void loadBoothSummary(); }, []);
+  const changeMode = async (id: string, label: string | null, mode: "standard" | "event_only") => {
+    if (mode === "event_only" && !window.confirm(`Jadikan booth "${label || "ini"}" KHUSUS EVENT?\n\nBooth hanya bisa dipakai saat salah satu event-nya sedang berlangsung. Di luar jadwal event, layar kiosk menampilkan "Booth ini khusus event".\n\nKamu bisa mengembalikannya ke Standar kapan saja.`)) return;
+    try {
+      await api.setBoothMode(id, mode);
+      await loadBoothSummary();
+      pushToast({ type: "success", title: mode === "event_only" ? "Booth jadi khusus event" : "Booth kembali ke mode standar", sub: mode === "event_only" ? "Hanya jalan saat ada event berlangsung." : "Bisa dipakai untuk photobooth biasa lagi. Kiosk menyesuaikan dalam sekitar 1 menit." });
+    } catch (err) { pushToast({ type: "error", title: "Gagal mengubah mode booth", sub: err instanceof Error ? err.message : undefined }); }
+  };
   const [keys, setKeys] = useState<KioskKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState("");
@@ -323,7 +331,24 @@ export default function KioskKeys() {
                   b?.hiddenPackages ? `${b.hiddenPackages} paket disembunyikan` : null,
                   b?.customLook ? "tampilan khusus" : null,
                 ].filter(Boolean);
-                return (
+                const eventOnly = b?.boothMode === "event_only";
+                return (<>
+                  <div className="mt-3 rounded-xl border border-fg/10 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">Mode booth</span>
+                      <span className="inline-flex rounded-full border border-fg/10 bg-fg/[0.05] p-0.5" role="group" aria-label="Mode booth">
+                        {([["standard", "Standar"], ["event_only", "Khusus event"]] as const).map(([value, text]) => (
+                          <button key={value} type="button" onClick={() => { if ((value === "event_only") !== eventOnly) void changeMode(key.id, key.label, value); }} aria-pressed={(value === "event_only") === eventOnly}
+                            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${(value === "event_only") === eventOnly ? "bg-accent text-white shadow-sm" : "text-fg/55 hover:text-fg"}`}>{text}</button>
+                        ))}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-fg/55">
+                      {eventOnly
+                        ? "Booth ini hanya aktif saat event-nya berlangsung. Setelah event selesai, pilih Standar agar bisa dipakai photobooth biasa lagi."
+                        : "Booth berjualan seperti biasa. Kalau ada event yang dipilihkan untuk booth ini, tampilannya ikut berubah selama event berlangsung, lalu kembali normal."}
+                    </p>
+                  </div>
                   <button type="button" onClick={() => setEditingBooth(key.id)} className="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 px-3 py-2.5 text-left transition hover:bg-accent/10">
                     <span>
                       <span className="block text-sm font-semibold">Pengaturan booth</span>
@@ -331,7 +356,7 @@ export default function KioskKeys() {
                     </span>
                     <span aria-hidden className="text-accent">›</span>
                   </button>
-                );
+                </>);
               })()}
 
               {(revealed[key.id] || revealError[key.id]) && (

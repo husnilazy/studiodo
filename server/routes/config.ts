@@ -6,11 +6,12 @@ import { testXenditQris } from "../lib/xenditBilling.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { loadPlatformDoku } from "../lib/platformDoku.js";
 import { loadBoothSettings } from "../lib/boothSettings.js";
+import { eventForKiosk, getBoothMode, loadEventFrameIds, resolveActiveEvent } from "../lib/events.js";
 import { getEffectivePolicy, unsettledAmount } from "../lib/qrisBalance.js";
 import { isUsable, loadGateway } from "../lib/gateways.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { frameOverlays, kioskKeys, packages, sessions, templates, tenantSettings, tenants } from "../db/schema.js";
+import { events, frameOverlays, kioskKeys, packages, sessions, templates, tenantSettings, tenants } from "../db/schema.js";
 import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { requireAnyAuth } from "../middleware/anyAuth.js";
 import { getStorageSettings, resetStorageSettingsCache } from "../lib/storageConfig.js";
@@ -103,7 +104,7 @@ configRouter.get("/public", async (req, res) => {
   const sessionId = String(req.query.sessionId ?? "");
   if (!sessionId) return res.json({ baseUrl });
 
-  const [session] = await db.select({ tenantId: sessions.tenantId }).from(sessions).where(eq(sessions.id, sessionId));
+  const [session] = await db.select({ tenantId: sessions.tenantId, eventId: sessions.eventId }).from(sessions).where(eq(sessions.id, sessionId));
   if (!session) return res.json({ baseUrl });
 
   const [profile] = await db.select({
@@ -126,7 +127,10 @@ configRouter.get("/public", async (req, res) => {
     accentColor: tenantSettings.accentColor,
   }).from(tenantSettings).where(eq(tenantSettings.tenantId, session.tenantId));
 
-  res.json({ baseUrl, ...profile });
+  // A session from an event shows that event's own branding on the guest's gallery page.
+  const [event] = session.eventId ? await db.select({ branding: events.branding }).from(events).where(eq(events.id, session.eventId)) : [];
+  const b = event?.branding ?? {};
+  res.json({ baseUrl, ...profile, ...(b.brandName ? { brandName: b.brandName } : {}), ...(b.tagline ? { tagline: b.tagline } : {}), ...(b.logoUrl ? { logoUrl: b.logoUrl } : {}), ...(b.accentColor ? { accentColor: b.accentColor } : {}), ...(b.hashtag ? { hashtag: b.hashtag } : {}) });
 });
 
 // GET /api/config/tenant — dipakai kiosk untuk re-sync branding lokal begitu
@@ -162,7 +166,10 @@ configRouter.get("/tenant", requireAnyAuth, async (req, res) => {
   }).from(tenantSettings).where(eq(tenantSettings.tenantId, req.tenantId!));
   // A kiosk also gets what is special about ITS booth (look / text overrides); the dashboard sees the tenant's main settings.
   const boothOverrides = req.kioskKeyId ? (await loadBoothSettings(req.kioskKeyId)).overrides : {};
-  res.json({ ...(config ?? {}), boothOverrides });
+  // The event live on this booth right now, decided on the server (lib/events.ts); the dashboard (no kiosk key) gets none.
+  const [activeEvent, boothMode] = req.kioskKeyId ? await Promise.all([resolveActiveEvent(req.tenantId!, req.kioskKeyId), getBoothMode(req.kioskKeyId)]) : [null, "standard" as const];
+  const eventFrameCount = activeEvent ? (await loadEventFrameIds([activeEvent.id])).get(activeEvent.id)?.length ?? 0 : 0;
+  res.json({ ...(config ?? {}), boothOverrides, activeEvent: eventForKiosk(activeEvent, eventFrameCount), boothMode });
 });
 
 // --- Kiosk design config (customizer) ---------------------------------------------------------------------
