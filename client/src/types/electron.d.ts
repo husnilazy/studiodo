@@ -52,6 +52,10 @@ export interface StudiodoBridgeAPI {
   getDeviceIdentity?: () => Promise<{ deviceId: string; token: string | null }>;
   setDeviceToken?: (token: string) => Promise<boolean>;
   clearDeviceToken?: () => Promise<boolean>;
+  getAdminSession?: () => Promise<string | null>;
+  setAdminSession?: (token: string) => Promise<boolean>;
+  clearAdminSession?: () => Promise<boolean>;
+  getLaunchPrefs?: () => Promise<{ kioskAutostart: boolean }>;
   relaunchKiosk: () => Promise<void>;
   getKioskStatus: () => Promise<{ open: boolean }>;
   closeKiosk: () => Promise<{ open: boolean }>;

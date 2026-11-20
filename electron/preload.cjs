@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld("studiodo", {
   getDeviceIdentity: () => ipcRenderer.invoke("device:getIdentity"),
   setDeviceToken: (token) => ipcRenderer.invoke("device:setToken", token),
   clearDeviceToken: () => ipcRenderer.invoke("device:clearToken"),
+  // Remembered admin login (kept encrypted in the main process) and what the app opens at start.
+  getAdminSession: () => ipcRenderer.invoke("admin:getSession"),
+  setAdminSession: (token) => ipcRenderer.invoke("admin:setSession", token),
+  clearAdminSession: () => ipcRenderer.invoke("admin:clearSession"),
+  getLaunchPrefs: () => ipcRenderer.invoke("launch:getPrefs"),
   relaunchKiosk: () => ipcRenderer.invoke("app:relaunchKiosk"),
   getKioskStatus: () => ipcRenderer.invoke("kiosk:status"),
   closeKiosk: () => ipcRenderer.invoke("kiosk:close"),

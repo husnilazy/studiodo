@@ -3,7 +3,7 @@ import { pushConfigNow, syncBoothConfigFromServer } from "@/lib/boothConfigStore
 import { Link } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
-import { setAdminToken } from "@/lib/api";
+import { isViewOnlyAdmin, setAdminToken } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
@@ -30,6 +30,10 @@ import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControl
 import AdminNotificationBell from "@/components/AdminNotificationBell";
 import HelpChatButton from "@/components/HelpChatButton";
 import NetProgressBar from "@/components/NetProgressBar";
+import SetupGuideCard from "@/components/SetupGuideCard";
+import PhoneLinkModal from "@/components/PhoneLinkModal";
+import AppTour from "@/components/AppTour";
+import { TOUR_STEPS, pendingTour, type TourStep } from "@/lib/tourSteps";
 import type { StudiodoUpdaterStatus } from "@/types/electron";
 
 type Section = "monitor" | "control" | "gallery" | "kiosk" | "flow" | "finance" | "crm" | "traffic" | "media";
@@ -121,6 +125,7 @@ function OverviewSkeleton() {
 }
 
 type MeInfo = {
+  tenantId?: string;
   subscriptionEndsAt: string | null;
   status: string | null;
   gracePeriodDays: number;
@@ -663,6 +668,8 @@ export default function AdminDashboard() {
   const [overview, setOverview] = useState<any>({ sessions: [], metrics: {}, traffic: [] });
   const [me, setMe] = useState<MeInfo>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [tour, setTour] = useState<{ mode: "welcome" | "whatsnew" | "replay"; steps: TourStep[] } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   // Keyed by session id + asset type/index — the "Download" button used to
@@ -724,6 +731,19 @@ export default function AdminDashboard() {
   }, [loadOverview]);
 
   useEffect(() => { api.getMe().then((result) => setMe(result ?? null)).catch(() => undefined); }, []);
+
+  // First time in the desktop app: guided tour. After an update that added features: only the new steps (see lib/tourSteps.ts).
+  // Not on a phone, where the tour would pop up again on every new browser.
+  useEffect(() => {
+    if (!me?.tenantId || !window.studiodo || isViewOnlyAdmin()) return;
+    const pending = pendingTour(me.tenantId);
+    if (pending) setTour(pending);
+  }, [me?.tenantId]);
+  const goToTourStep = useCallback((step: TourStep) => {
+    if (step.section) setSection(step.section);
+    if (step.kioskSubtab) setKioskSubtab(step.kioskSubtab);
+    if (step.financeSubtab) setFinanceSubtab(step.financeSubtab);
+  }, []);
 
   // On admin login: load the tenant's saved design from the server. A tenant that customized before design saving
   // existed has it only on this PC — in that case upload it once so it survives restarts and reaches other kiosks.
@@ -856,7 +876,9 @@ export default function AdminDashboard() {
         <div className="mt-auto space-y-2 pt-6">
           <div className="flex items-center justify-between gap-2 px-1"><span className="text-[10px] font-semibold uppercase tracking-[.16em] text-fg/35">Tampilan</span><AdminThemeToggle /></div>
           <AdminKeyboardToggle showLabel />
-          <Link href="/" className="flex items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Kiosk</Link>
+          {window.studiodo && <Link href="/" className="flex items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="arrow-left" className="h-4 w-4" />Kembali ke Kiosk</Link>}
+          {!isViewOnlyAdmin() && <button type="button" onClick={() => setPhoneOpen(true)} data-tour="phone" className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="phone" className="h-4 w-4" />Luncurkan di HP</button>}
+          <button type="button" onClick={() => setTour({ mode: "replay", steps: TOUR_STEPS })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-accent/40 hover:text-fg"><Icon name="sparkles" className="h-4 w-4" />Tur aplikasi</button>
           <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-fg/10 px-3 py-2.5 text-sm font-medium text-fg/60 transition hover:border-red-400/50 hover:text-red-500"><Icon name="logout" className="h-4 w-4" />Logout</button>
           <KioskWindowToggle />
           {window.studiodo?.restartApp && (
@@ -917,6 +939,7 @@ export default function AdminDashboard() {
             >
           {section === "monitor" && (
             <>
+              <SetupGuideCard onOpenKeys={() => { setSection("kiosk"); setKioskSubtab("keys"); }} />
               <ReadinessCard onGo={goToReadinessTarget} />
               <LiveMonitorPanel />
             </>
@@ -985,6 +1008,8 @@ export default function AdminDashboard() {
         </div>
       </main>
       <HelpChatButton />
+      {phoneOpen && <PhoneLinkModal onClose={() => setPhoneOpen(false)} />}
+      {tour && <AppTour steps={tour.steps} mode={tour.mode} tenantId={me?.tenantId ?? ""} onStep={goToTourStep} onClose={() => setTour(null)} />}
     </div>
   );
 }

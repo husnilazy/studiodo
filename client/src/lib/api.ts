@@ -4,12 +4,45 @@ import { videoExtension } from "@/lib/videoMime";
 import type { LayoutElement, ScreenOrientation } from "./screenBuilder/types";
 
 const ADMIN_TOKEN_KEY = "studiodo-admin-token";
+// A phone/browser that signed in through "Luncurkan di HP" keeps its session here (a normal web page has no OS keystore).
+// Never used inside the desktop app: its kiosk window shares this storage with the admin window.
+const ADMIN_REMEMBER_KEY = "studiodo-admin-token-remember";
+
+const inDesktopApp = () => Boolean(window.studiodo?.getAdminSession);
+/** The desktop app's remembered login belongs to admin windows only; the customer-facing kiosk window must never pick it up. */
+const inAdminContext = () => window.location.hash.startsWith("#/admin");
 
 let adminToken: string | null = null;
 try {
   adminToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!adminToken && !inDesktopApp()) adminToken = localStorage.getItem(ADMIN_REMEMBER_KEY);
 } catch {
-  // sessionStorage can throw in private/locked-down contexts — admin just has to log in again.
+  // storage can throw in private/locked-down contexts — admin just has to log in again.
+}
+
+function tokenIsViewOnly(token: string | null): boolean {
+  try { return Boolean(token && JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).ro === true); } catch { return false; }
+}
+
+/** Desktop app: load the remembered admin login from the OS keystore (admin windows only). Await before first render. */
+export async function hydrateAdminSession(): Promise<void> {
+  if (adminToken || !inDesktopApp() || !inAdminContext()) return;
+  try {
+    const saved = await window.studiodo!.getAdminSession!();
+    if (saved) setAdminTokenInMemory(saved);
+  } catch {
+    // keystore unreadable: the admin just logs in again
+  }
+}
+
+function setAdminTokenInMemory(token: string | null) {
+  adminToken = token;
+  try {
+    if (token) sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch {
+    // ignore — token still works for the rest of this session via the in-memory variable
+  }
 }
 
 export function getAdminToken() {
@@ -18,16 +51,51 @@ export function getAdminToken() {
 
 /** True when the current admin token is a read-only "lihat sebagai tenant" session opened from Admin Pusat (server refuses every write). */
 export function isViewOnlyAdmin(): boolean {
-  try { return Boolean(adminToken && JSON.parse(atob(adminToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).ro === true); } catch { return false; }
+  return tokenIsViewOnly(adminToken);
 }
 
+/**
+ * Sets (or clears, with null) the admin session. In an admin window of the desktop app it is also remembered in the OS keystore
+ * (and on a phone, in local storage) so the tenant is not asked to log in at every launch. Logging out / an expired session clears it.
+ */
 export function setAdminToken(token: string | null) {
-  adminToken = token;
+  const wasViewOnly = tokenIsViewOnly(adminToken);
+  setAdminTokenInMemory(token);
+  if (token && tokenIsViewOnly(token)) return; // a 30-minute impersonation is never remembered
   try {
-    if (token) sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
-    else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    if (inDesktopApp()) {
+      if (!inAdminContext()) return;
+      if (token) void window.studiodo!.setAdminSession!(token);
+      else if (!wasViewOnly) void window.studiodo!.clearAdminSession!();
+    } else if (token) {
+      if (localStorage.getItem(ADMIN_REMEMBER_KEY)) localStorage.setItem(ADMIN_REMEMBER_KEY, token); // keep a remembered phone session fresh
+    } else if (!wasViewOnly) {
+      localStorage.removeItem(ADMIN_REMEMBER_KEY);
+    }
   } catch {
-    // ignore — token still works for the rest of this session via the in-memory variable
+    // remembering is a convenience: failing to do it must never break signing in
+  }
+}
+
+/** Remember this browser's admin login (used by the phone link: the phone should not need the QR again tomorrow). */
+export function rememberAdminOnThisBrowser(token: string) {
+  setAdminTokenInMemory(token);
+  try { if (!inDesktopApp()) localStorage.setItem(ADMIN_REMEMBER_KEY, token); } catch { /* ignore */ }
+}
+
+/** Persist a token for the desktop app's admin windows from a non-admin window (the first-run pairing screen). */
+export function rememberAdminForDesktop(token: string) {
+  try { if (inDesktopApp()) void window.studiodo!.setAdminSession!(token); } catch { /* ignore */ }
+}
+
+/** Trade the current session for a fresh 30-day one. Best effort: a network blip just keeps the current token. */
+export async function refreshAdminSession(): Promise<void> {
+  if (!adminToken || tokenIsViewOnly(adminToken)) return;
+  try {
+    const result = await api.refreshAdminSession();
+    if (result?.token) setAdminToken(result.token);
+  } catch {
+    // keep the current token
   }
 }
 
@@ -332,7 +400,11 @@ export const api = {
   /** One-time upgrade of a booth paired before activation existed: trade key + device id for the per-device secret. */
   upgradeKioskBinding: (body: { newDeviceId?: string }) =>
     request<{ deviceToken: string; deviceId: string | null }>("/kiosk-keys/upgrade-binding", { method: "POST", body: JSON.stringify(body) }),
-  loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  // Inside the desktop app the login is kept for 30 days (encrypted in the OS keystore); a plain browser keeps the short session.
+  loginAdmin: (email: string, password: string) => request<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, remember: Boolean(window.studiodo?.getAdminSession) }) }),
+  refreshAdminSession: () => request<{ token: string }>("/auth/refresh", { method: "POST", body: "{}" }),
+  createPhoneLink: () => request<{ url: string; expiresInSeconds: number }>("/auth/phone-link", { method: "POST", body: "{}" }),
+  redeemPhoneLink: (code: string) => request<{ token: string }>("/auth/phone-link/redeem", { method: "POST", body: JSON.stringify({ code }) }),
   // Passwordless sign-in (Google / email link) — see server/lib/loginHandoff.ts
   getLoginProviders: () => request<{ google: boolean; googleButton: boolean; googleClientId: string | null; magic: boolean }>("/auth/providers"),
   startGoogleHandoff: () => request<{ id: string; poll: string; url: string; expiresInSeconds: number }>("/auth/handoff/google", { method: "POST", body: "{}" }),

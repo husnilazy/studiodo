@@ -33,6 +33,7 @@ Tiga bagian terpisah, masing-masing punya langkah sendiri. Kerjakan berurutan da
 2. `npm run dist` (build:client + electron-builder, NSIS + portable) menghasilkan `dist/STUDIODO-Setup-X.Y.Z.exe` dan `dist/STUDIODO-X.Y.Z.exe`. Build tidak ditandatangani (SmartScreen bisa memperingatkan).
 3. `npm run dist:publish` memublikasikan GitHub Release (butuh `GH_TOKEN`) dan LANGSUNG mengirim auto-update ke semua kiosk. Hanya jalankan dengan konfirmasi eksplisit.
 4. Sebutkan bahwa aplikasi belum dijalankan/dites di perangkat sungguhan bila memang belum.
+5. **Tur aplikasi**: bila rilis ini menambah fitur yang terlihat tenant, tambahkan langkahnya di `client/src/lib/tourSteps.ts` (id baru, `since` = versi rilis). Tenant lama otomatis hanya melihat langkah baru. Panduan: `docs/app-tour.md`. Tanyakan ke user fitur mana yang perlu masuk tur bila tidak jelas.
 
 ## Laporan akhir
 Tulis: apa yang di-commit, apa yang sudah di-push, apa yang sudah terdeploy (dibuktikan), dan apa yang masih menunggu user (env, migrasi, publikasi).

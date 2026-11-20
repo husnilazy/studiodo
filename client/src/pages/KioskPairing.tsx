@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { getApiBaseUrl, getHardwareDeviceId, setApiBaseUrl, setBoundDeviceId, setDeviceToken, setKioskKey } from "@/lib/apiConfig";
-import { syncBoothConfigFromServer } from "@/lib/boothConfigStore";
-import { ApiError, api, setAdminToken } from "@/lib/api";
-import { sendKioskHeartbeatNow } from "@/lib/kioskHeartbeat";
+import { useEffect, useState } from "react";
+import { getApiBaseUrl, setApiBaseUrl } from "@/lib/apiConfig";
+import { ApiError, api, rememberAdminForDesktop, setAdminToken } from "@/lib/api";
+import { activateThisComputer } from "@/lib/activateKiosk";
+import { openAdminFromKiosk } from "@/lib/adminEntry";
 
 // First-run setup of a computer, in the order STUDIODO requires:
-//   1. sign in with the TENANT account (email + password): proves who owns the booth;
+//   1. sign in with the TENANT account (email + password): proves who owns the booth. If this computer already remembers an admin
+//      login (30-day session in the OS keystore) this step is skipped and the tenant only types the key;
 //   2. enter the booth KEY from the dashboard: the server checks it belongs to that account, binds THIS computer to it
 //      (hardware-derived id + a secret kept in the OS keystore) and only then does the kiosk open.
 // A key that was merely copied is useless on its own: it cannot claim a computer without the owner's login (see
@@ -23,6 +24,26 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // A remembered admin login lets the tenant go straight to the key (a second booth on the same account = just paste the key).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = await window.studiodo?.getAdminSession?.().catch(() => null);
+      if (!saved || cancelled) return;
+      setAdminToken(saved);
+      try {
+        const me = await api.getMe();
+        if (cancelled) return;
+        setAccount(me?.email ?? "akun tenant");
+        setStep("key");
+      } catch (err) {
+        // An expired/revoked session falls back to the normal login; only a real 401 means it is dead.
+        if (err instanceof ApiError && err.status === 401) { setAdminToken(null); void window.studiodo?.clearAdminSession?.(); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const fail = (err: unknown, fallback: string) => setError(err instanceof Error && err.message ? err.message : fallback);
 
   const login = async (e: React.FormEvent) => {
@@ -37,6 +58,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
       if (!ok) throw new Error("Server tidak bisa dijangkau. Cek koneksi internet (atau URL server di bagian Lanjutan).");
       const { token } = (await api.loginAdmin(email.trim(), password))!;
       setAdminToken(token);
+      rememberAdminForDesktop(token); // keep the login so the Admin window opens already signed in
       setAccount(email.trim());
       setPassword("");
       setStep("key");
@@ -56,15 +78,10 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
     if (!key) return setError("Key booth wajib diisi.");
     setBusy(true);
     try {
-      const hardwareId = getHardwareDeviceId();
-      const result = (await api.activateKiosk({ key, deviceId: hardwareId }))!;
-      // From here on this computer is the booth: remember who we are (id + secret) before the first kiosk request goes out.
-      setBoundDeviceId(hardwareId);
-      await setDeviceToken(result.deviceToken);
-      setKioskKey(key);
-      setAdminToken(null); // the tenant login was only needed to activate; don't leave an admin session on a customer-facing PC
-      await syncBoothConfigFromServer().catch(() => undefined); // offline right after activating is fine: it syncs later
-      void sendKioskHeartbeatNow();
+      await activateThisComputer(key);
+      // The kiosk window itself must not hold an admin session (customer-facing PC); the remembered login stays in the keystore
+      // for the Admin window only.
+      setAdminToken(null);
       onPaired();
     } catch (err) {
       fail(err, "Gagal mengaktifkan kiosk. Coba lagi.");
@@ -75,6 +92,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
 
   const backToLogin = () => {
     setAdminToken(null);
+    void window.studiodo?.clearAdminSession?.();
     setAccount(null);
     setKioskKeyInput("");
     setError(null);
@@ -103,6 +121,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
             {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
             <button type="submit" disabled={busy || !email.trim() || !password} className="k-btn k-btn-accent mt-6 w-full">{busy ? "Masuk…" : "Masuk"}</button>
             <p className="mt-4 text-center text-xs text-fg/40">Belum punya akun? Daftar di studiodo.id.</p>
+            {window.studiodo?.openAdmin && <button type="button" onClick={openAdminFromKiosk} className="mt-3 w-full text-center text-xs font-semibold text-accent underline-offset-4 hover:underline">Buka Admin (login tenant)</button>}
           </form>
         ) : (
           <form onSubmit={activate}>
@@ -117,6 +136,7 @@ export default function KioskPairing({ onPaired }: { onPaired: () => void }) {
             {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
             <button type="submit" disabled={busy || !kioskKey.trim()} className="k-btn k-btn-accent mt-6 w-full">{busy ? "Mengaktifkan…" : "Aktifkan kiosk"}</button>
             <button type="button" onClick={backToLogin} className="mt-3 w-full text-center text-xs text-fg/45 underline-offset-4 hover:underline">Ganti akun</button>
+            {window.studiodo?.openAdmin && <button type="button" onClick={openAdminFromKiosk} className="mt-2 w-full text-center text-xs font-semibold text-accent underline-offset-4 hover:underline">Buka Admin</button>}
           </form>
         )}
       </div>

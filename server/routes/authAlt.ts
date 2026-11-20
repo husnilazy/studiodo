@@ -6,6 +6,8 @@ import { deliver, magicLinkMail } from "../lib/emails.js";
 import { exchangeGoogleCode, googleAuthUrl, googleClientId, googleCodeFlowConfigured, googleConfigured, verifyGoogleIdToken } from "../lib/googleAuth.js";
 import { MAGIC_PER_EMAIL_PER_HOUR, approve, attachMagicSecret, findAdminByEmail, getLiveHandoff, markFailed, markVerified, poll, recentMagicCount, startHandoff, tokenFor, verifyMagic } from "../lib/loginHandoff.js";
 import { mailConfigured } from "../lib/mailer.js";
+import { redeemPhoneLink } from "../lib/phoneLink.js";
+import { makeRateLimiter } from "../lib/clientIp.js";
 
 // Passwordless tenant-admin sign-in, mounted next to the password login at /api/auth. See lib/loginHandoff.ts for the model.
 export const authAltRouter = Router();
@@ -38,6 +40,15 @@ function page(title: string, body: string, status = 200) {
   return { status, html };
 }
 const send = (res: express.Response, p: { status: number; html: string }) => res.status(p.status).type("html").setHeader("Cache-Control", "no-store").send(p.html);
+
+// POST /phone-link/redeem { code } — a phone opened the QR/link from the PC app: trade the one-time code for a 30-day session.
+const redeemLimiter = makeRateLimiter(20, 10 * 60_000);
+authAltRouter.post("/phone-link/redeem", async (req, res) => {
+  if (redeemLimiter(clientIp(req))) return res.status(429).json({ error: "Terlalu banyak percobaan, coba lagi nanti." });
+  const result = await redeemPhoneLink(String(req.body?.code ?? ""));
+  if (!result) return res.status(400).json({ error: "Tautan ini sudah dipakai atau kedaluwarsa. Buat tautan baru dari aplikasi STUDIODO di PC." });
+  res.json(result);
+});
 
 // GET /providers — what the login screen may offer
 authAltRouter.get("/providers", (_req, res) => {

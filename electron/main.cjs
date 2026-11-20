@@ -224,6 +224,15 @@ function createAdminWindow() {
   adminWin.on("closed", () => (adminWin = null));
 }
 
+// ─── Launch preferences (what the app opens at start) ───────────────────────────────────────────────────
+function launchPrefsFile() { return path.join(app.getPath("userData"), "launch-prefs.json"); }
+function launchPrefs() {
+  try { return { kioskAutostart: Boolean(JSON.parse(fs.readFileSync(launchPrefsFile(), "utf8")).kioskAutostart) }; } catch { return { kioskAutostart: false }; }
+}
+function setKioskAutostart(on) {
+  try { fs.writeFileSync(launchPrefsFile(), JSON.stringify({ kioskAutostart: Boolean(on) })); } catch (error) { console.error("[launch-prefs] gagal menyimpan", error); }
+}
+
 function openAdminWindow() {
   createAdminWindow();
 }
@@ -430,7 +439,11 @@ app.whenReady().then(() => {
     startDigicamBridge({ onLiveViewShown: bringKioskToFront });
   }
   void hardwareId(); // warm up: reading the hardware id takes about a second
-  createKioskWindow();
+  // A first-time install opens the (windowed) Admin so the tenant can sign in, activate and press "Luncurkan Kiosk" — nobody has
+  // to know Ctrl+Shift+A. Once the kiosk has been launched from there, every later start goes straight to the kiosk so an
+  // unattended booth that reboots comes back by itself. (Dev always opens the kiosk, as before.)
+  if (isDev || launchPrefs().kioskAutostart) createKioskWindow();
+  else createAdminWindow();
   setupAutoUpdater();
 
   // Secret combo to open/reveal admin dashboard on top of the kiosk
@@ -507,6 +520,20 @@ ipcMain.handle("device:clearToken", () => {
   return true;
 });
 
+// The remembered admin login (30-day session). Same OS-keystore storage as the device secret; only admin windows ask for it.
+const ADMIN_SESSION_FILE = "admin-session.bin";
+ipcMain.handle("admin:getSession", () => device.readToken(app.getPath("userData"), safeStorage, ADMIN_SESSION_FILE));
+ipcMain.handle("admin:setSession", (_event, token) => {
+  if (typeof token !== "string" || token.length < 20 || token.length > 4000) return false;
+  device.writeToken(app.getPath("userData"), safeStorage, token, ADMIN_SESSION_FILE);
+  return true;
+});
+ipcMain.handle("admin:clearSession", () => {
+  device.clearToken(app.getPath("userData"), ADMIN_SESSION_FILE);
+  return true;
+});
+ipcMain.handle("launch:getPrefs", () => launchPrefs());
+
 ipcMain.handle("app:getVersion", () => app.getVersion());
 // Lets the kiosk UI (hidden corner tap / Operator Console button) open the admin window without Ctrl+Shift+A.
 ipcMain.handle("admin:open", () => {
@@ -525,6 +552,7 @@ ipcMain.handle("kiosk:close", () => {
   return { open: false };
 });
 ipcMain.handle("kiosk:open", () => {
+  setKioskAutostart(true); // launched on purpose once: from now on this PC boots straight into the kiosk
   if (kioskWin && !kioskWin.isDestroyed()) {
     kioskWin.show();
     kioskWin.focus();

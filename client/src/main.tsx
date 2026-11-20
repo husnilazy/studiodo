@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./lib/fontPairings";
-import { api } from "./lib/api";
+import { api, hydrateAdminSession } from "./lib/api";
 import { initDeviceIdentity, isKioskPaired } from "./lib/apiConfig";
 import { installKioskPreview, IS_KIOSK_PREVIEW } from "./lib/previewMode";
 
@@ -78,7 +78,7 @@ if (window.studiodo?.logRenderer) {
 
 // The hardware device id and the per-device secret come from the Electron main process; the first API request must not
 // leave before they are known (it would go out with the wrong id and be rejected).
-void initDeviceIdentity().finally(() => {
+void Promise.all([initDeviceIdentity(), hydrateAdminSession()]).finally(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <App />

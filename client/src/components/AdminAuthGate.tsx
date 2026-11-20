@@ -2,7 +2,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { signInWithEmailLink, signInWithGoogle, type HandoffHandle } from "@/lib/passwordless";
 import { api, ApiError } from "@/lib/api";
-import { getAdminToken, setAdminToken } from "@/lib/api";
+import { getAdminToken, refreshAdminSession, setAdminToken } from "@/lib/api";
 import ToastHost from "@/components/ToastHost";
 import AdminKeyboard from "@/components/AdminKeyboard";
 import { AdminKeyboardToggle, AdminThemeToggle } from "@/components/AdminControls";
@@ -77,6 +77,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
     try {
       await api.getMe();
       setStatus("authenticated");
+      void refreshAdminSession(); // rolling 30 days: opening the app regularly means never logging in again
     } catch (err) {
       // Only a real 401 means the token is actually invalid/expired — a
       // network blip or a transient 5xx must not force a re-login when the
@@ -204,7 +205,7 @@ export default function AdminAuthGate({ children, scopeTheme = true }: { childre
             Masuk tanpa password — kirim tautan ke email
           </button>
         )}
-        <a href="#/" className="mt-4 block text-center text-xs font-semibold text-fg/45 hover:text-fg">← Kembali ke kiosk</a>
+        {window.studiodo && <a href="#/" className="mt-4 block text-center text-xs font-semibold text-fg/45 hover:text-fg">← Kembali ke kiosk</a>}
       </form>
       <AdminKeyboard />
     </div>

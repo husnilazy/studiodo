@@ -13,6 +13,9 @@ import { createLoginGuard, minutesLabel } from "../lib/loginGuard.js";
 import { clientIp } from "../lib/clientIp.js";
 import { logEvent } from "../lib/platformEvents.js";
 import { onTenantLoginLockout } from "../lib/securityAlerts.js";
+import { PHONE_LINK_TTL_MS, createPhoneLink, REMEMBER_TTL } from "../lib/phoneLink.js";
+import { appBaseUrl } from "../lib/urls.js";
+import { verifyAdminToken } from "../lib/jwt.js";
 
 export const authRouter = Router();
 
@@ -49,8 +52,27 @@ authRouter.post("/login", async (req, res) => {
   }
   accountGuard.succeed(email);
 
-  const token = signAdminToken({ adminId: admin.id, tenantId: admin.tenantId, pv: sessionVersion(admin.passwordHash) });
+  // The desktop app asks for a long-lived session ("remember": true) so the tenant is not asked to log in at every launch.
+  // A password change still revokes it at once (pv), and the token is kept encrypted in the OS keystore, not in page storage.
+  const token = signAdminToken({ adminId: admin.id, tenantId: admin.tenantId, pv: sessionVersion(admin.passwordHash) }, req.body?.remember === true ? { expiresIn: REMEMBER_TTL } : {});
   res.json({ token });
+});
+
+// POST /api/auth/refresh — swaps a valid long-lived session for a fresh one (rolling 30 days: used regularly = never asked again).
+// Read-only "lihat sebagai tenant" sessions cannot be renewed this way.
+authRouter.post("/refresh", requireAdminAuth, async (req, res) => {
+  let claims;
+  try { claims = verifyAdminToken((req.headers.authorization ?? "").slice(7)); } catch { return res.status(401).json({ error: "Sesi tidak valid", code: "admin_auth_required" }); }
+  if (claims.ro) return res.status(403).json({ error: "Sesi lihat-saja tidak bisa diperpanjang." });
+  res.json({ token: signAdminToken({ adminId: req.adminId!, tenantId: req.tenantId!, ...(claims.pv ? { pv: claims.pv } : {}) }, { expiresIn: REMEMBER_TTL }) });
+});
+
+// POST /api/auth/phone-link — the signed-in admin asks for a one-time link/QR that signs a phone in without typing a password.
+authRouter.post("/phone-link", requireAdminAuth, async (req, res) => {
+  const link = await createPhoneLink(req.adminId!, req.tenantId!, { ip: clientIp(req), ua: String(req.headers["user-agent"] ?? "") });
+  if (!link) return res.status(404).json({ error: "Akun admin tidak ditemukan." });
+  logEvent({ tenantId: req.tenantId!, level: "info", category: "auth", action: "phone_link.created", message: "Tautan akses HP dibuat dari aplikasi", actorType: "tenant_admin" });
+  res.status(201).json({ url: `${appBaseUrl()}/#/hp/${link.code}`, expiresInSeconds: Math.round(PHONE_LINK_TTL_MS / 1000) });
 });
 
 // POST /api/auth/logout — stateless JWT, nothing to revoke server-side; kept for API symmetry

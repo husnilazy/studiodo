@@ -72,13 +72,14 @@ async function getDeviceId(userDataDir) {
 
 // --- device secret -------------------------------------------------------------------------------------------------
 
-function tokenFile(userDataDir) {
-  return path.join(userDataDir, "device-secret.bin");
+function tokenFile(userDataDir, name = "device-secret.bin") {
+  return path.join(userDataDir, name);
 }
 
-function readToken(userDataDir, safeStorage) {
+// `name` lets the same keystore-backed storage hold other secrets (the remembered admin session, "admin-session.bin").
+function readToken(userDataDir, safeStorage, name) {
   try {
-    const raw = fs.readFileSync(tokenFile(userDataDir));
+    const raw = fs.readFileSync(tokenFile(userDataDir, name));
     if (raw.slice(0, 4).toString() === "ENC1") {
       if (!safeStorage || !safeStorage.isEncryptionAvailable()) return null;
       return safeStorage.decryptString(raw.slice(4)) || null;
@@ -90,15 +91,15 @@ function readToken(userDataDir, safeStorage) {
   }
 }
 
-function writeToken(userDataDir, safeStorage, token) {
+function writeToken(userDataDir, safeStorage, token, name) {
   fs.mkdirSync(userDataDir, { recursive: true });
   const useKeystore = safeStorage && safeStorage.isEncryptionAvailable();
   const body = useKeystore ? Buffer.concat([Buffer.from("ENC1"), safeStorage.encryptString(token)]) : Buffer.concat([Buffer.from("RAW1"), Buffer.from(token, "utf8")]);
-  fs.writeFileSync(tokenFile(userDataDir), body, { mode: 0o600 });
+  fs.writeFileSync(tokenFile(userDataDir, name), body, { mode: 0o600 });
 }
 
-function clearToken(userDataDir) {
-  try { fs.rmSync(tokenFile(userDataDir), { force: true }); } catch { /* already gone */ }
+function clearToken(userDataDir, name) {
+  try { fs.rmSync(tokenFile(userDataDir, name), { force: true }); } catch { /* already gone */ }
 }
 
 module.exports = { getDeviceId, deriveDeviceId, readToken, writeToken, clearToken, cleanValue };

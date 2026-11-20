@@ -16,6 +16,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import FrameManagement from "@/pages/FrameManagement";
 import AdminAuthGate from "@/components/AdminAuthGate";
 import KioskPairing from "@/pages/KioskPairing";
+import PhoneEntry from "@/pages/PhoneEntry";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import ScreenBuilder from "@/pages/ScreenBuilder";
 import BuilderFrame from "@/pages/BuilderFrame";
@@ -43,7 +44,7 @@ function GlobalIdleTimer() {
 
   useEffect(() => {
     // Jangan aktifkan idle timer di halaman ini
-    const isSafeRoute = location === "/" || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share") || location === "/hasil";
+    const isSafeRoute = location === "/" || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share") || location.startsWith("/hp/") || location === "/hasil";
     // Sesi foto sudah lunas dibayar sebelum sampai di sini — 3 menit terlalu ketat untuk layar ini (customer
     // mungkin sedang pose, ganti filter, atau kamera butuh waktu nyambung) dan diam-diam membuang sesi yang
     // SUDAH DIBAYAR kalau timer ini kena. Kasih waktu lebih longgar di sini saja, bukan dihilangkan total.
@@ -141,6 +142,7 @@ function AnimatedRoutes() {
           <Route path="/admin/screen-builder/:screenKey">{(params) => <AdminAuthGate><ScreenBuilder screenKey={params.screenKey} /></AdminAuthGate>}</Route>
           <Route path="/__builder/:screenKey">{(params) => (IS_KIOSK_PREVIEW ? <BuilderFrame screenKey={params.screenKey} /> : null)}</Route>
           <Route path="/superadmin" component={SuperadminDashboard} />
+          <Route path="/hp/:code">{(params) => <PhoneEntry code={params.code} />}</Route>
           <Route path="/share/:id">{(params) => <ShareGallery id={params.id} />}</Route>
           <Route>
             <div className="flex h-full items-center justify-center text-muted">Halaman tidak ditemukan</div>
@@ -171,7 +173,7 @@ export default function App() {
   // see the banner/renew, and existing public share links shouldn't break): admin
   // logs in with its own tenant credentials, superadmin is a separate platform-wide
   // login, and the public share page is opened by customers, not the kiosk.
-  const isExemptRoute = IS_KIOSK_PREVIEW || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share");
+  const isExemptRoute = IS_KIOSK_PREVIEW || location.startsWith("/admin") || location.startsWith("/superadmin") || location.startsWith("/share") || location.startsWith("/hp/");
   const needsPairing = !paired && !isExemptRoute;
   const subscriptionLocked = locked && !isExemptRoute;
   const isDeviceMismatched = deviceMismatch && !isExemptRoute;
