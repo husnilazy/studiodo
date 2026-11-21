@@ -47,12 +47,21 @@ export type CsSettings = {
   autopilot: boolean; // keep the calendar filled automatically
   autoApprove: boolean; // autopilot drafts go straight to "scheduled" (off = a person approves first)
   horizonDays: number; // autopilot keeps this many days of posts queued ahead
+  slotFormats: Record<string, "reel" | "carousel">; // HH:mm -> format for that slot (overrides reelEvery for the slots listed)
+  checkedKeys: string[]; // content the owner confirmed ("f:<featureId>" / "r:<storyReelId>"); anything flagged "cek dulu" stays out of autopilot until listed here
+  autopilotUntil?: string; // ISO: autopilot stops queuing new posts after this moment (the 1-month trial)
   lastRefillAt?: string;
 };
 
 export const DEFAULT_SETTINGS: CsSettings = {
   tzOffsetMin: 420, days: [1, 3, 5, 0], times: ["19:00"], reelEvery: 3, defaultMode: "auto", prepLeadMin: 30, maxPerDay: 3,
-  autopilot: false, autoApprove: false, horizonDays: 14,
+  autopilot: false, autoApprove: false, horizonDays: 14, slotFormats: {}, checkedKeys: [],
+};
+
+/** "Program 1 bulan": 3 posts a day (09:00 reel, 14:00 carousel, 18:30 reel), every day, published automatically. */
+export const MONTH_PROGRAM: Pick<CsSettings, "days" | "times" | "slotFormats" | "reelEvery" | "maxPerDay" | "horizonDays" | "autopilot" | "autoApprove" | "defaultMode"> = {
+  days: [0, 1, 2, 3, 4, 5, 6], times: ["09:00", "14:00", "18:30"], slotFormats: { "09:00": "reel", "14:00": "carousel", "18:30": "reel" },
+  reelEvery: 0, maxPerDay: 4, horizonDays: 30, autopilot: true, autoApprove: true, defaultMode: "auto",
 };
 
 const dir = () => path.join(process.cwd(), "storage", "content-studio");
@@ -127,6 +136,11 @@ export function parseSettings(input: any, base: CsSettings): CsSettings | string
     maxPerDay: num(input.maxPerDay, base.maxPerDay, 1, 25),
     autopilot: !!input.autopilot, autoApprove: !!input.autoApprove,
     horizonDays: num(input.horizonDays, base.horizonDays, 3, 90),
+    slotFormats: input.slotFormats && typeof input.slotFormats === "object"
+      ? Object.fromEntries(Object.entries(input.slotFormats as Record<string, unknown>).filter(([k, v]) => HM.test(k) && (v === "reel" || v === "carousel")) as [string, "reel" | "carousel"][])
+      : base.slotFormats,
+    autopilotUntil: typeof input.autopilotUntil === "string" && !Number.isNaN(Date.parse(input.autopilotUntil)) ? new Date(input.autopilotUntil).toISOString() : undefined,
+    checkedKeys: Array.isArray(input.checkedKeys) ? [...new Set<string>(input.checkedKeys.map(String).filter((k: string) => /^[fr]:[a-z0-9-]{1,60}$/.test(k)))].slice(0, 300) : base.checkedKeys,
   };
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { contentStudioApi, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
+import { contentStudioApi, type CsMonthResult, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
 import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, StatusChip, timeOf, Toggle, type Notice, NoticeLine } from "./shared";
 
 // Ringkasan: what needs attention, what posts next, and the Autopilot switch.
@@ -26,10 +26,19 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
     setN(null);
     try { await contentStudioApi.queueStoryReel(id); await onChange(); setN({ ok: true, text: "Reel masuk Kalender sebagai draf. Tinjau lalu setujui." }); } catch (e) { setN({ ok: false, text: errText(e) }); }
   };
+  const [replace, setReplace] = useState(true);
+  const [month, setMonthRes] = useState<CsMonthResult | null>(null);
+  const startMonth = async () => {
+    setBusy(true); setN(null);
+    try { const r = await contentStudioApi.monthProgram(replace); if (!r) throw new Error("Server tidak membalas"); setMonthRes(r); await onChange(); setN({ ok: true, text: `${r.created} post masuk jadwal (${r.reels} reel, ${r.carousels} carousel)${r.skipped ? `, ${r.skipped} jadwal lama dilewati` : ""}. Tayang otomatis jam 09:00, 14:00, dan 18:30.` }); }
+    catch (e) { setN({ ok: false, text: errText(e) }); } finally { setBusy(false); }
+  };
+  const confirmKey = (key: string, on: boolean) => { const cur = settings.checkedKeys ?? []; void save({ checkedKeys: on ? [...new Set([...cur, key])] : cur.filter((k) => k !== key) }); };
+  const until = settings.autopilotUntil ? new Date(settings.autopilotUntil) : null;
   const today = dayKey(new Date().toISOString(), tz);
   const count = (s: CsPost["status"]) => posts.filter((p) => p.status === s).length;
   const upcoming = posts.filter((p) => ["scheduled", "ready", "preparing", "posting"].includes(p.status)).slice(0, 5);
-  const month = posts.filter((p) => p.status === "posted" && p.postedAt && Date.now() - new Date(p.postedAt).getTime() < 30 * 86_400_000).length;
+  const postedMonth = posts.filter((p) => p.status === "posted" && p.postedAt && Date.now() - new Date(p.postedAt).getTime() < 30 * 86_400_000).length;
   const manualDue = posts.filter((p) => p.status === "ready" && p.mode === "manual" && new Date(p.scheduledAt).getTime() <= Date.now());
 
   const save = async (patch: Partial<typeof settings>) => {
@@ -49,7 +58,7 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat value={count("draft")} label="Draf menunggu persetujuan" tone={count("draft") ? "text-amber-600" : ""} onClick={() => go("kalender")} />
         <Stat value={count("scheduled") + count("ready")} label="Terjadwal & siap tayang" onClick={() => go("kalender")} />
-        <Stat value={month} label="Tayang 30 hari terakhir" onClick={() => go("kalender")} />
+        <Stat value={postedMonth} label="Tayang 30 hari terakhir" onClick={() => go("kalender")} />
         <Stat value={count("failed")} label="Gagal, perlu dicek" tone={count("failed") ? "text-red-500" : ""} onClick={() => go("kalender")} />
       </div>
 
@@ -100,6 +109,27 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
               </>
             )}
           </Card>
+          <Card title="Program 1 bulan" hint="3 posting sehari: 09:00 reel, 14:00 carousel, 18:30 reel. Tayang otomatis, tanpa persetujuan satu per satu.">
+            <div className="grid gap-3">
+              {until && settings.autopilot && <p className="text-sm text-emerald-600">Aktif sampai {until.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}. Setelah itu autopilot berhenti mengisi kalender.</p>}
+              <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={replace} onChange={(e) => setReplace(e.target.checked)} /><span>Lewati draf & jadwal autopilot lama yang belum tayang</span></label>
+              <button className={btnPrimary} disabled={busy} onClick={startMonth}>{busy ? "Menyusun jadwal…" : until && settings.autopilot ? "Susun ulang program 1 bulan" : "Mulai program 1 bulan"}</button>
+              {!connected && <p className="text-xs text-amber-600">Instagram belum tersambung: post tetap disiapkan tapi belum bisa tayang sendiri.</p>}
+              {month && <p className="text-xs text-fg/55">{month.created} post: {month.reels} reel, {month.carousels} carousel.</p>}
+            </div>
+          </Card>
+          {(queue.held?.length ?? 0) > 0 && (
+            <Card title={`Perlu kamu cek dulu (${queue.held!.length})`} hint="Konten ini tidak ikut autopilot sampai kamu centang 'sudah dicek'. Baca catatannya, pastikan fiturnya benar di akun live.">
+              <ul className="grid gap-2">
+                {queue.held!.map((h) => (
+                  <li key={h.key} className="flex items-start gap-3 rounded-xl border border-fg/10 p-3 text-sm">
+                    <input type="checkbox" className="mt-1" checked={false} onChange={(e) => confirmKey(h.key, e.target.checked)} />
+                    <span><b>{h.label}</b><br /><span className="text-xs text-fg/55">{h.note}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card title="Autopilot" hint="Mengisi kalender dari katalog fitur: format & topik bergantian, tidak ada fitur yang terulang.">
             <div className="grid gap-3">
               <Toggle on={settings.autopilot} onChange={(v) => void save({ autopilot: v })} label="Isi kalender otomatis" hint={`Menjaga ${settings.horizonDays} hari ke depan selalu terisi`} />

@@ -1,4 +1,4 @@
-import type { Deck } from "./types.js";
+import { THEMES, type Deck } from "./types.js";
 import { MORE_DECKS } from "./decks_more.js";
 import { BATCH3_DECKS } from "./decks_batch3.js";
 import { BATCH4_DECKS } from "./decks_batch4.js";
@@ -8,7 +8,7 @@ const TAGS = ["#studiodo", "#photobooth", "#bisnisphotobooth", "#photoboothindon
 
 // Phase-1 decks. Every claim maps to a real feature in the app / landing page (featureData.ts). Edit freely in the UI;
 // edits are stored separately, so "Reset" always brings these back.
-export const BUILTIN_DECKS: Deck[] = [
+const RAW_DECKS: Deck[] = [
   {
     id: "carousel-bayar-qris",
     title: "Carousel · Bayar QRIS otomatis",
@@ -83,6 +83,15 @@ export const BUILTIN_DECKS: Deck[] = [
   ...BATCH4_DECKS,
   ...BATCH5_DECKS,
 ];
+
+/**
+ * Carousels move to the newest look ("kaca": dark glass, per-deck colour theme) unless a deck says otherwise. Reels and highlights keep their
+ * own look. The theme rotates through the carousels so the feed does not turn into one blue wall.
+ */
+export const BUILTIN_DECKS: Deck[] = (() => {
+  let n = 0;
+  return RAW_DECKS.map((d) => (d.format === "carousel" && !d.style ? { ...d, style: "kaca" as const, theme: d.theme ?? THEMES[n++ % THEMES.length] } : d));
+})();
 
 export type Idea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
 

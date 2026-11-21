@@ -87,8 +87,8 @@ export function mixAudio(o: { vo: string; sfx: string; music?: string; duration:
   const inputs = ["-i", o.vo, "-i", o.sfx, ...(o.music ? ["-i", o.music] : [])];
   const fmt = `aformat=channel_layouts=stereo:sample_rates=${R}`;
   const f = o.music
-    ? `[0:a]${fmt},apad=whole_dur=${o.duration},asplit=2[vo1][vo2];[2:a]volume=0.55[mu];[mu][vo2]sidechaincompress=threshold=0.02:ratio=9:attack=15:release=450[mud];[vo1][1:a][mud]amix=inputs=3:normalize=0:weights=1 0.55 0.6,alimiter=limit=0.95[m]`
-    : `[0:a]${fmt},apad=whole_dur=${o.duration}[v];[v][1:a]amix=inputs=2:normalize=0:weights=1 0.55,alimiter=limit=0.95[m]`;
+    ? `[0:a]loudnorm=I=-16:TP=-1.5:LRA=8,${fmt},apad=whole_dur=${o.duration},asplit=2[vo1][vo2];[2:a]volume=0.55[mu];[mu][vo2]sidechaincompress=threshold=0.02:ratio=9:attack=15:release=450[mud];[vo1][1:a][mud]amix=inputs=3:normalize=0:weights=1 0.55 0.6,alimiter=limit=0.95[m]`
+    : `[0:a]loudnorm=I=-16:TP=-1.5:LRA=8,${fmt},apad=whole_dur=${o.duration}[v];[v][1:a]amix=inputs=2:normalize=0:weights=1 0.55,alimiter=limit=0.95[m]`;
   ff(["-y", ...inputs, "-filter_complex", f, "-map", "[m]", "-t", String(o.duration), o.out]);
 }
 export const workDir = (name: string) => path.resolve("storage/content-studio", name);

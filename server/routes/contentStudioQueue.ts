@@ -4,9 +4,9 @@ import path from "node:path";
 import { FEATURES, PILLARS, featureById } from "../lib/contentStudio/features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, withPhotos } from "../lib/contentStudio/generator.js";
 import { checkConnection, clearConnection, discoverAccounts, loadConnection, mask, saveConnection } from "../lib/contentStudio/instagram.js";
-import { createPost, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
+import { createPost, heldKeys, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
 import { listDecks, saveDeck } from "../lib/contentStudio/render.js";
-import { approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
+import { MONTH_PROGRAM, approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
 import { STORY_REELS, storyReelById, storyReelDeck, storyReelDeckId } from "../lib/contentStudio/storyReels.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
@@ -67,7 +67,12 @@ contentQueueRouter.post("/story-reels/:id/queue", async (req, res) => {
 
 contentQueueRouter.get("/queue", async (_req, res) => {
   const [posts, settings, conn] = await Promise.all([listPosts(), loadSettings(), loadConnection()]);
-  res.json({ posts, settings, connected: !!conn, mediaBase: mediaBase() });
+  const h = heldKeys(settings.checkedKeys ?? []);
+  const held = [
+    ...h.features.map((id) => ({ key: `f:${id}`, label: featureById(id)?.name ?? id, note: featureById(id)?.check ?? "" })),
+    ...h.reels.map((id) => ({ key: `r:${id}`, label: `🎬 ${storyReelById(id)?.title ?? id}`, note: storyReelById(id)?.needsCheck ?? "" })),
+  ];
+  res.json({ posts, settings, connected: !!conn, mediaBase: mediaBase(), held });
 });
 
 contentQueueRouter.get("/settings", async (_req, res) => res.json(await loadSettings()));
@@ -164,6 +169,31 @@ contentQueueRouter.get("/queue/:id/files/:name", async (req, res) => {
 contentQueueRouter.post("/autopilot/run", async (req, res) => {
   try { res.json(await refillCalendar({ weeks: Math.min(Math.max(Number(req.body?.weeks) || 2, 1), 12), force: true })); }
   catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Autopilot gagal" }); }
+});
+
+// "Program 1 bulan": 3 posts a day (09:00 reel, 14:00 carousel, 18:30 reel), published automatically until the trial ends.
+// replaceFuture=true skips the autopilot posts that are still waiting (draft/scheduled with a feature) so the new rhythm starts clean.
+contentQueueRouter.post("/autopilot/month", async (req, res) => {
+  try {
+    const base = await loadSettings();
+    const next = { ...base, ...MONTH_PROGRAM, checkedKeys: [...new Set([...(base.checkedKeys ?? []), "f:kamera-sdk", "r:kamera"])], autopilotUntil: new Date(Date.now() + MONTH_PROGRAM.horizonDays * 86_400_000).toISOString() };
+    await saveSettings(next);
+    let skipped = 0;
+    if (req.body?.replaceFuture) {
+      skipped = await mutatePosts((posts) => {
+        let n = 0;
+        for (const p of posts) if ((p.status === "draft" || p.status === "scheduled") && p.featureId && new Date(p.scheduledAt).getTime() > Date.now()) { p.status = "skipped"; p.log = [...p.log, "diganti Program 1 bulan"].slice(-12); n++; }
+        return n;
+      });
+    }
+    const created = await refillCalendar({ weeks: 5, force: true, exactHorizon: true });
+    const held = heldKeys(next.checkedKeys);
+    res.json({
+      settings: next, skipped, created: created.length,
+      reels: created.filter((p) => p.format === "reel").length, carousels: created.filter((p) => p.format === "carousel").length,
+      first: created[0]?.scheduledAt, last: created[created.length - 1]?.scheduledAt, held,
+    });
+  } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Program 1 bulan gagal" }); }
 });
 
 // ---- Instagram connection ----

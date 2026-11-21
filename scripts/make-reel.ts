@@ -3,15 +3,18 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { renderHeroReel } from "../server/lib/contentStudio/render.js";
-import { buildMusic, buildSfx, mixAudio, type MusicStyle } from "../server/lib/contentStudio/sfx.js";
+import { storyReelById } from "../server/lib/contentStudio/storyReels.js";
+import { buildMusic, buildSfx, mixAudio, type MusicStyle, type SfxEvent } from "../server/lib/contentStudio/sfx.js";
 
 const name = process.argv[2] ?? "wifi";
 const stillsArg = process.argv.find((a) => a.startsWith("--stills="));
-const mod = name === "wifi" ? await import("../server/lib/contentStudio/reel01Wifi.js") : name === "invoice" ? await import("../server/lib/contentStudio/reel02Invoice.js") : name === "error" ? await import("../server/lib/contentStudio/reel03Error.js") : name === "approval" ? await import("../server/lib/contentStudio/reel04Approval.js") : name === "pin" ? await import("../server/lib/contentStudio/reel05Pin.js") : name === "mirror" ? await import("../server/lib/contentStudio/reel06Mirror.js") : name === "voucher" ? await import("../server/lib/contentStudio/reel07Voucher.js") : name === "mode" ? await import("../server/lib/contentStudio/reel08Mode.js") : name === "kamera" ? await import("../server/lib/contentStudio/reel09Kamera.js") : name === "multicam" ? await import("../server/lib/contentStudio/reel10Multicam.js") : name === "kontrol" ? await import("../server/lib/contentStudio/reel11Kontrol.js") : null;
-if (!mod) throw new Error(`reel tidak dikenal: ${name}`);
+const entry = storyReelById(name);
+if (!entry) throw new Error(`reel tidak dikenal: ${name}`);
+const mod = (await entry.load()) as { buildReelDoc: () => { html: string; durationSec: number }; SFX: SfxEvent[]; DURATION: number; VO_FILE: string; MUSIC?: MusicStyle };
 const dir = path.resolve("storage/content-studio", `reel-${name}`);
 await mkdir(dir, { recursive: true });
-const vo = path.join(dir, mod.VO_FILE);
+const assetVo = path.resolve("server/assets/story-reels", `${name}.mp3`);
+const vo = existsSync(assetVo) ? assetVo : path.join(dir, mod.VO_FILE);
 let audio: string | undefined;
 if (!stillsArg) {
   buildSfx(mod.SFX, mod.DURATION, path.join(dir, "sfx.wav"));

@@ -3,6 +3,7 @@ import { copyFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { featureById } from "./features.js";
 import { hashtagsFor } from "./generator.js";
+import { NEW_STORY_REELS } from "./newReelMeta.js";
 import { renderHeroReel } from "./render.js";
 import { buildMusic, buildSfx, mixAudio, type MusicStyle, type SfxEvent } from "./sfx.js";
 import type { Deck } from "./types.js";
@@ -30,7 +31,9 @@ export type StoryReel = {
 const assetDir = () => path.join(process.cwd(), "server", "assets", "story-reels");
 const LINK = "🔗 Info lengkap di studiodo.id (link di bio).";
 
-export const STORY_REELS: StoryReel[] = [
+// A reel is only offered (queue, autopilot) once its voice over exists, so scenes can be prepared before the voice is generated.
+export const STORY_REELS: StoryReel[] = ALL_STORY_REELS().filter((r) => existsSync(path.join(process.cwd(), "server", "assets", "story-reels", `${r.id}.mp3`)));
+function ALL_STORY_REELS(): StoryReel[] { return [
   {
     id: "wifi", featureId: "offline-aman", title: "Wifi mal mati: booth tetap jalan", hook: "Wifi mal mati. Booth-mu ikut mati?", cta: "coba", music: "synthwave", coverAt: 1.6,
     caption: `Wifi mal mati jam ramai, layar booth cuma bilang "error", antrean bubar satu per satu. 😮‍💨\n\nDi STUDIODO sesi tersimpan di booth, lalu tersinkron otomatis saat internet kembali. (Pembayaran QRIS tetap butuh internet.)\n\n💬 Komen "COBA" dan kami bantu mulai trial gratis.\n${LINK}`,
@@ -125,7 +128,8 @@ Di STUDIODO ISO, shutter, aperture, dan white balance bisa diatur dari dashboard
 ${LINK}`,
     needsCheck: "Berlaku untuk kamera yang didukung digiCamControl. Pastikan panel Admin > Kiosk > Kamera tampil seperti di video.", load: () => import("./reel11Kontrol.js"),
   },
-];
+  ...NEW_STORY_REELS,
+]; }
 
 export const storyReelById = (id: string) => STORY_REELS.find((r) => r.id === id);
 export const storyReelDeckId = (id: string) => `story-${id}`;

@@ -326,3 +326,36 @@ describe("story reels", () => {
     STORY_REELS.slice(1).forEach((r, i) => expect(r.cta, `${STORY_REELS[i].id} -> ${r.id}`).not.toBe(STORY_REELS[i].cta));
   });
 });
+
+describe("program 1 bulan (3 posts a day)", () => {
+  const base = { startDate: "2026-11-23", weeks: 5, days: [0, 1, 2, 3, 4, 5, 6], times: ["09:00", "14:00", "18:30"], reelEvery: 0, tzOffsetMin: 420, used: [] as { featureId: string; format: "carousel" | "reel" }[] };
+  const slotFormats = { "09:00": "reel", "14:00": "carousel", "18:30": "reel" } as const;
+  it("puts a reel at 09:00 and 18:30 and a carousel at 14:00, every day", () => {
+    const slots = planAutopilot({ ...base, slotFormats: { ...slotFormats } });
+    expect(slots.length).toBeGreaterThanOrEqual(90);
+    for (const s of slots) expect(s.format, s.local).toBe(slotFormats[s.local.slice(11) as keyof typeof slotFormats]);
+  });
+  it("keeps going when a format runs out (second round) instead of stopping early", () => {
+    const slots = planAutopilot({ ...base, weeks: 12, slotFormats: { ...slotFormats } });
+    expect(slots.filter((s) => s.format === "reel").length).toBeGreaterThan(FEATURES.length);
+  });
+  it("never picks excluded features", () => {
+    const skip = FEATURES.slice(0, 8).map((f) => f.id);
+    const slots = planAutopilot({ ...base, slotFormats: { ...slotFormats }, excludeFeatureIds: skip });
+    expect(slots.some((s) => skip.includes(s.featureId))).toBe(false);
+  });
+  it("holds back anything flagged cek-dulu until the owner confirms it", async () => {
+    const { heldKeys } = await import("./publisher.js");
+    const none = heldKeys([]);
+    expect(none.features.length).toBeGreaterThan(0);
+    const confirmed = heldKeys([`f:${none.features[0]}`]);
+    expect(confirmed.features).not.toContain(none.features[0]);
+    expect(none.reels.length).toBeGreaterThan(0);
+  });
+  it("validates slot formats and confirmed keys in settings", async () => {
+    const { DEFAULT_SETTINGS, parseSettings } = await import("./schedule.js");
+    const out = parseSettings({ ...DEFAULT_SETTINGS, slotFormats: { "09:00": "reel", "bad": "reel", "10:00": "x" }, checkedKeys: ["f:kamera-sdk", "oops", "r:wifi"] }, DEFAULT_SETTINGS);
+    expect(typeof out).not.toBe("string");
+    if (typeof out !== "string") { expect(out.slotFormats).toEqual({ "09:00": "reel" }); expect(out.checkedKeys).toEqual(["f:kamera-sdk", "r:wifi"]); }
+  });
+});

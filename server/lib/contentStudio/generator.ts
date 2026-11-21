@@ -118,6 +118,8 @@ export type AutopilotOptions = {
   tzOffsetMin: number; // minutes east of UTC (WIB = 420)
   used: { featureId: string; format: "carousel" | "reel" }[]; // already queued/posted, skipped here
   onlyFeatureIds?: string[];
+  excludeFeatureIds?: string[]; // never picked (e.g. content that still needs a manual check)
+  slotFormats?: Record<string, "reel" | "carousel">; // HH:mm -> format; slots not listed follow reelEvery
   maxPosts?: number;
 };
 export type Slot = { featureId: string; format: "carousel" | "reel"; local: string; scheduledAt: string };
@@ -150,18 +152,21 @@ export function postingSlots(o: Pick<AutopilotOptions, "startDate" | "weeks" | "
  * another one has content left) and every feature is used once per format before any repeats.
  */
 export function planAutopilot(o: AutopilotOptions): Slot[] {
-  const pool = FEATURES.filter((f) => !o.onlyFeatureIds?.length || o.onlyFeatureIds.includes(f.id));
+  const pool = FEATURES.filter((f) => (!o.onlyFeatureIds?.length || o.onlyFeatureIds.includes(f.id)) && !o.excludeFeatureIds?.includes(f.id));
   const taken = new Set(o.used.map((u) => `${u.featureId}:${u.format}`));
   const lastUse = new Map<Pillar, number>();
   const slots: Slot[] = [];
   let prevPillar: Pillar | null = null;
   const all = postingSlots(o);
   for (let i = 0; i < all.length && slots.length < (o.maxPosts ?? 200); i++) {
-    const wantReel = o.reelEvery > 0 && (slots.length + 1) % o.reelEvery === 0;
+    const fixed = o.slotFormats?.[all[i].time];
+    const wantReel = fixed ? fixed === "reel" : o.reelEvery > 0 && (slots.length + 1) % o.reelEvery === 0;
     const formats: ("carousel" | "reel")[] = wantReel ? ["reel", "carousel"] : ["carousel", "reel"];
     let pick: { f: Feature; format: "carousel" | "reel" } | null = null;
     for (const format of formats) {
-      const free = pool.filter((f) => !taken.has(`${f.id}:${format}`));
+      let free = pool.filter((f) => !taken.has(`${f.id}:${format}`));
+      // a long programme (e.g. 60 reels from 52 features) starts a second round instead of stopping: that format's list is reused, oldest first
+      if (!free.length && fixed && pool.length) { for (const f of pool) taken.delete(`${f.id}:${format}`); free = pool.filter((f) => !taken.has(`${f.id}:${format}`)); }
       if (!free.length) continue;
       // pillar that was used longest ago (and not the previous one if avoidable)
       const pillars = PILLARS.filter((p) => free.some((f) => f.pillar === p));

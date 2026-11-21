@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { appBaseUrl } from "../urls.js";
-import { featureById } from "./features.js";
+import { FEATURES, featureById } from "./features.js";
 import { featureDeck, planAutopilot, localToIso, postingSlots, CAPTION_VARIANTS } from "./generator.js";
 import { buildCaption, checkConnection, loadConnection, publishPost } from "./instagram.js";
 import { listDecks, renderForPublish, saveDeck } from "./render.js";
@@ -81,26 +81,40 @@ async function publish(p: ScheduledPost): Promise<void> {
   }
 }
 
+/** Content autopilot must not queue by itself: flagged "cek dulu" (feature `check` / story reel `needsCheck`) and not yet confirmed by the owner. */
+export function heldKeys(checkedKeys: string[]): { features: string[]; reels: string[] } {
+  const ok = new Set(checkedKeys);
+  return {
+    features: FEATURES.filter((f) => f.check && !ok.has(`f:${f.id}`)).map((f) => f.id),
+    reels: STORY_REELS.filter((r) => r.needsCheck && !ok.has(`r:${r.id}`)).map((r) => r.id),
+  };
+}
+
 /** Autopilot: queue more posts when the calendar runs shorter than the configured horizon. Returns how many were added. */
-export async function refillCalendar(opts: { weeks?: number; force?: boolean } = {}): Promise<ScheduledPost[]> {
+export async function refillCalendar(opts: { weeks?: number; force?: boolean; exactHorizon?: boolean } = {}): Promise<ScheduledPost[]> {
   const s = await loadSettings();
   const posts = await listPosts();
   const live = posts.filter((p) => p.status !== "skipped");
-  const horizonEnd = Date.now() + s.horizonDays * 86_400_000;
+  const until = s.autopilotUntil ? new Date(s.autopilotUntil).getTime() : Infinity;
+  if (until <= Date.now()) return []; // the trial period is over
+  const horizonEnd = Math.min(Date.now() + s.horizonDays * 86_400_000, until);
   const lastAt = live.reduce((m, p) => Math.max(m, new Date(p.scheduledAt).getTime()), 0);
   if (!opts.force && lastAt >= horizonEnd) return [];
   const localNow = new Date(Date.now() + s.tzOffsetMin * 60_000);
   const after = new Date(Math.max(lastAt, Date.now()) + s.tzOffsetMin * 60_000 + 86_400_000);
   const startDate = (opts.force && !lastAt ? localNow : after).toISOString().slice(0, 10);
+  const held = heldKeys(s.checkedKeys ?? []);
   const slots = planAutopilot({
     startDate, weeks: opts.weeks ?? Math.ceil(s.horizonDays / 7), days: s.days, times: s.times, reelEvery: s.reelEvery, tzOffsetMin: s.tzOffsetMin,
+    slotFormats: s.slotFormats, excludeFeatureIds: held.features,
     used: live.filter((p) => p.featureId).map((p) => ({ featureId: p.featureId!, format: p.format })),
   });
   const created: ScheduledPost[] = [];
-  for (const [i, slot] of slots.entries()) {
+  const lastAllowed = opts.exactHorizon ? horizonEnd : until;
+  for (const [i, slot] of slots.filter((x) => new Date(x.scheduledAt).getTime() <= lastAllowed).entries()) {
     const f = featureById(slot.featureId);
     if (!f) continue;
-    const story = slot.format === "reel" ? STORY_REELS.find((r) => r.featureId === slot.featureId && !live.some((p) => p.deckId === `story-${r.id}`)) : undefined;
+    const story = slot.format === "reel" ? STORY_REELS.find((r) => r.featureId === slot.featureId && !held.reels.includes(r.id) && !live.some((p) => p.deckId === `story-${r.id}`) && !created.some((c) => c.deckId === `story-${r.id}`)) : undefined;
     const deck = story ? storyReelDeck(story) : featureDeck(f, slot.format, (live.length + i) % CAPTION_VARIANTS);
     await saveDeck(deck);
     created.push(await createPost(deck, slot.scheduledAt, s.defaultMode, s.autoApprove ? "scheduled" : "draft"));

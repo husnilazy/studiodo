@@ -785,9 +785,11 @@ export type CsPost = {
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
   tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; prepLeadMin: number; maxPerDay: number;
-  autopilot: boolean; autoApprove: boolean; horizonDays: number; lastRefillAt?: string;
+  autopilot: boolean; autoApprove: boolean; horizonDays: number; slotFormats?: Record<string, "reel" | "carousel">; checkedKeys?: string[]; autopilotUntil?: string; lastRefillAt?: string;
 };
-export type CsQueue = { posts: CsPost[]; settings: CsSettings; connected: boolean; mediaBase: string };
+export type CsHeld = { key: string; label: string; note: string };
+export type CsMonthResult = { settings: CsSettings; skipped: number; created: number; reels: number; carousels: number; first?: string; last?: string };
+export type CsQueue = { posts: CsPost[]; settings: CsSettings; connected: boolean; mediaBase: string; held?: CsHeld[] };
 export type CsIgStatus = { connected: boolean; source: "env" | "file" | null; userId: string | null; token: string | null; mediaBase: string };
 export type CsIgTest = { account?: string; accountError?: string; urlOk: boolean; urlError?: string; mediaBase: string };
 export type CsIdea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
@@ -851,6 +853,7 @@ export const contentStudioApi = {
   },
   storyReels: () => request<CsStoryReel[]>("/content-studio/story-reels"),
   queueStoryReel: (id: string, scheduledAt?: string) => request<CsPost>(`/content-studio/story-reels/${encodeURIComponent(id)}/queue`, { method: "POST", body: JSON.stringify({ scheduledAt }) }),
+  monthProgram: (replaceFuture: boolean) => request<CsMonthResult>("/content-studio/autopilot/month", { method: "POST", body: JSON.stringify({ replaceFuture }) }),
   autopilotRun: (weeks: number) => request<CsPost[]>("/content-studio/autopilot/run", { method: "POST", body: JSON.stringify({ weeks }) }),
   settings: () => request<CsSettings>("/content-studio/settings"),
   saveSettings: (s: CsSettings) => request<CsSettings>("/content-studio/settings", { method: "PUT", body: JSON.stringify(s) }),
