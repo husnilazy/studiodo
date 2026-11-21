@@ -9,8 +9,8 @@ import type { SfxEvent } from "./sfx.js";
 
 export const MUSIC = "house" as const;
 export const VO_FILE = "vo-kontrol.mp3";
-export const T = { sore: 0.83, malam: 2.73, suram: 4.54, lari: 6.65, studiodo: 11.13, atur: 12.3, tanpa: 18.64, live: 20.42, simpan: 24.26, pas: 25.35, brand: 27.91, coba: 28.9, tombol: 29.6 };
-export const DURATION = 31.2;
+export const T = { sore: 0.86, malam: 2.75, suram: 4.58, lari: 6.66, studiodo: 11.03, atur: 12.16, tanpa: 16.77, live: 18.51, simpan: 22.12, pas: 23.93, brand: 26.49, coba: 27.52, tombol: 28.2 };
+export const DURATION = 30.7;
 const STARTS = [0, T.malam - 0.1, T.suram - 0.1, T.lari - 0.1, T.studiodo - 0.1, T.tanpa - 0.1, T.live - 0.1, T.pas - 0.1, T.brand - 0.1, T.coba - 0.1];
 
 const sun = (x: number, y: number, r: number, t: number) => at(`<g transform="translate(${x} ${y})">${Array.from({ length: 12 }, (_, i) => `<rect x="-8" y="${-r - 44}" width="16" height="34" rx="8" transform="rotate(${i * 30})" style="fill:${ORG}"/>`).join("")}<circle r="${r}" style="fill:${ORG}"/></g>`, t, null, "rise");
@@ -46,7 +46,7 @@ export function buildReelDoc(): { html: string; durationSec: number } {
   SC.push({ i: 4, bg: BLUE, dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a64ff") + dot(960, 1560, 150, "#3a64ff") + star(980, 700, 30, YEL, 0.3)
     + at(`<rect x="100" y="1020" width="880" height="620" rx="40" style="fill:#0f1330;opacity:.35"/>`, T.studiodo + 0.3)
-    + sliders(150, 1130, 780, T.atur + 0.2, 1.5),
+    + sliders(150, 1130, 780, T.atur + 0.2, 1.1),
     html: tx("Di STUDIODO, atur *dari dashboard.*", T.studiodo, T.atur - 0.1, "left:120px;top:310px;font-size:100px;line-height:1;color:#fff", "big") + tx("ISO, shutter, aperture, *white balance.*", T.atur, null, "left:120px;top:310px;font-size:96px;line-height:1;color:#fff", "big") });
   // 5 without touching the camera
   SC.push({ i: 5, bg: MINT, dark: false, from: "10% 90%", art:
@@ -92,7 +92,7 @@ export const SFX: SfxEvent[] = [
   ["pop", T.malam + 0.4, 0.4], ["pop", T.malam + 0.7, 0.4], ["beepLow", T.malam + 1.2, 0.35],
   ["pop", T.suram + 0.4, 0.4], ["thud", T.suram + 1.2, 0.5], ["buzz", T.suram + 1.2, 0.4],
   ["pop", T.lari + 0.4, 0.4], ["pop", T.lari + 0.6, 0.4], ...[2.0, 2.8, 3.6, 4.2].map((d): SfxEvent => ["tick", T.lari + d, 0.4]),
-  ["pop", T.studiodo + 0.3, 0.4], ...[0.2, 1.7, 3.2, 4.7].map((d): SfxEvent => ["pop", T.atur + d, 0.4]), ["zap", T.atur + 1.7, 0.25], ["ding", T.atur + 6.2, 0.4],
+  ["pop", T.studiodo + 0.3, 0.4], ...[0.2, 1.3, 2.4, 3.5].map((d): SfxEvent => ["pop", T.atur + d, 0.4]), ["zap", T.atur + 1.3, 0.25], ["ding", T.atur + 4.6, 0.4],
   ["pop", T.tanpa + 0.3, 0.4], ["zap", T.tanpa + 0.8, 0.3], ["pop", T.tanpa + 0.6, 0.4], ["ding", T.tanpa + 1.4, 0.4],
   ["pop", T.live + 0.3, 0.4], ["shutter", T.live + 2.6, 0.5], ["sparkle", T.live + 2.7, 0.4], ["ding", T.simpan + 0.3, 0.5],
   ["pop", T.pas + 0.2, 0.4], ["pop", T.pas + 0.4, 0.4], ["sparkle", T.pas + 0.9, 0.4],
