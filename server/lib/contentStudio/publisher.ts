@@ -91,7 +91,7 @@ export function heldKeys(checkedKeys: string[]): { features: string[]; reels: st
 }
 
 /** Autopilot: queue more posts when the calendar runs shorter than the configured horizon. Returns how many were added. */
-export async function refillCalendar(opts: { weeks?: number; force?: boolean; exactHorizon?: boolean } = {}): Promise<ScheduledPost[]> {
+export async function refillCalendar(opts: { weeks?: number; force?: boolean; exactHorizon?: boolean; fromToday?: boolean } = {}): Promise<ScheduledPost[]> {
   const s = await loadSettings();
   const posts = await listPosts();
   const live = posts.filter((p) => p.status !== "skipped");
@@ -102,7 +102,7 @@ export async function refillCalendar(opts: { weeks?: number; force?: boolean; ex
   if (!opts.force && lastAt >= horizonEnd) return [];
   const localNow = new Date(Date.now() + s.tzOffsetMin * 60_000);
   const after = new Date(Math.max(lastAt, Date.now()) + s.tzOffsetMin * 60_000 + 86_400_000);
-  const startDate = (opts.force && !lastAt ? localNow : after).toISOString().slice(0, 10);
+  const startDate = (opts.fromToday || (opts.force && !lastAt) ? localNow : after).toISOString().slice(0, 10); // fromToday: today's slots that are still ahead are included
   const held = heldKeys(s.checkedKeys ?? []);
   const slots = planAutopilot({
     startDate, weeks: opts.weeks ?? Math.ceil(s.horizonDays / 7), days: s.days, times: s.times, reelEvery: s.reelEvery, tzOffsetMin: s.tzOffsetMin,
@@ -111,7 +111,9 @@ export async function refillCalendar(opts: { weeks?: number; force?: boolean; ex
   });
   const created: ScheduledPost[] = [];
   const lastAllowed = opts.exactHorizon ? horizonEnd : until;
-  for (const [i, slot] of slots.filter((x) => new Date(x.scheduledAt).getTime() <= lastAllowed).entries()) {
+  const taken = new Set(live.map((p) => p.scheduledAt));
+  const earliest = Date.now() + 10 * 60_000; // a slot that is almost due is skipped: the worker needs time to render it
+  for (const [i, slot] of slots.filter((x) => { const at = new Date(x.scheduledAt).getTime(); return at <= lastAllowed && at >= earliest && !taken.has(x.scheduledAt); }).entries()) {
     const f = featureById(slot.featureId);
     if (!f) continue;
     const story = slot.format === "reel" ? STORY_REELS.find((r) => r.featureId === slot.featureId && !held.reels.includes(r.id) && !live.some((p) => p.deckId === `story-${r.id}`) && !created.some((c) => c.deckId === `story-${r.id}`)) : undefined;

@@ -186,7 +186,7 @@ contentQueueRouter.post("/autopilot/month", async (req, res) => {
         return n;
       });
     }
-    const created = await refillCalendar({ weeks: 5, force: true, exactHorizon: true });
+    const created = await refillCalendar({ weeks: 5, force: true, exactHorizon: true, fromToday: true });
     const held = heldKeys(next.checkedKeys);
     res.json({
       settings: next, skipped, created: created.length,
