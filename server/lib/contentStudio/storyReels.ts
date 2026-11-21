@@ -95,6 +95,36 @@ STUDIODO punya 4 mode alur: Lengkap, Ringkas, Satu harga, dan Kilat. Event ramai
 🔗 studiodo.id (link di bio).`,
     load: () => import("./reel08Mode.js"),
   },
+  {
+    id: "kamera", featureId: "kamera-sdk", title: "Kamera Canon & Sony tersambung langsung", hook: "Kamera Canon-mu bagus. Tapi disambungin ke booth?", cta: "simpan", music: "techno", coverAt: 1.6,
+    caption: `Kamera bagus, tapi menyambungkannya ke booth: pasang software ini, driver itu, ujungnya "kamera tidak terdeteksi" dan balik lagi ke webcam. 📸 (Ilustrasi.)
+
+Di STUDIODO ada bridge kamera Canon (lewat SDK resmi Canon) dan Sony bawaan aplikasi: hubungkan kamera ke PC, terdeteksi otomatis, pilih, lalu mulai sesi. Tanpa instalasi tambahan.
+
+📌 Simpan buat checklist setup booth barumu. Kamera apa yang kamu pakai? Ceritakan di komentar.
+${LINK}`,
+    needsCheck: "Canon sudah diuji pada kamera fisik dan berhasil (SDK resmi dari Canon), jadi boleh disebut di caption. Sony belum diuji pada kamera fisik: jangan sebut 'terbukti' untuk Sony. Cek daftar kamera yang didukung sebelum posting.", load: () => import("./reel09Kamera.js"),
+  },
+  {
+    id: "multicam", featureId: "multi-kamera", title: "Multi kamera: dua sudut dalam satu booth", hook: "Satu booth, satu sudut kamera.", cta: "tag", music: "synthwave", coverAt: 1.6,
+    caption: `Dari foto pertama sampai kesepuluh, hasilnya mirip-mirip terus karena cuma satu sudut kamera. 📷 (Ilustrasi.)
+
+Di STUDIODO ada multi kamera: pasang kamera kedua sebagai Sudut 2. Mode bergantian (foto 1 kamera utama, foto 2 Sudut 2) atau mode dua sudut (satu jepretan, dua foto; pelanggan memilih sudut di layar Preview).
+
+👇 Tag temanmu yang suka eksperimen sudut foto.
+${LINK}`,
+    needsCheck: "Belum diuji dengan dua kamera fisik. Kombinasi paling aman: dua webcam, atau satu DSLR + satu webcam. Cek tampilan pilihan sudut di layar Preview.", load: () => import("./reel10Multicam.js"),
+  },
+  {
+    id: "kontrol", featureId: "kontrol-kamera", title: "Atur ISO & shutter dari dashboard", hook: "Lampu venue berubah, kamu harus lari ke booth?", cta: "coba", music: "house", coverAt: 1.6,
+    caption: `Sore lampu venue terang, malam mendadak gelap, foto di booth jadi suram, dan kamu harus lari ke booth buat ubah setelan satu per satu. 🌙 (Ilustrasi.)
+
+Di STUDIODO ISO, shutter, aperture, dan white balance bisa diatur dari dashboard, tanpa menyentuh kameranya. Live view ada di sebelahnya dan setelan tersimpan. (Untuk kamera yang didukung digiCamControl.)
+
+💬 Komen "COBA" dan kami bantu mulai trial gratis.
+${LINK}`,
+    needsCheck: "Berlaku untuk kamera yang didukung digiCamControl. Pastikan panel Admin > Kiosk > Kamera tampil seperti di video.", load: () => import("./reel11Kontrol.js"),
+  },
 ];
 
 export const storyReelById = (id: string) => STORY_REELS.find((r) => r.id === id);
