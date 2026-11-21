@@ -4,7 +4,7 @@ import type { Mockup } from "./types.js";
 // The generator turns each entry into a carousel and a reel. Keep claims literal: nothing here may promise more than the app does.
 // `check` marks claims that were built but not yet proven on real hardware / a live account: the UI shows a warning before posting.
 
-export const PILLARS = ["Pembayaran", "Pengalaman booth", "Hasil digital", "Kamera & cetak", "Operasional", "Bisnis & growth"] as const;
+export const PILLARS = ["Pembayaran", "Pengalaman booth", "Hasil digital", "Kamera & cetak", "Operasional", "Bisnis & growth", "Tips bisnis"] as const;
 export type Pillar = (typeof PILLARS)[number];
 
 export type Feature = {
@@ -22,11 +22,12 @@ export type Feature = {
   tip: string; // closing note under the last content slide
   stat?: { value: number; prefix?: string; suffix?: string; label: string }; // only literal, countable facts
   check?: string;
+  kind?: "fitur" | "tips"; // "tips" = general advice for booth owners (no product claim), told with the same layouts
 };
 
-type Opts = { stat?: Feature["stat"]; check?: string; since?: string };
+type Opts = { stat?: Feature["stat"]; check?: string; since?: string; kind?: Feature["kind"] };
 const F = (id: string, name: string, pillar: Pillar, hook: string, tagline: string, emoji: string, pain: string[], gain: string[], how: string[], mockup: Mockup, tip: string, o: Opts = {}): Feature =>
-  ({ id, name, pillar, since: o.since ?? "2026-10", hook, tagline, emoji, pain, gain, how, mockup, tip, stat: o.stat, check: o.check });
+  ({ id, name, pillar, since: o.since ?? "2026-10", hook, tagline, emoji, pain, gain, how, mockup, tip, stat: o.stat, check: o.check, kind: o.kind });
 
 export const FEATURES: Feature[] = [
   // ---------- Pembayaran ----------
@@ -160,6 +161,41 @@ export const FEATURES: Feature[] = [
   F("panduan-onboarding", "Panduan onboarding bergambar", "Bisnis & growth", "Mulai dari nol?|*Ada panduannya.*", "Panduan bergambar dengan tangkapan layar asli dari login sampai printer.", "📖",
     ["Bingung mulai dari mana", "Panduan teks panjang", "Takut salah setting"], ["Panduan bergambar langkah demi langkah", "Screenshot dashboard asli", "Mencakup kamera & printer"],
     ["Buka panduan", "Ikuti langkah bergambar", "Booth siap dipakai"], "dashboard", "Pemula pun bisa mulai sendiri.", { since: "2026-11" }),
+
+  // ---------- Tips bisnis (saran umum untuk pemilik booth; tanpa klaim produk) ----------
+  F("tips-harga-paket", "Menentukan harga paket", "Tips bisnis", "Harga paket booth-mu|*asal tembak?*", "Mulai dari biaya per sesi, bukan dari harga kompetitor.", "🧮",
+    ["Harga ikut-ikutan kompetitor", "Biaya cetak dan sewa tidak dihitung", "Untung tipis tanpa sadar"], ["Hitung biaya per sesi dulu", "Sisihkan margin untuk perawatan", "Tinjau harga tiap beberapa bulan"],
+    ["Jumlahkan kertas, tinta, dan listrik per sesi", "Tambahkan sewa tempat dan perawatan", "Tentukan harga, lalu uji di event"], "none", "Harga yang sehat dimulai dari angka yang kamu hitung sendiri.", { kind: "tips" }),
+  F("tips-antrean-event", "Mengatasi antrean event", "Tips bisnis", "Antrean event panjang?|*Ini caranya.*", "Antrean yang diatur rapi bikin customer sabar dan booth tetap produktif.", "⏳",
+    ["Satu paket lama untuk semua orang", "Customer menunggu tanpa kabar", "Booth penuh tapi tidak ada yang selesai cepat"], ["Sediakan satu paket cepat", "Beri perkiraan waktu tunggu", "Pisahkan tempat ambil hasil dari area foto"],
+    ["Tandai paket yang paling cepat", "Pasang papan perkiraan waktu", "Siapkan satu orang untuk mengatur antrean"], "none", "Antrean yang jelas terasa lebih pendek.", { kind: "tips" }),
+  F("tips-lokasi-booth", "Memilih posisi booth", "Tips bisnis", "Booth-mu di pojok|*yang tidak kelihatan?*", "Posisi dan penerangan menentukan seberapa sering orang mampir.", "📍",
+    ["Booth di sudut yang tersembunyi", "Tidak ada papan penunjuk", "Cahaya sekitar terlalu gelap"], ["Taruh dekat jalur orang lewat", "Pasang papan yang terlihat dari jauh", "Pastikan cahaya cukup dan lembut"],
+    ["Jalan sekali di venue, cari jalur ramai", "Pasang papan di tinggi mata", "Tes cahaya sebelum tamu datang"], "none", "Orang mampir ke apa yang mereka lihat.", { kind: "tips" }),
+  F("tips-frame-event", "Desain frame event", "Tips bisnis", "Frame event wedding|*asal jadi?*", "Frame yang terbaca jelas dan senada dengan acara terlihat lebih mahal.", "🖼️",
+    ["Desain terlalu ramai", "Teks kecil dan susah dibaca", "Warna beda dari tema acara"], ["Selaraskan warna dengan tema", "Pakai teks singkat dan besar", "Cetak uji sebelum hari H"],
+    ["Minta warna dan nama acara dari klien", "Beri ruang kosong untuk wajah", "Cetak satu contoh dan cek"], "none", "Frame yang rapi dibawa pulang dan dipajang.", { kind: "tips" }),
+  F("tips-cek-sebelum-event", "Cek sebelum event", "Tips bisnis", "H-1 event,|*sudah cek ini?*", "Lima menit memeriksa hal kecil mencegah masalah di hari acara.", "✅",
+    ["Printer belum diuji", "Kertas tinggal sedikit", "Koneksi venue tidak dicek"], ["Cetak uji satu sesi penuh", "Bawa kertas dan tinta cadangan", "Siapkan cadangan koneksi"],
+    ["Jalankan satu sesi lengkap", "Hitung kertas untuk perkiraan tamu", "Cek sinyal di titik booth"], "none", "Persiapan kecil, hari acara tenang.", { kind: "tips" }),
+  F("tips-konten-booth", "Booth ramai di Instagram", "Tips bisnis", "Ramai di lokasi,|*sepi di Instagram?*", "Hasil foto customer adalah materi promosi terbaikmu, kalau izinnya jelas.", "📣",
+    ["Hasil foto tidak pernah dibagikan", "Tidak ada akun yang bisa di-tag", "Tidak ada ajakan ikut serta"], ["Minta izin lalu posting hasil terbaik", "Buat hashtag khas booth", "Ajak customer men-tag akunmu"],
+    ["Pasang tulisan izin di booth", "Pilih hasil yang paling ceria", "Cantumkan akun dan hashtag di frame"], "none", "Izin dulu, baru posting.", { kind: "tips" }),
+  F("tips-pelanggan-kembali", "Membuat customer kembali", "Tips bisnis", "Sekali datang,|*lalu hilang?*", "Alasan kecil untuk kembali bikin booth punya pelanggan, bukan hanya pengunjung.", "🔁",
+    ["Tidak ada cara menghubungi lagi", "Promo hanya untuk orang baru", "Tidak ada alasan untuk datang lagi"], ["Kumpulkan kontak dengan izin", "Beri promo untuk yang kembali", "Umumkan frame atau tema baru"],
+    ["Tanyakan kontak secara opsional", "Siapkan promo kembali sederhana", "Kabari saat ada frame baru"], "none", "Pelanggan dibangun dari alasan untuk kembali.", { kind: "tips" }),
+  F("tips-perawatan-printer", "Merawat printer", "Tips bisnis", "Printer sering macet?|*Cek tiga hal ini.*", "Perawatan rutin lebih murah daripada printer mati di tengah event.", "🖨️",
+    ["Kertas lembap atau salah jenis", "Kepala cetak jarang dibersihkan", "Driver dan setelan tidak diperiksa"], ["Simpan kertas di tempat kering", "Bersihkan sesuai petunjuk pabrik", "Cek setelan sebelum event"],
+    ["Simpan kertas tertutup", "Jadwalkan pembersihan berkala", "Uji cetak sebelum dipakai"], "none", "Printer yang dirawat jarang mogok.", { kind: "tips" }),
+  F("tips-pencahayaan", "Pencahayaan booth", "Tips bisnis", "Wajah customer gelap?|*Periksa cahayanya.*", "Cahaya yang tepat membuat foto terlihat bagus tanpa banyak setelan.", "💡",
+    ["Cahaya datang dari belakang", "Ruangan terlalu gelap", "Ada pantulan di layar"], ["Arahkan cahaya dari depan", "Pakai lampu yang lembut", "Ubah posisi booth atau layar"],
+    ["Cek bayangan di wajah", "Tambah lampu depan yang lembut", "Geser booth menjauh dari jendela"], "none", "Cahaya yang baik mengalahkan kamera mahal.", { kind: "tips" }),
+  F("tips-kesepakatan-event", "Kesepakatan job event", "Tips bisnis", "Job event tanpa|*kesepakatan tertulis?*", "Catatan sederhana mencegah salah paham soal durasi, cetak, dan biaya.", "📝",
+    ["Durasi dan jumlah cetak tidak jelas", "Biaya tambahan baru dibahas di akhir", "Pembayaran tidak tercatat"], ["Tulis durasi dan jumlah cetak", "Sepakati biaya tambahan di awal", "Simpan bukti pembayaran"],
+    ["Buat daftar yang disepakati", "Kirim ke klien untuk dikonfirmasi", "Simpan di tempat yang mudah dicari"], "none", "Jelas di awal, tenang di akhir.", { kind: "tips" }),
+  F("tips-mulai-bisnis", "Memulai bisnis booth", "Tips bisnis", "Baru mau buka booth?|*Mulai dari sini.*", "Mulai kecil, hitung dulu, dan belajar dari event pertama.", "🚀",
+    ["Beli alat sebelum riset", "Tidak ada hitungan balik modal", "Desain dan paket belum jelas"], ["Riset lokasi dan jenis acara", "Hitung biaya per sesi", "Mulai kecil lalu perbaiki"],
+    ["Amati acara di sekitarmu", "Hitung modal dan biaya per sesi", "Uji di satu event sebelum menambah alat"], "none", "Langkah pertama yang rapi menghemat banyak biaya.", { kind: "tips" }),
 ];
 
 export const featureById = (id: string): Feature | undefined => FEATURES.find((f) => f.id === id);

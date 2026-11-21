@@ -4,6 +4,7 @@ import { featureById } from "./features.js";
 import { featureDeck, planAutopilot, localToIso, postingSlots, CAPTION_VARIANTS } from "./generator.js";
 import { buildCaption, checkConnection, loadConnection, publishPost } from "./instagram.js";
 import { listDecks, renderForPublish, saveDeck } from "./render.js";
+import { renderStoryReelForPublish, STORY_REELS, storyReelDeck } from "./storyReels.js";
 import {
   duePrepare, duePublish, getPost, listPosts, loadSettings, localDayKey, mutatePosts, newPostId, newToken, patchPost, publishDir, retryDelayMs, saveSettings,
   type CsSettings, type PostMode, type ScheduledPost,
@@ -46,7 +47,7 @@ async function prepare(p: ScheduledPost): Promise<void> {
     if (!deck) throw new Error("Deck tidak ditemukan (sudah dihapus?)");
     const problem = validateForPosting(deck);
     if (problem) throw new Error(problem);
-    const out = await renderForPublish(deck, publishDir(p.id), p.carouselMedia);
+    const out = deck.storyReel ? await renderStoryReelForPublish(deck.storyReel, publishDir(p.id)) : await renderForPublish(deck, publishDir(p.id), p.carouselMedia);
     if (!out.files.length) throw new Error("Render tidak menghasilkan file");
     await patchPost(p.id, { status: "ready", mediaType: out.type, files: out.files, coverFile: out.cover, attempts: 0, nextTryAt: undefined }, `render selesai (${out.files.length} file)`);
   } catch (e) {
@@ -99,7 +100,8 @@ export async function refillCalendar(opts: { weeks?: number; force?: boolean } =
   for (const [i, slot] of slots.entries()) {
     const f = featureById(slot.featureId);
     if (!f) continue;
-    const deck = featureDeck(f, slot.format, (live.length + i) % CAPTION_VARIANTS);
+    const story = slot.format === "reel" ? STORY_REELS.find((r) => r.featureId === slot.featureId && !live.some((p) => p.deckId === `story-${r.id}`)) : undefined;
+    const deck = story ? storyReelDeck(story) : featureDeck(f, slot.format, (live.length + i) % CAPTION_VARIANTS);
     await saveDeck(deck);
     created.push(await createPost(deck, slot.scheduledAt, s.defaultMode, s.autoApprove ? "scheduled" : "draft"));
   }

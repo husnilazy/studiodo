@@ -14,7 +14,7 @@ export const contentStudioAdminRouter = Router();
 contentStudioAdminRouter.use(contentSourceRouter); // photo material from our own booths
 contentStudioAdminRouter.use(contentQueueRouter); // feature generator, calendar, autopilot, Instagram connection
 
-const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge", "hook", "chat", "note"];
+const KINDS = ["cover", "feature", "steps", "stat", "compare", "cta", "badge", "hook", "chat", "note", "scene"];
 const TONES = ["light", "dark", "indigo", "mint", "peach"];
 
 function parseDeck(input: any): Deck | string {

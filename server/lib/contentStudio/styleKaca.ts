@@ -3,6 +3,8 @@ import path from "node:path";
 import { BASE_CSS, fontFaces, wordmark } from "./theme.js";
 import { FIT_SCRIPT, icon, stage } from "./templates.js";
 import { CTA_KEYWORD } from "./hooks.js";
+import { ART_CSS, scene as artScene } from "./art.js";
+import { decodeArt } from "./scenes.js";
 import { FORMATS, THEMES, type Deck, type Slide, type ThemeName } from "./types.js";
 
 // "Kaca" (style "kaca"): STUDIODO's own look. A near-black base lit by drifting aurora blobs, fluted-glass ribs, frosted glass
@@ -12,7 +14,7 @@ import { FORMATS, THEMES, type Deck, type Slide, type ThemeName } from "./types.
 
 const fontsDir = path.join(process.cwd(), "server", "assets", "fonts");
 let fontCss: string | null = null;
-function kacaFonts(): string {
+export function kacaFonts(): string {
   if (fontCss) return fontCss;
   const b64 = (f: string) => readFileSync(path.join(fontsDir, f)).toString("base64");
   const face = (fam: string, w: number, style: string, file: string) => `@font-face{font-family:"${fam}";font-weight:${w};font-style:${style};src:url(data:font/woff2;base64,${b64(file)}) format("woff2")}`;
@@ -27,9 +29,10 @@ function kacaFonts(): string {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const em = (s: string) => esc(s).replace(/\*([^*]+)\*/g, "<em>$1</em>");
+const nowrapHyphen = (h: string) => h.replace(/([A-Za-z]+-[A-Za-z]+)/g, '<span class="nw">$1</span>');
 /** "line one|line *two*": every line wipes up on its own; *word* becomes the serif-italic accent. */
 function lines(title: string, d0 = 0.1): string {
-  return title.split("|").map((l, i) => `<span class="ln"><span class="li" style="--d:${(d0 + i * 0.14).toFixed(2)}s">${em(l)}</span></span>`).join("");
+  return title.split("|").map((l, i) => `<span class="ln"><span class="li" style="--d:${(d0 + i * 0.14).toFixed(2)}s">${nowrapHyphen(em(l))}</span></span>`).join("");
 }
 const D = (n: number) => `style="--d:${n}s"`;
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -71,7 +74,7 @@ ${THEMES.map((t) => `.kc-${t}{${THEME_VARS[t]}}`).join("\n")}
 /* type */
 .kh{font-family:"Bricolage",system-ui,sans-serif;font-weight:800;font-size:112px;line-height:.98;letter-spacing:-.035em}
 .kh.xl{font-size:116px;line-height:.95}.kh.xl.s{font-size:98px}.kh.big{font-size:148px;line-height:.9}.kh.m{font-size:86px;line-height:1}
-.kh.c{text-align:center}
+.kh.c{text-align:center}.nw{white-space:nowrap}
 .ln{display:block;overflow:hidden;padding:0 .1em .2em 0;margin:0 -.1em -.14em 0}
 .li{display:block;animation:kup .9s cubic-bezier(.2,.9,.2,1) both;animation-delay:calc(var(--s0,0s) + var(--d,0s))}
 @keyframes kup{from{transform:translateY(112%) skewY(5deg);opacity:0}to{transform:none;opacity:1}}
@@ -184,33 +187,76 @@ ${THEMES.map((t) => `.kc-${t}{${THEME_VARS[t]}}`).join("\n")}
 .kscene{animation:ksIn .001s both,ksOut .001s forwards;animation-delay:var(--in,0s),var(--out,1000s)}
 @keyframes ksIn{from{opacity:0;visibility:hidden}to{opacity:1;visibility:visible}}
 @keyframes ksOut{to{opacity:0;visibility:hidden}}
+
+/* illustrations */
+.k_art{position:relative;flex:1;min-height:0}.k_art svg{position:absolute;inset:0;width:100%;height:100%}
+.k_tilt,.k_full,.k_circle,.k_panel{display:flex;flex-direction:column}
+.artA .k_card{padding:0}.artA .k_art{margin:0}
+.artB .k_circle{position:absolute;right:-70px;bottom:66px;width:660px;height:660px;border-radius:50%;background:radial-gradient(circle at 38% 30%,color-mix(in srgb,var(--c2) 60%,transparent),color-mix(in srgb,var(--c1) 22%,transparent) 70%);border:1.5px solid rgba(255,255,255,.28);z-index:2;animation:kfade .9s ease both;animation-delay:calc(var(--s0,0s) + .7s)}
+.artB .k_circle .k_art{position:absolute;inset:30px 70px 0 20px}
+.artC .k_art{margin:0 -40px}.artC .k_glow{bottom:60px}
+.artD .k_full{position:absolute;left:-20px;right:-20px;bottom:56px;height:660px;z-index:2}
+.artE .k_tilt{flex:1;min-height:0;margin:30px 14px 0;transform:rotate(-3deg);border:7px solid #fff;border-radius:46px;background:linear-gradient(150deg,var(--c1),color-mix(in srgb,var(--c2) 80%,#000));overflow:hidden;box-shadow:0 40px 80px -20px rgba(0,0,0,.65);animation:kfade .9s ease both;animation-delay:calc(var(--s0,0s) + .6s)}
+.artE .k_tape{position:absolute;left:50px;top:560px;z-index:6;transform:rotate(-4deg);padding:12px 28px;background:#ffd23f;color:#1b1730;font-weight:700;font-size:25px;letter-spacing:.14em;text-transform:uppercase;border-radius:8px}
+.artF .k_arttop{flex:1.25;min-height:0;margin:0 -72px;position:relative;z-index:2}.artF .k_arttop .k_art{position:absolute;inset:0}
+.scnA .k_art,.scnB .k_art{flex:1}
+.scnB .k_panel{padding:34px 38px}.scnB h1{margin-bottom:6px}
+.scnC .k_row{display:grid;grid-template-columns:1.55fr 1fr;gap:10px;align-items:center;flex:1;min-height:0}.scnC .k_row .k_art{height:100%}
+.k_items{display:flex;flex-wrap:wrap;gap:14px}.scnC .k_items span{font-size:27px;padding:14px 22px}
+.k_items span{padding:16px 28px;border:1.5px solid rgba(255,255,255,.4);border-radius:99px;font-weight:700;font-size:30px;background:rgba(255,255,255,.07);animation:kpop .7s cubic-bezier(.3,1.5,.5,1) both;animation-delay:calc(var(--s0,0s) + var(--d,0s))}
+${ART_CSS}
 `;
 
 const STAR = `<svg class="k_star" viewBox="0 0 100 100"><path fill="#fff" d="M50 0l7 38 38-7-30 24 30 24-38-7-7 38-7-38-38 7 30-24L5 31l38 7z"/></svg>`;
 const pad = (n: number) => String(n).padStart(2, "0");
-const kstage = (s: Slide, reel: boolean, d = 0.5) => stage(s, reel, d).replace('class="stage"', 'class="stage t-light"');
+const kstage = (s: Slide, reel: boolean, d = 0.5) => stage(s, reel, d).replace('class="stage"', 'class="stage t-dark"');
 const kbody = (s: Slide, d = 0.45, cls = "") => (s.body ? `<p class="kb ${cls}" ${D(d)}>${esc(s.body)}</p>` : "");
 const kpill = (s: Slide, d = 0, cls = "") => (s.eyebrow ? `<div class="k_pill ${cls}" ${D(d)}>${esc(s.eyebrow)}</div>` : "");
 const ktape = (s: Slide) => (s.note ? `<div class="k_tape k_glass" ${D(0.9)}>${em(s.note)}</div>` : "");
 const longCls = (s: Slide) => (s.title.replace(/[|*]/g, "").length > 30 ? " s" : "");
+const longest0 = (s: Slide) => Math.max(...s.title.replace(/\*/g, "").split("|").map((l) => l.length));
 const sizeCls = (s: Slide) => (s.title.replace(/[|*]/g, "").length > 38 ? "m" : "");
 const ribs = (low = false) => `<div class="k_ribs${low ? " low" : ""}"></div>`;
 
 type Pick = (salt: number, n: number) => number;
+
+/** The illustration of a slide as an inline <svg> inside a sized box, or "" when the slide has none. */
+function artHtml(s: Slide, cls = ""): string {
+  const a = decodeArt(s.art);
+  return a ? `<div class="k_art ${cls}">${artScene(a.scene, { expr: a.expr, hair: a.hair, skin: a.skin })}</div>` : "";
+}
 
 function inner(s: Slide, deck: Deck, reel: boolean, pick: Pick): { html: string; cls: string; extra: string } {
   const none = { cls: "", extra: "" };
   switch (s.kind) {
     case "cover":
     case "hook": {
-      const emo = s.emoji ? `<div class="k_emo" ${D(0.9)}>${esc(s.emoji)}</div>` : "";
-      if (s.kind === "hook" && !s.bgImage) return { cls: "ctr", extra: `${ribs()}<div class="k_glow"></div>`, html: `${kpill(s)}<h1 class="kh big${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.8)}${emo}` };
+      const emo = s.emoji && !s.art ? `<div class="k_emo" ${D(0.9)}>${esc(s.emoji)}</div>` : "";
+      if (s.kind === "hook" && !s.bgImage && !s.art) return { cls: "ctr", extra: `${ribs()}<div class="k_glow"></div>`, html: `${kpill(s)}<h1 class="kh big${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.8)}${emo}` };
+      if (!s.bgImage && s.art) {
+        const av = pick(0, 6);
+        const t = `<h1 class="kh ${av === 1 ? (longest0(s) > 13 ? "xl" : "big") : "xl"}${av === 2 ? " c" : ""}${longCls(s)}">${lines(s.title, 0.2)}</h1>`;
+        if (av === 0) return { cls: "artA", extra: ribs(), html: `${kpill(s)}${t}${kbody(s, 0.85)}${emo}<div class="k_card k_glass" ${D(1.0)}>${artHtml(s)}</div>` };
+        if (av === 1) return { cls: "artB", extra: ribs(), html: `${kpill(s)}${t}${kbody(s, 0.85)}${emo}<div class="k_circle">${artHtml(s)}</div>` };
+        if (av === 2) return { cls: "artC", extra: `${ribs()}<div class="k_glow"></div>`, html: `${kpill(s, 0, "c")}${t}${kbody(s, 0.85, "c")}${emo}${artHtml(s)}` };
+        if (av === 3) return { cls: "artD", extra: ribs(true), html: `${kpill(s)}${t}${kbody(s, 0.85)}${emo}<div class="k_full">${artHtml(s)}</div>` };
+        if (av === 4) return { cls: "artE", extra: "", html: `${kpill(s)}${t}${emo}<div class="k_tilt">${artHtml(s)}</div><div class="k_tape">Kasus nyata</div>` };
+        return { cls: "artF", extra: ribs(), html: `<div class="k_arttop">${artHtml(s)}</div>${kpill(s)}${t}${kbody(s, 0.85)}${emo}` };
+      }
       const v = s.bgImage ? 3 : pick(0, 3);
       const longest = Math.max(...s.title.replace(/\*/g, "").split("|").map((l) => l.length));
       if (v === 3) return { cls: "cvP", extra: `<div class="k_photo" style="background-image:url('${esc(s.bgImage ?? "")}')"></div><div class="k_scrim"></div>`, html: `${kpill(s)}<div style="flex:1"></div><h1 class="kh xl${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.8)}${emo}` };
       if (v === 0) return { cls: "cvA", extra: ribs(), html: `${kpill(s)}<h1 class="kh xl${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.85)}${emo}${s.mockup && s.mockup !== "none" ? `<div class="k_card k_glass" ${D(1.1)}>${kstage(s, reel, 1.4)}</div>` : ""}` };
       if (v === 1) return { cls: "cvB", extra: STAR.replace("<svg", `<svg style="right:72px;top:${reel ? 252 : 160}px;width:92px;height:92px"`), html: `${kpill(s)}<h1 class="kh ${longest > 13 ? "xl" : "big"}${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.85)}${emo}${kstage(s, reel, 1.1)}` };
       return { cls: "cvC", extra: `${ribs()}<div class="k_glow"></div>`, html: `${kpill(s, 0, "c")}<h1 class="kh xl c${longCls(s)}">${lines(s.title, 0.2)}</h1>${kbody(s, 0.85, "c")}${emo}${kstage(s, reel, 1.2)}` };
+    }
+    case "scene": {
+      const sv = pick(5, 3);
+      const items = (s.items ?? []).slice(0, 3).map((it, i) => `<span style="--d:${(1.2 + i * 0.25).toFixed(2)}s">${esc(it)}</span>`).join("");
+      const head = `${kpill(s)}<h1 class="kh m">${lines(s.title, 0.15)}</h1>`;
+      if (sv === 0) return { cls: "scnA", extra: ribs(true), html: `${head}${artHtml(s)}<div class="k_items">${items}</div>${kbody(s, 1.6)}` };
+      if (sv === 1) return { cls: "scnB", extra: ribs(), html: `${artHtml(s)}<div class="k_panel k_glass" ${D(0.6)}>${head}<div class="k_items" style="margin-top:14px">${items}</div></div>` };
+      return { cls: "scnC", extra: ribs(true), html: `${head}<div class="k_row">${artHtml(s)}<div class="k_items" style="flex-direction:column;align-items:flex-start">${items}</div></div>${kbody(s, 1.6)}` };
     }
     case "feature":
       return { cls: "cvA", extra: ribs(), html: `${kpill(s)}<h1 class="kh ${sizeCls(s)}">${lines(s.title, 0.15)}</h1>${kbody(s, 0.7)}<div class="k_card k_glass" ${D(0.9)}>${kstage(s, reel, 1.1)}</div>${ktape(s)}` };

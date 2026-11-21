@@ -227,6 +227,8 @@ function inner(s: Slide, deck: Deck, reel: boolean): string {
         <div class="kfade" style="margin-top:14px;animation:kfade .6s steps(6,end) both;animation-delay:calc(var(--s,0s) + 1.1s)"><div class="kbtn">${esc(deck.handle === "studiodo.id" ? "Coba gratis" : "Coba gratis")}${icon("arrow", 38, 3.2)}</div><div class="kurl">studiodo.id</div></div>`;
     case "badge":
       return "";
+    case "scene":
+      return ""; // illustration slides exist only in the "kaca" style
   }
 }
 

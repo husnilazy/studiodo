@@ -1,5 +1,6 @@
 import { FEATURES, PILLARS, type Feature, type Pillar } from "./features.js";
 import { CTA_KEYWORD, hookFor } from "./hooks.js";
+import { artFor, encodeArt } from "./scenes.js";
 import { THEMES, type Deck, type Slide, type Tone } from "./types.js";
 
 // Feature -> ready-to-post deck. Pure and deterministic (no AI call): the same feature always yields the same deck, so
@@ -13,6 +14,7 @@ const PILLAR_TAGS: Record<Pillar, string[]> = {
   "Kamera & cetak": ["#kamerafoto", "#printfoto", "#photostrip"],
   Operasional: ["#manajemenbooth", "#dashboardbisnis", "#sistemkasir"],
   "Bisnis & growth": ["#bisnisonline", "#umkmindonesia", "#startupindonesia"],
+  "Tips bisnis": ["#tipsbisnis", "#usahaphotobooth", "#photoboothevent"],
 };
 
 const plain = (s: string) => s.replace(/\|/g, " ").replace(/\*/g, "").replace(/\s+/g, " ").trim();
@@ -27,7 +29,7 @@ export function captionFor(f: Feature, variant = 0): string {
 🔗 Atau langsung ke studiodo.id (link di bio).`;
   const hook = plain(hookFor(f.id, f.hook));
   if (v === 0) return `${f.emoji} ${hook}\n\n${f.tagline}\n\n${ticks}\n\n${f.tip}\n\n${cta}`;
-  if (v === 1) return `Masih begini?\n${f.pain.map((p) => `❌ ${p}`).join("\n")}\n\nDengan STUDIODO:\n${ticks}\n\n${f.tip}\n\n${cta}`;
+  if (v === 1) return `Masih begini?\n${f.pain.map((p) => `❌ ${p}`).join("\n")}\n\n${f.kind === "tips" ? "Coba ini:" : "Dengan STUDIODO:"}\n${ticks}\n\n${f.tip}\n\n${cta}`;
   return `${f.tagline}\n\nCara kerjanya:\n${f.how.map((h, i) => `${i + 1}️⃣ ${h}`).join("\n")}\n\n${f.tip}\n\nSimpan postingan ini buat referensi 📌\n\n${cta}`;
 }
 
@@ -40,6 +42,7 @@ const COMPARE_TITLES = ["Dulu *ribet,*|sekarang beres", "Sebelum *vs*|sesudah", 
 
 export function featureDeck(f: Feature, format: "carousel" | "reel", variant = 0): Deck {
   const ci = featureIndex(f);
+  const tips = f.kind === "tips";
   const hook = hookFor(f.id, f.hook);
   const t0 = coverTone(ci);
   const tCompare: Tone = t0 === "dark" ? "light" : "dark";
@@ -48,15 +51,32 @@ export function featureDeck(f: Feature, format: "carousel" | "reel", variant = 0
   const stat = f.stat
     ? ({ kind: "stat", tone: tNote, eyebrow: "Fakta", title: `${f.name}`, stat: f.stat, note: f.tip } as Slide)
     : ({ kind: "note", tone: tNote, eyebrow: "Yang kamu dapat", title: "Hasilnya *begini*", items: f.gain, note: f.tip } as Slide);
-  const compare: Slide = { kind: "compare", tone: tCompare, eyebrow: "Dulu vs sekarang", title: COMPARE_TITLES[ci % COMPARE_TITLES.length], labelBefore: "Dulu", labelAfter: "Dengan STUDIODO", itemsBefore: f.pain, items: f.gain };
+  const compare: Slide = { kind: "compare", tone: tCompare, eyebrow: "Dulu vs sekarang", title: COMPARE_TITLES[ci % COMPARE_TITLES.length], labelBefore: tips ? "Yang sering terjadi" : "Dulu", labelAfter: tips ? "Lebih baik" : "Dengan STUDIODO", itemsBefore: f.pain, items: f.gain };
   const steps: Slide = { kind: "steps", tone: tSteps, eyebrow: "Cara kerja", title: "Semudah *ini*", items: f.how };
   const cta: Slide = { kind: "cta", tone: "dark", eyebrow: "Mulai sekarang", title: "Siap bikin booth yang *jalan sendiri?*", body: `Komen "${CTA_KEYWORD}" atau daftar gratis di studiodo.id.` };
+  // Illustration that matches the hook (the problem) and the one for the solution; features without art keep their UI mockup.
+  const coverArt = artFor(f.id, "cover"), fixArt = artFor(f.id, "fix");
+  const cover: Slide = { kind: "cover", tone: t0, eyebrow: f.pillar, title: hook, body: f.tagline, mockup: coverArt ? "none" : f.mockup, art: coverArt && encodeArt(coverArt) };
+  const fixTitles = ["Dengan STUDIODO,|*beres*", "Bayangkan *ini*|jadi kenyataan", "Tinggal *begini*"];
+  const fix: Slide = { kind: "scene", tone: tNote, eyebrow: tips ? "Cara yang lebih baik" : "Dengan STUDIODO", title: fixTitles[ci % fixTitles.length], items: f.gain, art: fixArt ? encodeArt(fixArt) : undefined, mockup: fixArt ? "none" : f.mockup };
+  const talk: Slide = { kind: "chat", tone: tCompare, eyebrow: "Obrolan pemilik booth", title: "Pernah *begini?*", chat: [
+    { from: "them", text: `😩 ${f.pain[0]}` }, { from: "them", text: f.pain[1] }, { from: "us", text: `${tips ? "Coba ini" : "Pakai STUDIODO"}: ${f.gain[0].toLowerCase()}` }, { from: "us", text: f.tagline },
+  ] };
+  const pains: Slide = { kind: "note", tone: tCompare, eyebrow: "Yang sering terjadi", title: "Ini *masalahnya*", items: f.pain, note: "Kalau kamu pernah mengalaminya, geser." };
+  const ui: Slide = { kind: "feature", tone: tNote, eyebrow: "Tampilan di aplikasi", title: `${plain(f.name)}`, body: f.tagline, mockup: f.mockup };
+  // Four story shapes so consecutive posts do not read like one template (picked by the feature's position in the catalog).
+  const shapes: Slide[][] = [
+    [cover, compare, steps, stat, cta],
+    [cover, talk, fix, steps, cta],
+    [cover, pains, ui, compare, cta],
+    [cover, fix, steps, cta],
+  ];
   const slides: Slide[] = format === "carousel"
-    ? [{ kind: "cover", tone: t0, eyebrow: f.pillar, title: hook, body: f.tagline, mockup: f.mockup }, compare, steps, stat, cta]
+    ? shapes[ci % shapes.length]
     : [
-        { kind: "hook", tone: t0, eyebrow: f.pillar, title: hook, emoji: f.emoji, mockup: "none", seconds: 3 },
-        { kind: "feature", tone: tNote, eyebrow: "Fitur", title: `${plain(f.name)}`, body: f.tagline, mockup: f.mockup, seconds: 4 },
-        { ...compare, seconds: 4.2 },
+        { ...cover, kind: "hook", emoji: f.emoji, seconds: 3.2 },
+        { ...fix, seconds: 4 },
+        { ...ui, seconds: 4 },
         { ...steps, seconds: 4.2 },
         { ...cta, seconds: 3.4 },
       ];

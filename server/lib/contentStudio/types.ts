@@ -1,7 +1,7 @@
 // Content Studio: Instagram decks (carousel / reel) rendered from HTML templates in STUDIODO's own visual language.
 
 export type Mockup = "none" | "dashboard" | "macbook" | "qris" | "gallery" | "booth" | "queue" | "hub" | "strip" | "qris-l" | "booth-l" | "gallery-l" | "print-l";
-export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note";
+export type SlideKind = "cover" | "feature" | "steps" | "stat" | "compare" | "cta" | "badge" | "hook" | "chat" | "note" | "scene";
 export type Tone = "light" | "dark" | "indigo" | "mint" | "peach";
 /** Visual language of a deck: "klasik" = the original glass/indigo look, "kontak" = Contact Sheet (paper, film strip, stop-motion). */
 export type DeckStyle = "klasik" | "kontak" | "kaca";
@@ -16,6 +16,7 @@ export type Slide = {
   title: string; // "|" = line break, *word* = accent colour
   body?: string;
   mockup?: Mockup;
+  art?: string; // illustration "scene:expr:hair:skin" (see scenes.ts / art.ts), used by the "kaca" style instead of a UI mockup
   note?: string; // glass pill under the mockup
   items?: string[]; // steps / compare "with" column
   itemsBefore?: string[]; // compare "without" column
@@ -41,6 +42,7 @@ export type Deck = {
   style?: DeckStyle; // default "klasik"
   theme?: ThemeName; // "kaca" only; default biru
   featureId?: string; // set when the deck was generated from the feature catalog
+  storyReel?: string; // id of a hand-timed story reel (storyReels.ts): the publisher renders that instead of the slides
   slides: Slide[];
   builtin?: boolean;
   updatedAt?: string;

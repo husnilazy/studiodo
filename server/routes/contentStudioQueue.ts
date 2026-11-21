@@ -7,6 +7,7 @@ import { checkConnection, clearConnection, discoverAccounts, loadConnection, mas
 import { createPost, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
 import { listDecks, saveDeck } from "../lib/contentStudio/render.js";
 import { approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
+import { STORY_REELS, storyReelById, storyReelDeck, storyReelDeckId } from "../lib/contentStudio/storyReels.js";
 import type { Deck } from "../lib/contentStudio/types.js";
 
 // Superadmin → Konten Instagram: feature generator, posting calendar, autopilot and the Instagram connection.
@@ -41,6 +42,27 @@ contentQueueRouter.post("/generate", async (req, res) => {
     }
   }
   res.json(decks);
+});
+
+// Story reels: hand-timed reels with voice over. GET lists them (+ whether already queued); POST /:id/queue puts one in the calendar as a draft.
+contentQueueRouter.get("/story-reels", async (_req, res) => {
+  const posts = await listPosts();
+  res.json(STORY_REELS.map((r) => ({
+    id: r.id, title: r.title, hook: r.hook, featureId: r.featureId, cta: r.cta, music: r.music, caption: r.caption, needsCheck: r.needsCheck ?? null,
+    queued: posts.filter((p) => p.deckId === storyReelDeckId(r.id) && p.status !== "skipped").map((p) => ({ id: p.id, status: p.status, scheduledAt: p.scheduledAt })),
+  })));
+});
+contentQueueRouter.post("/story-reels/:id/queue", async (req, res) => {
+  const r = storyReelById(cleanId(req.params.id));
+  if (!r) return res.status(404).json({ error: "Reel cerita tidak ditemukan" });
+  const at = new Date(String(req.body?.scheduledAt ?? new Date(Date.now() + 86_400_000).toISOString()));
+  if (Number.isNaN(at.getTime())) return res.status(400).json({ error: "Waktu posting tidak valid" });
+  try {
+    const deck = storyReelDeck(r);
+    await saveDeck(deck);
+    const s = await loadSettings();
+    res.json(await createPost(deck, at.toISOString(), s.defaultMode, "draft"));
+  } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Gagal mengantrekan" }); }
 });
 
 contentQueueRouter.get("/queue", async (_req, res) => {

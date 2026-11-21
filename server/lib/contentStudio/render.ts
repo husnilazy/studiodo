@@ -12,7 +12,7 @@ import { buildKacaReelDoc, buildKacaSlideDoc } from "./styleKaca.js";
 import { buildIconDoc, type FileKind } from "./appicon.js";
 import { buildTeaserDoc, sanitizeTeaser, TEASER_COVER_SEC, TEASER_DURATION_SEC, TEASER_H, TEASER_W, type TeaserOptions } from "./teaser.js";
 import { buildTriptychDoc, COVER_SEC, DURATION_SEC, geometry, sanitizeTriptych, TILE_H, TILE_W, type Seam, type TriptychOptions } from "./triptych.js";
-import { FORMATS, type Deck } from "./types.js";
+import { FORMATS, type Deck, type ThemeName } from "./types.js";
 
 // Content Studio storage lives next to the other local files: storage/content-studio/{assets,jobs,decks.json}.
 const root = () => path.join(process.cwd(), "storage", "content-studio");
@@ -523,3 +523,36 @@ export async function renderForPublish(deckIn: Deck, dir: string, carouselMedia:
 }
 
 export const contentRoot = root;
+
+/** Renders the hand-timed hero reel (heroReel.ts) to MP4, optionally muxing a voice-over track. `frameDir` also receives a few check frames. */
+export async function renderHeroReel(out: string, opts: { audio?: string; theme?: ThemeName; v1?: boolean; builder?: () => { html: string; durationSec: number }; stills?: { dir: string; at: number[] } } = {}): Promise<void> {
+  const { html, durationSec } = opts.builder ? opts.builder() : (opts.v1 ? await import("./heroReel.js") : await import("./heroReel2.js")).buildHeroReelDoc(opts.theme ?? "biru");
+  const frames = Math.ceil(durationSec * FPS);
+  const silent = opts.audio ? `${out}.silent.mp4` : out;
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1080, height: 1920, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: "load" });
+    await page.waitForFunction("window.__ready === true", { timeout: 20000 });
+    if (opts.stills) {
+      await mkdir(opts.stills.dir, { recursive: true });
+      for (const t of opts.stills.at) {
+        await page.evaluate(`window.__seek(${(t * 1000).toFixed(1)})`);
+        await writeFile(path.join(opts.stills.dir, `t${String(Math.round(t * 10)).padStart(3, "0")}.jpg`), (await page.screenshot({ type: "jpeg", quality: 85 })) as Uint8Array);
+      }
+    }
+    if (!opts.stills || !process.env.HERO_STILLS_ONLY) await recordFrames(page, silent, frames, (f) => { if (f % 60 === 0) console.log(`frame ${f}/${frames}`); });
+  } finally {
+    await browser.close();
+  }
+  if (opts.audio && !process.env.HERO_STILLS_ONLY) {
+    const ffmpeg = resolveFfmpeg();
+    if (!ffmpeg) throw new Error("ffmpeg tidak ditemukan");
+    await new Promise<void>((resolve, reject) => {
+      const p = spawn(ffmpeg, ["-y", "-i", silent, "-i", opts.audio!, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out], { stdio: "ignore" });
+      p.on("close", (c) => (c === 0 ? resolve() : reject(new Error(`mux exit ${c}`))));
+    });
+    await rm(silent, { force: true });
+  }
+}

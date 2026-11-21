@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { contentStudioApi, type CsPost, type CsQueue } from "@/lib/superadminApi";
+import { useEffect, useState } from "react";
+import { contentStudioApi, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
 import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, StatusChip, timeOf, Toggle, type Notice, NoticeLine } from "./shared";
 
 // Ringkasan: what needs attention, what posts next, and the Autopilot switch.
@@ -20,6 +20,12 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
   const tz = settings.tzOffsetMin;
   const [busy, setBusy] = useState(false);
   const [n, setN] = useState<Notice>(null);
+  const [reels, setReels] = useState<CsStoryReel[]>([]);
+  useEffect(() => { contentStudioApi.storyReels().then((r) => setReels(r ?? [])).catch(() => undefined); }, [posts.length]);
+  const queueReel = async (id: string) => {
+    setN(null);
+    try { await contentStudioApi.queueStoryReel(id); await onChange(); setN({ ok: true, text: "Reel masuk Kalender sebagai draf. Tinjau lalu setujui." }); } catch (e) { setN({ ok: false, text: errText(e) }); }
+  };
   const today = dayKey(new Date().toISOString(), tz);
   const count = (s: CsPost["status"]) => posts.filter((p) => p.status === s).length;
   const upcoming = posts.filter((p) => ["scheduled", "ready", "preparing", "posting"].includes(p.status)).slice(0, 5);
@@ -71,6 +77,19 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
         </div>
 
         <div className="grid content-start gap-4">
+          <Card title="Reel cerita" hint="Reel bersuara (VO + musik + efek). Masuk Kalender sebagai draf; dirender di PC saat mendekati jadwal.">
+            <ul className="grid gap-2">
+              {reels.map((r) => (
+                <li key={r.id} className="rounded-xl bg-canvas/60 px-3 py-2.5">
+                  <p className="text-sm font-semibold">{r.title}</p>
+                  <p className="text-xs text-fg/55">CTA: {r.cta} · musik: {r.music}</p>
+                  {r.needsCheck && <p className="mt-1 text-xs text-amber-700">Cek dulu: {r.needsCheck}</p>}
+                  {r.queued.length ? <p className="mt-1 text-xs text-emerald-700">Sudah di kalender ({r.queued[0].status})</p> : <button className={`${btnGhost} mt-2`} onClick={() => void queueReel(r.id)}>Antrekan sebagai draf</button>}
+                </li>
+              ))}
+              {reels.length === 0 && <p className="text-sm text-fg/50">Belum ada reel cerita.</p>}
+            </ul>
+          </Card>
           <Card title="Instagram">
             {connected ? (
               <p className="flex items-center gap-2 text-sm"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Tersambung. Post bermode Auto tayang otomatis.</p>

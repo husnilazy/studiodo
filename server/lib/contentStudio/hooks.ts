@@ -50,6 +50,18 @@ export const HOOKS: Record<string, string> = {
   "marketplace-frame": "Bikin frame dari nol|*tiap event?*",
   "direktori-booth": "Booth-mu bagus,|tapi *tidak ada yang tahu?*",
   "panduan-onboarding": "Mau buka bisnis booth,|*mulai dari mana?*",
+  // Tips bisnis
+  "tips-harga-paket": "Harga paket booth-mu|*asal tembak?*",
+  "tips-antrean-event": "Antrean event panjang?|*Ini caranya.*",
+  "tips-lokasi-booth": "Booth-mu di pojok|*yang tidak kelihatan?*",
+  "tips-frame-event": "Frame event wedding|*asal jadi?*",
+  "tips-cek-sebelum-event": "H-1 event,|*sudah cek ini?*",
+  "tips-konten-booth": "Ramai di lokasi,|*sepi di Instagram?*",
+  "tips-pelanggan-kembali": "Sekali datang,|*lalu hilang?*",
+  "tips-perawatan-printer": "Printer sering macet?|*Cek tiga hal ini.*",
+  "tips-pencahayaan": "Wajah customer gelap?|*Periksa cahayanya.*",
+  "tips-kesepakatan-event": "Job event tanpa|*kesepakatan tertulis?*",
+  "tips-mulai-bisnis": "Baru mau buka booth?|*Mulai dari sini.*",
 };
 
 /** The word people comment to ask for the trial link: one fixed keyword so replies are easy to find and answer. */

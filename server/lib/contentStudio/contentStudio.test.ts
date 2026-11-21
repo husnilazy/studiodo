@@ -161,12 +161,38 @@ describe("queue rules", () => {
   });
 });
 
+describe("illustrated decks", () => {
+  it("gives every feature a cover and a fix illustration that exist", async () => {
+    const { FEATURE_ART, decodeArt, encodeArt } = await import("./scenes.js");
+    const { SCENES } = await import("./art.js");
+    expect(Object.keys(FEATURE_ART).sort()).toEqual(FEATURES.map((f) => f.id).sort());
+    for (const pair of Object.values(FEATURE_ART)) for (const a of [pair.cover, pair.fix]) {
+      expect(SCENES).toContain(a.scene);
+      expect(decodeArt(encodeArt(a))).toEqual({ scene: a.scene, expr: a.expr, hair: a.hair, skin: a.skin });
+    }
+  });
+  it("uses at least three different story shapes and many compositions across the catalog", () => {
+    const shapes = new Set(FEATURES.map((f) => featureDeck(f, "carousel").slides.map((s) => s.kind).join(">")));
+    expect(shapes.size).toBeGreaterThanOrEqual(4);
+    const covers = new Set<string>();
+    for (const f of FEATURES) for (const format of ["carousel", "reel"] as const) {
+      const d = featureDeck(f, format);
+      const html = buildKacaSlideDoc({ ...d, format: "carousel" }, 0);
+      const m = /class="ks kc-\w+ (\w+)/.exec(html);
+      if (m) covers.add(m[1]);
+      expect(html).toContain("<svg");
+    }
+    expect(covers.size).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe("photo material", () => {
   it("puts photos on the cover, a backdrop on slide 2 and strips in the mockups", () => {
-    const d = withPhotos(featureDeck(FEATURES.find((f) => f.mockup === "strip")!, "carousel"), ["a.jpg", "b.jpg"], ["s.png"]);
+    const base = featureDeck(FEATURES.find((f) => f.mockup === "strip")!, "carousel");
+    const d = withPhotos({ ...base, slides: [...base.slides.slice(0, 2), { kind: "feature", title: "Hasil", mockup: "strip" }, ...base.slides.slice(2)] }, ["a.jpg", "b.jpg"], ["s.png"]);
     expect(d.slides[0].bgImage).toBe("asset:a.jpg");
     expect(d.slides[1].bgImage).toBe("asset:b.jpg");
-    expect(d.slides[0].images).toEqual(["asset:s.png", "asset:a.jpg", "asset:b.jpg"]);
+    expect(d.slides[2].images).toEqual(["asset:s.png", "asset:a.jpg", "asset:b.jpg"]);
     expect(buildKacaSlideDoc({ ...d, slides: [{ ...d.slides[0], bgImage: "data:image/png;base64,AAAA" }] }, 0)).toContain("cvP");
   });
   it("leaves a deck untouched without photos", () => {
@@ -279,5 +305,24 @@ describe("Instagram publishing", () => {
     expect(buildCaption("hi", ["#a", "#b"])).toBe("hi\n\n#a #b");
     expect(buildCaption("x".repeat(3000), []).length).toBe(2200);
     expect(buildCaption("hi", Array.from({ length: 40 }, (_, i) => `#t${i}`)).split(" ").length).toBeLessThanOrEqual(31);
+  });
+});
+
+describe("story reels", () => {
+  it("every registered reel points at a real feature and builds a one-slide reel deck", async () => {
+    const { STORY_REELS, storyReelDeck } = await import("./storyReels.js");
+    const { featureById } = await import("./features.js");
+    expect(STORY_REELS.length).toBeGreaterThan(0);
+    for (const r of STORY_REELS) {
+      expect(featureById(r.featureId), r.id).toBeTruthy();
+      const d = storyReelDeck(r);
+      expect(d.format).toBe("reel");
+      expect(d.storyReel).toBe(r.id);
+      expect(d.slides.length).toBe(1);
+    }
+  });
+  it("never uses the same call to action twice in a row", async () => {
+    const { STORY_REELS } = await import("./storyReels.js");
+    STORY_REELS.slice(1).forEach((r, i) => expect(r.cta, `${STORY_REELS[i].id} -> ${r.id}`).not.toBe(STORY_REELS[i].cta));
   });
 });

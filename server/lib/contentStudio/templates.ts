@@ -263,6 +263,8 @@ function mainFor(s: Slide, deck: Deck, reel: boolean): string {
     }
     case "badge":
       return ""; // rendered by slideHtml (no header/footer)
+    case "scene":
+      return ""; // illustration slides exist only in the "kaca" style
     case "cta":
       return `${eyebrow(s)}${heading(s, "xl")}${bodyP(s)}${stage(s, reel)}
         <div class="in ctawrap" ${D(0.6)}><div class="btn">${esc(deck.handle === "studiodo.id" ? "Coba gratis di studiodo.id" : "Coba gratis")}${icon("arrow", 34, 2.6)}</div><div class="ctaurl">studiodo.id</div></div>`;

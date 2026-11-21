@@ -825,6 +825,7 @@ export type CsTriptych = { seam: "panorama" | "grid"; logoStyle: "silver" | "squ
 
 export type CsTeaser = { logoStyle: "silver" | "squircle-white" | "squircle-dark"; comingTitle: string; beats: string; headline: string; features: string; cta: string };
 
+export type CsStoryReel = { id: string; title: string; hook: string; featureId: string; cta: string; music: string; caption: string; needsCheck: string | null; queued: { id: string; status: string; scheduledAt: string }[] };
 export const contentStudioApi = {
   features: () => request<{ pillars: string[]; features: CsFeature[] }>("/content-studio/features"),
   captionVariants: (featureId: string) => request<{ captions: string[] }>(`/content-studio/features/${encodeURIComponent(featureId)}/captions`),
@@ -848,6 +849,8 @@ export const contentStudioApi = {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
+  storyReels: () => request<CsStoryReel[]>("/content-studio/story-reels"),
+  queueStoryReel: (id: string, scheduledAt?: string) => request<CsPost>(`/content-studio/story-reels/${encodeURIComponent(id)}/queue`, { method: "POST", body: JSON.stringify({ scheduledAt }) }),
   autopilotRun: (weeks: number) => request<CsPost[]>("/content-studio/autopilot/run", { method: "POST", body: JSON.stringify({ weeks }) }),
   settings: () => request<CsSettings>("/content-studio/settings"),
   saveSettings: (s: CsSettings) => request<CsSettings>("/content-studio/settings", { method: "PUT", body: JSON.stringify(s) }),
