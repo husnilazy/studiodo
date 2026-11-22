@@ -103,7 +103,7 @@ const ART_SAFE = "translate(0 -230) translate(540 1700) scale(.85) translate(-54
 export type Sc = { i: number; bg: string; dark: boolean; art: string; html: string; from: string };
 function scene(o: Sc, starts: number[]): string {
   const a = starts[o.i], first = o.i === 0;
-  return `<section class="sc ${first ? "first" : ""}" style="--in:${s(a)};--bg:${o.bg};--ink:${o.dark ? "#ffffff" : INK};--fx:${o.from}">${svg(`<g transform="${ART_SAFE}">${o.art}</g>`)}${o.html}${logo(o.dark)}</section>`;
+  return `<section class="sc ${first ? "first" : ""}" style="--in:${s(a)};--bg:${o.bg};--ink:${o.dark ? "#ffffff" : INK};--fx:${o.from}">${svg(`<g transform="${ART_SAFE}">${o.art}</g>`)}${o.html}</section>`;
 }
 
 export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; durationSec: number } {
@@ -121,7 +121,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     + at(P({ x: 130, y: 1300, s: 0.6, expr: "khawatir", hair: "long", skin: 1, pose: "hold", color: 0, glasses: true, bag: CREAM }), 0.15) + at(P({ x: 270, y: 1315, s: 0.57, expr: "bingung", hair: "curly", skin: 2, pose: "chin", color: 2, jacket: "#2d2a55" }), 0.35)
     + at(P({ x: 410, y: 1325, s: 0.55, expr: "berpikir", hair: "short", skin: 3, pose: "down", color: 3 }), 0.55) + at(P({ x: 540, y: 1310, s: 0.58, expr: "khawatir", hair: "hijab", skin: 0, pose: "hold", color: 1, bag: "#ffd23f" }), 0.75),
     html:
-      tx("JAM 7 *MALAM.*", T.jam, null, "left:120px;top:310px;font-size:150px;color:#fff", "big")
+      tx("JAM 7 *MALAM.*", T.jam, null, "left:120px;top:325px;font-size:150px;color:#fff", "big")
       + `<div class="chip" style="--t:${s(T.jam + 0.3)};left:120px;top:700px;background:${YEL};color:${INK}">🕖 19:00</div>`
       + tx("Antrean booth-mu *mengular.*", T.antrean, null, "left:120px;top:740px;font-size:70px;color:#fff;max-width:840px", "mid") });
 
@@ -130,7 +130,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     blob(180, 520, 220, "#ffe27a") + blob(940, 1500, 260, "#ffc61a") + dot(900, 480, 40, ORG, 0.2) + plus(140, 1250, 34, INK, 0) + star(960, 880, 30, "#fff", 0.4)
     + at(phone(540, 1080, 2.0, scrPay(T.customer + 0.9)), T.customer - 0.1, null, "rise")
     + at(P({ x: 170, y: 1160, s: 0.7, expr: "senang", hair: "bun", skin: 0, pose: "hold", color: 2, bag: INK, jacket: "#7b5cff" }), T.customer + 0.2) + at(P({ x: 920, y: 1180, s: 0.68, expr: "khawatir", hair: "short", skin: 2, pose: "chin", color: 1 }), T.customer + 0.4)
-    + dot(300, 700, 26, ORG, 0.1) + dot(780, 760, 18, MINT, 0.5), html: tx("Customer udah *siap bayar...*", T.customer, null, "left:120px;top:310px;font-size:96px;max-width:840px", "big") });
+    + dot(300, 700, 26, ORG, 0.1) + dot(780, 760, 18, MINT, 0.5), html: tx("Customer udah *siap bayar...*", T.customer, null, "left:120px;top:325px;font-size:96px;max-width:840px", "big") });
 
   // 3 owner still scrolling
   const notif = (x: number, y: number, txt: string, c: string, t: number) => `<g class="an pop" style="--t:${s(t)}"><rect x="${x}" y="${y}" width="300" height="74" rx="22" style="fill:${c}"/><text x="${x + 24}" y="${y + 46}" font-family="InterK,sans-serif" font-weight="800" font-size="26" style="fill:${INK}">${txt}</text></g>`;
@@ -139,7 +139,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     + at(P({ x: 360, y: 1010, s: 0.98, expr: "bingung", hair: "hijab", skin: 1, pose: "chin", color: 2, jacket: "#14122b", glasses: false }), T.dan + 0.1)
     + at(phone(700, 1150, 1.5, scrMutasi(), 6), T.dan + 0.25, null, "rise")
     + notif(60, 760, "Transfer masuk?", "#fff", T.scroll + 0.4) + notif(700, 700, "Rp 25.000 siapa?", "#ffd0d8", T.scroll + 0.9) + notif(120, 1580, "Belum cocok…", "#fff", T.scroll + 1.4),
-    html: tx("dan *kamu?*", T.dan, T.scroll - 0.1, "left:120px;top:310px;font-size:170px", "big") + tx("Masih scroll *mutasi bank.*", T.scroll, null, "left:120px;top:310px;font-size:96px;max-width:840px", "big") });
+    html: tx("dan *kamu?*", T.dan, T.scroll - 0.1, "left:120px;top:325px;font-size:170px", "big") + tx("Masih scroll *mutasi bank.*", T.scroll, null, "left:120px;top:325px;font-size:96px;max-width:840px", "big") });
 
   // 4 satu per satu: three colour slams
   const slam = (word: string, t: number, o: number | null, bgc: string, fg: string, sub: string, ic: string) =>
@@ -154,7 +154,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     + at(booth(540, 1680, 1.3, [{ html: scQR(), t: 0, o: null }]), T.bayangin + 0.1, null, "rise")
     + at(`<g transform="translate(850 880) rotate(10)"><rect x="-110" y="-44" width="220" height="88" rx="24" style="fill:${YEL}"/><text x="0" y="14" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="44" style="fill:${INK}">QRIS</text></g>`, T.bayangin + 1.0)
     + at(P({ x: 930, y: 1230, s: 0.62, expr: "senang", hair: "curly", skin: 2, pose: "wave", color: 1, jacket: "#fff3e4", shoe: YEL }), T.bayangin + 1.6),
-    html: tx("QRIS muncul *langsung*|di layar kiosk.", T.bayangin, null, "left:120px;top:310px;font-size:104px;line-height:1;color:#fff", "big") });
+    html: tx("QRIS muncul *langsung*|di layar kiosk.", T.bayangin, null, "left:120px;top:325px;font-size:104px;line-height:1;color:#fff", "big") });
 
   // 6 scan - pay - session starts
   SC.push({ i: 5, bg: MINT, dark: false, from: "10% 50%", art:
@@ -163,7 +163,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     + at(P({ x: 230, y: 1190, s: 0.95, expr: "senang", hair: "bun", skin: 0, pose: "hold", color: 2, jacket: "#14122b", bag: "#fff3e4", glasses: true }), 15.3)
     + vis(`<polygon points="330,1280 640,1010 640,1150" style="fill:#fff;opacity:.5"/>`, T.scan, T.bayar)
     + at(`<g transform="translate(300 1420) rotate(-12)"><rect x="-130" y="-52" width="260" height="104" rx="18" style="fill:none;stroke:#e5384f;stroke-width:12"/><text x="0" y="22" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="64" style="fill:#e5384f">LUNAS</text></g>`, T.bayar + 0.1, null, "stamp"),
-    html: tx("SCAN.", T.scan, T.bayar - 0.02, "left:120px;top:310px;font-size:230px", "slam") + tx("BAYAR.", T.bayar, T.sesi - 0.02, "left:120px;top:310px;font-size:230px", "slam") + tx("Sesi foto *jalan sendiri!*", T.sesi, null, "left:120px;top:310px;font-size:112px;line-height:.98", "big") });
+    html: tx("SCAN.", T.scan, T.bayar - 0.02, "left:120px;top:325px;font-size:230px", "slam") + tx("BAYAR.", T.bayar, T.sesi - 0.02, "left:120px;top:325px;font-size:230px", "slam") + tx("Sesi foto *jalan sendiri!*", T.sesi, null, "left:120px;top:325px;font-size:112px;line-height:.98", "big") });
 
   // 7 inside the booth: 3-2-1 CEKREK
   const num = (n: string, t: number, o: number) => `<div class="tx slam" style="--t:${s(t)};--o:${s(o)};left:0;right:0;top:470px;text-align:center;font-size:520px;color:${INK}">${n}</div>`;
@@ -178,7 +178,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
   SC.push({ i: 7, bg: "#ffe9b8", dark: false, from: "50% 100%", art:
     blob(180, 1480, 250, "#ffd88a") + dot(960, 420, 60, ORG, 0.1) + plus(120, 560, 32, INK, 0.3) + star(980, 1000, 30, BLUE, 0.4)
     + printer(330, 1420, 1.3, T.strip) + at(phone(790, 1180, 1.6, scrGallery(), -6), 23.1, null, "rise") + at(star(900, 880, 44, ORG, 0), 23.6) + at(star(190, 1020, 36, BLUE, 0), 22.6),
-    html: tx("Strip foto *keluar...*", T.strip, 23.0, "left:120px;top:310px;font-size:112px", "big") + tx("hasil digital *nyampe ke HP*|lewat QR.", 23.1, null, "left:120px;top:310px;font-size:92px;line-height:1", "big") });
+    html: tx("Strip foto *keluar...*", T.strip, 23.0, "left:120px;top:325px;font-size:112px", "big") + tx("hasil digital *nyampe ke HP*|lewat QR.", 23.1, null, "left:120px;top:325px;font-size:92px;line-height:1", "big") });
 
   // 9 owner relaxes with the dashboard
   const stat = (x: number, y: number, label: string, val: string, t: number, color = INK) => `<g class="an pop" style="--t:${s(t)}"><rect x="${x}" y="${y}" width="210" height="140" rx="26" style="fill:#fff"/><text x="${x + 20}" y="${y + 42}" font-family="InterK,sans-serif" font-weight="700" font-size="21" style="fill:${INK};opacity:.55">${label}</text><text x="${x + 20}" y="${y + 100}" font-family="Bricolage,sans-serif" font-weight="800" font-size="46" style="fill:${color}">${val}</text></g>`;
@@ -194,7 +194,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
     + at(`<text x="790" y="1420" text-anchor="middle" font-family="InterK,sans-serif" font-weight="700" font-size="20" style="fill:${INK};opacity:.45">Contoh tampilan</text>`, T.duduk + 1.6)
     + at(`<g transform="translate(700 760) rotate(-5)"><rect x="-150" y="-30" width="300" height="60" rx="30" style="fill:${YEL}"/><text x="0" y="9" text-anchor="middle" font-family="InterK,sans-serif" font-weight="800" font-size="24" style="fill:${INK}">+ Rp 25.000 · QRIS</text></g>`, 28.0)
     + at(`<g transform="translate(760 1560)"><circle r="14" style="fill:${MINT}"/><text x="26" y="8" font-family="InterK,sans-serif" font-weight="800" font-size="22" style="fill:#fff">Booth online</text></g>`, 29.2),
-    html: tx("Dan *kamu?*", T.dan2, T.duduk - 0.1, "left:120px;top:310px;font-size:170px;color:#fff", "big") + tx("Duduk *manis,*|ngopi,", T.duduk, 28.8, "left:120px;top:310px;font-size:140px;line-height:.95;color:#fff", "big") + tx("ngecek *omzet*|dan status booth|dari *dashboard.*", 28.8, null, "left:120px;top:310px;font-size:100px;line-height:1;color:#fff", "big") });
+    html: tx("Dan *kamu?*", T.dan2, T.duduk - 0.1, "left:120px;top:325px;font-size:170px;color:#fff", "big") + tx("Duduk *manis,*|ngopi,", T.duduk, 28.8, "left:120px;top:325px;font-size:140px;line-height:.95;color:#fff", "big") + tx("ngecek *omzet*|dan status booth|dari *dashboard.*", 28.8, null, "left:120px;top:325px;font-size:100px;line-height:1;color:#fff", "big") });
 
   // 10 reveal
   SC.push({ i: 9, bg: "#ffffff", dark: false, from: "50% 50%", art:
@@ -208,7 +208,7 @@ export function buildHeroReelDoc(_theme: ThemeName = "biru"): { html: string; du
   SC.push({ i: 10, bg: BLUE, dark: true, from: "50% 100%", art:
     dot(120, 330, 90, "#3a64ff") + dot(960, 760, 130, "#3a64ff") + plus(940, 330, 34, YEL, 0) + star(120, 900, 30, YEL, 0.4)
     + at(P({ x: 190, y: 1364, s: 0.7, expr: "senang", hair: "hijab", skin: 1, pose: "wave", color: 2, jacket: "#fff3e4" }), 34.3) + at(P({ x: 540, y: 1340, s: 0.75, expr: "senang", hair: "curly", skin: 2, pose: "up", color: 1, shoe: YEL, glasses: true }), 34.45) + at(P({ x: 890, y: 1364, s: 0.7, expr: "senang", hair: "short", skin: 0, pose: "point", color: 3, bag: YEL }), 34.6),
-    html: tx("Mau coba *gratis?*", T.mau, null, "left:120px;top:310px;font-size:150px;line-height:.95;color:#fff", "big")
+    html: tx("Mau coba *gratis?*", T.mau, null, "left:120px;top:325px;font-size:150px;line-height:.95;color:#fff", "big")
       + `<div class="btn" style="--t:${s(T.komen)}">Coba gratis →</div><div class="kw" style="--t:${s(T.komen)}">Komen <span class="cw">${word}</span></div>` + tx("studiodo.id", T.nanti, null, "left:120px;top:960px;font-size:64px;color:#fff", "url") });
 
   void D;

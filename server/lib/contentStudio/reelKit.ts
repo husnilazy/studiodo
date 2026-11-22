@@ -67,7 +67,7 @@ export function defineReel(def: ReelDef) {
       const c = mk(T[i], len(i));
       const size = sd.size ?? autoSize(sd.text);
       const col = dark ? "color:#fff;" : "";
-      const pos = sd.align === "center" ? `left:120px;width:840px;text-align:center;top:${sd.top ?? 310}px;` : `left:120px;top:${sd.top ?? 310}px;`;
+      const pos = sd.align === "center" ? `left:120px;width:840px;text-align:center;top:${sd.top ?? 400}px;` : `left:120px;top:${sd.top ?? 400}px;`;
       let html = tx(sd.text, T[i], sd.text2 ? T[i] + sd.text2.at - 0.1 : null, `${pos}font-size:${size}px;line-height:1;${col}`, "big");
       if (sd.text2) html += tx(sd.text2.text, T[i] + sd.text2.at, null, `${pos}font-size:${sd.text2.size ?? autoSize(sd.text2.text)}px;line-height:1;${col}`, "big");
       const decor = blob(i % 2 ? 860 : 180, 520, 200, dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.35)") + dot(i % 2 ? 130 : 950, 1560, 80, dark ? "rgba(255,255,255,.1)" : "rgba(0,0,0,.07)", 0.2) + plus(i % 2 ? 940 : 110, 1560, 30, dark ? "#fff" : INK, 0.3);
@@ -85,7 +85,7 @@ export function defineReel(def: ReelDef) {
     const cc = mk(tc, dc);
     SC.push({ i: rc, bg: def.cta.bg ?? TEAL, dark: true, from: "50% 100%",
       art: blob(160, 520, 190, "rgba(255,255,255,.18)") + dot(940, 420, 60, YEL, 0.2) + plus(100, 1560, 30, "#fff", 0.4) + (def.cta.art ? def.cta.art(cc) : cc.person({ x: 300, y: 1700, s: 0.78, expr: "senang", hair: "short", skin: 2, pose: "wave", color: 1 }) + cc.person({ x: 800, y: 1700, s: 0.78, expr: "senang", hair: "hijab", skin: 1, pose: "up", color: 3 }, 0.6)),
-      html: tx(def.cta.text, tc, null, `left:120px;top:310px;font-size:${autoSize(def.cta.text)}px;line-height:1;color:#fff`, "big")
+      html: tx(def.cta.text, tc, null, `left:120px;top:400px;font-size:${autoSize(def.cta.text)}px;line-height:1;color:#fff`, "big")
         + (def.cta.btn ? `<div class="btn" style="--t:${s(btnT)};top:790px">${def.cta.btn}</div>` : "") + (def.cta.kw ? `<div class="kw" style="--t:${s(btnT)};top:790px">${def.cta.kw}</div>` : "")
         + tx("studiodo.id", btnT + 0.6, null, "left:120px;top:970px;font-size:56px;color:#fff", "url") });
     starts.push(tc - 0.1);

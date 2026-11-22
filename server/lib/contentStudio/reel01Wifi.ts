@@ -31,36 +31,36 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + bld(-40, 260, 560, "#35248f") + bld(250, 220, 400, "#2d1f7c") + bld(700, 400, 640, "#35248f") + `<rect x="0" y="1620" width="1080" height="300" style="fill:#1a0f4d"/>`
     + at(wifi(850, 560, 1.6, MINT, false, "glow"), T.jam + 0.3)
     + at(P({ x: 200, y: 1300, s: 0.6, expr: "senang", hair: "long", skin: 1, pose: "hold", color: 0, glasses: true }), 0.2) + at(P({ x: 340, y: 1310, s: 0.58, expr: "senang", hair: "short", skin: 2, pose: "hold", color: 2 }), 0.4),
-    html: tx("JAM 8 *MALAM.*", T.jam, null, "left:120px;top:310px;font-size:160px;color:#fff", "big") + `<div class="chip" style="--t:${s(T.jam + 0.3)};left:120px;top:700px;background:${YEL};color:${INK}">📍 Mal ramai</div>` });
+    html: tx("JAM 8 *MALAM.*", T.jam, null, "left:120px;top:325px;font-size:160px;color:#fff", "big") + `<div class="chip" style="--t:${s(T.jam + 0.3)};left:120px;top:700px;background:${YEL};color:${INK}">📍 Mal ramai</div>` });
   // 1 wifi dies
   SC.push({ i: 1, bg: RED, dark: true, from: "50% 50%", art:
     dot(150, 1500, 80, "#ff7a84") + dot(940, 440, 60, "#ff7a84", 0.4) + plus(920, 1500, 34, "#fff", 0.2)
     + at(wifi(540, 1050, 3.4, "#fff", true, "shake"), T.wifi + 0.1),
-    html: tx("WIFI MAL *MATI.*", T.wifi, null, "left:120px;top:310px;font-size:190px;color:#fff;max-width:840px", "slam") });
+    html: tx("WIFI MAL *MATI.*", T.wifi, null, "left:120px;top:325px;font-size:190px;color:#fff;max-width:840px", "slam") });
   // 2 the queue of twelve
   const queue = [0, 1, 2, 3, 4, 5].map((i) => at(P({ x: 130 + i * 164, y: 1330 - (i % 2) * 16, s: 0.5, expr: i % 2 ? "bingung" : "khawatir", hair: (["long", "curly", "short", "hijab", "bun", "short"] as const)[i], skin: i % 4, pose: i % 3 === 0 ? "hold" : "down", color: i, glasses: i === 2, bag: i === 4 ? INK : undefined }), T.antrean + 0.15 * i)).join("");
   SC.push({ i: 2, bg: CREAM, dark: false, from: "10% 90%", art:
     blob(840, 540, 240, "#ffe3c4") + plus(110, 560, 30, ORG, 0.2) + queue
     + at(`<g transform="translate(790 900)"><circle r="150" style="fill:${YEL}"/><text x="0" y="40" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="150" style="fill:${INK}">12</text><text x="0" y="104" text-anchor="middle" font-family="InterK,sans-serif" font-weight="800" font-size="34" style="fill:${INK}">orang antre</text></g>`, T.antrean + 0.6),
-    html: tx("Antrean *dua belas* orang...", T.antrean, null, "left:120px;top:310px;font-size:110px;max-width:840px", "big") });
+    html: tx("Antrean *dua belas* orang...", T.antrean, null, "left:120px;top:325px;font-size:110px;max-width:840px", "big") });
   // 3 booth shows ERROR
   SC.push({ i: 3, bg: INKBG, dark: true, from: "50% 20%", art:
     dot(130, 520, 100, "#2a2550") + dot(960, 1380, 140, "#2a2550") + plus(960, 560, 34, RED, 0.2)
     + at(booth(540, 1700, 1.3, [{ html: scErr(), t: 0, o: null }], undefined, RED), T.error + 0.1, null, "rise")
     + at(`<g transform="translate(190 900) rotate(-10)"><path d="M0 -70 L72 54 H-72Z" style="fill:${YEL}"/><text x="0" y="30" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="64" style="fill:${INK}">!</text></g>`, T.errorWord + 0.1),
-    html: tx("dan layar booth|cuma bilang: *ERROR.*", T.error, null, "left:120px;top:310px;font-size:112px;line-height:1;color:#fff", "big") });
+    html: tx("dan layar booth|cuma bilang: *ERROR.*", T.error, null, "left:120px;top:325px;font-size:112px;line-height:1;color:#fff", "big") });
   // 4 customers leave one by one
   const leaver = (x: number, i: number) => `<g class="lv" style="--t:${s(T.bubar + 0.5 + i * 0.55)};--dx:${i % 2 ? 900 : 700}px">${P({ x, y: 1230 - (i % 2) * 20, s: 0.78, expr: "khawatir", hair: (["curly", "long", "bun", "short"] as const)[i], skin: (i + 1) % 4, pose: "down", color: i + 1, bag: i === 1 ? INK : undefined })}</g>`;
   SC.push({ i: 4, bg: YEL, dark: false, from: "90% 50%", art:
     blob(200, 480, 210, "#ffe27a") + dot(940, 1560, 90, ORG, 0.2) + plus(120, 1500, 32, INK, 0.3)
     + [150, 380, 610, 840].map((x, i) => at(leaver(x, i), T.bubar + 0.1 + i * 0.1)).join(""),
-    html: tx("Customer *bubar*|satu per satu.", T.bubar, null, "left:120px;top:310px;font-size:128px;line-height:.98", "big") });
+    html: tx("Customer *bubar*|satu per satu.", T.bubar, null, "left:120px;top:325px;font-size:128px;line-height:.98", "big") });
   // 5 imagine: the booth keeps going
   SC.push({ i: 5, bg: MINT, dark: false, from: "50% 100%", art:
     blob(180, 500, 200, "#7af0bd") + dot(950, 1450, 100, "#7af0bd") + plus(960, 560, 32, INK, 0.1) + star(110, 1050, 28, "#fff", 0.4)
     + booth(790, 1680, 1.1, [{ html: scCam(), t: 0, o: null }])
     + at(P({ x: 190, y: 1160, s: 0.9, expr: "senang", hair: "curly", skin: 2, pose: "up", color: 2, shoe: BLUE }), T.bayangin + 0.4) + at(P({ x: 420, y: 1180, s: 0.85, expr: "senang", hair: "hijab", skin: 0, pose: "up", color: 1 }), T.bayangin + 0.6),
-    html: tx("Sekarang bayangin|*booth-mu* tetap jalan.", T.bayangin, null, "left:120px;top:310px;font-size:104px;line-height:1", "big") });
+    html: tx("Sekarang bayangin|*booth-mu* tetap jalan.", T.bayangin, null, "left:120px;top:325px;font-size:104px;line-height:1", "big") });
   // 6 saved on the booth, then synced to the cloud
   SC.push({ i: 6, bg: BLUE, dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a64ff") + dot(960, 1500, 150, "#3a64ff") + star(980, 700, 30, YEL, 0.3)
@@ -73,14 +73,14 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + vis(`<text x="850" y="1190" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="30" style="fill:${INK}">SERVER</text>`, T.simpan + 0.2, T.sync + 1.4)
     + vis(`<g transform="translate(850 1180)"><circle r="40" style="fill:${MINT}"/><path d="M-16 0 L-4 12 L18 -12" style="fill:none;stroke:#fff;stroke-width:9;stroke-linecap:round;stroke-linejoin:round"/></g>`, T.sync + 1.4, null)
     + fly(480, 1440, 330, -240, PINK, T.sync + 0.1) + fly(580, 1440, 230, -240, YEL, T.sync + 0.4) + fly(680, 1440, 130, -240, MINT, T.sync + 0.7),
-    html: tx("Sesi *tersimpan*|di booth,", T.simpan, T.sync - 0.1, "left:120px;top:310px;font-size:136px;line-height:.98;color:#fff", "big") + tx("lalu *tersinkron otomatis*|saat internet kembali.", T.sync, null, "left:120px;top:310px;font-size:90px;line-height:1;color:#fff", "big") });
+    html: tx("Sesi *tersimpan*|di booth,", T.simpan, T.sync - 0.1, "left:120px;top:325px;font-size:136px;line-height:.98;color:#fff", "big") + tx("lalu *tersinkron otomatis*|saat internet kembali.", T.sync, null, "left:120px;top:325px;font-size:90px;line-height:1;color:#fff", "big") });
   // 7 the punchline
   SC.push({ i: 7, bg: ORG, dark: true, from: "50% 50%", art:
     dot(140, 1450, 110, "#ff8a50") + dot(960, 520, 70, YEL, 0.3) + plus(930, 1480, 34, "#fff", 0.2)
     + at(wifi(850, 720, 1.2, "#fff", true), T.putus + 0.2)
     + at(P({ x: 260, y: 1060, s: 0.9, expr: "senang", hair: "bun", skin: 0, pose: "up", color: 2, jacket: INK }), T.sesiJalan + 0.2) + at(P({ x: 540, y: 1050, s: 0.95, expr: "senang", hair: "curly", skin: 2, pose: "up", color: 1, glasses: true }), T.sesiJalan + 0.35) + at(P({ x: 820, y: 1070, s: 0.9, expr: "senang", hair: "short", skin: 3, pose: "up", color: 3, bag: YEL }), T.sesiJalan)
     + chipSvg(540, 1760, 460, "Sesi ke-14 ✓", YEL, INK, T.sesiJalan + 0.9),
-    html: tx("Internet putus?", T.putus, T.sesiJalan, "left:120px;top:310px;font-size:150px;color:#fff", "big") + tx("Sesi *tetap jalan!*", T.sesiJalan, null, "left:120px;top:310px;font-size:150px;color:#fff;line-height:.95", "slam") });
+    html: tx("Internet putus?", T.putus, T.sesiJalan, "left:120px;top:325px;font-size:150px;color:#fff", "big") + tx("Sesi *tetap jalan!*", T.sesiJalan, null, "left:120px;top:325px;font-size:150px;color:#fff;line-height:.95", "slam") });
   // 8 reveal
   SC.push({ i: 8, bg: "#ffffff", dark: false, from: "50% 50%", art:
     [[160, 520, 40, ORG], [900, 600, 50, BLUE], [200, 1400, 60, YEL], [880, 1380, 44, PINK], [540, 440, 30, MINT]].map(([x, y, r, c], i) => at(dot(x as number, y as number, r as number, c as string, 0.1 * i), T.studiodo + 0.1 * i)).join(""),
@@ -90,7 +90,7 @@ export function buildReelDoc(): { html: string; durationSec: number } {
   SC.push({ i: 9, bg: BLUE, dark: true, from: "50% 100%", art:
     dot(120, 330, 90, "#3a64ff") + dot(960, 760, 130, "#3a64ff") + plus(940, 330, 34, YEL, 0) + star(120, 900, 30, YEL, 0.4)
     + at(P({ x: 190, y: 1364, s: 0.7, expr: "senang", hair: "long", skin: 1, pose: "wave", color: 2, jacket: "#fff3e4" }), T.mau + 0.3) + at(P({ x: 540, y: 1340, s: 0.75, expr: "senang", hair: "hijab", skin: 2, pose: "up", color: 1, shoe: YEL }), T.mau + 0.45) + at(P({ x: 890, y: 1364, s: 0.7, expr: "senang", hair: "short", skin: 0, pose: "point", color: 3, bag: YEL, glasses: true }), T.mau + 0.6),
-    html: tx("Mau coba *gratis?*", T.mau, null, "left:120px;top:310px;font-size:150px;line-height:.95;color:#fff", "big")
+    html: tx("Mau coba *gratis?*", T.mau, null, "left:120px;top:325px;font-size:150px;line-height:.95;color:#fff", "big")
       + `<div class="btn" style="--t:${s(T.komen)}">Coba gratis →</div><div class="kw" style="--t:${s(T.komen)}">Komen <span class="cw">${word}</span></div>` + tx("studiodo.id", T.komen + 1.6, null, "left:120px;top:960px;font-size:64px;color:#fff", "url") });
   void em; void CREAM;
   return assembleReel(SC, STARTS, DURATION, EXTRA_CSS);

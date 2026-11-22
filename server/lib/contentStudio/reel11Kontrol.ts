@@ -24,30 +24,30 @@ export function buildReelDoc(): { html: string; durationSec: number } {
   SC.push({ i: 0, bg: YEL, dark: false, from: "50% 50%", art:
     blob(180, 520, 200, "#ffe27a") + dot(950, 1560, 90, ORG, 0.2) + plus(110, 1560, 32, INK, 0.3)
     + sun(840, 1000, 80, T.sore + 0.4) + at(shot(430, 1400, 400, 500, PINK, 1, "Terang"), T.sore + 0.8),
-    html: tx("Sore, lampu venue *masih terang.*", T.sore, null, "left:120px;top:310px;font-size:104px;line-height:1", "big") });
+    html: tx("Sore, lampu venue *masih terang.*", T.sore, null, "left:120px;top:325px;font-size:104px;line-height:1", "big") });
   // 1 night: it gets dark
   SC.push({ i: 1, bg: "#14122b", dark: true, from: "50% 100%", art:
     dot(130, 560, 100, "#2a2550") + dot(960, 1500, 150, "#2a2550") + star(930, 760, 30, YEL, 0.2)
     + moon(820, 1000, 80, T.malam + 0.4) + at(shot(430, 1400, 400, 500, PINK, 0.55, "Mulai gelap"), T.malam + 0.7),
-    html: tx("Malam, *mendadak gelap.*", T.malam, null, "left:120px;top:310px;font-size:118px;line-height:1;color:#fff", "big") });
+    html: tx("Malam, *mendadak gelap.*", T.malam, null, "left:120px;top:325px;font-size:118px;line-height:1;color:#fff", "big") });
   // 2 the photo gets gloomy
   SC.push({ i: 2, bg: "#2a2550", dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a3470") + dot(960, 1560, 120, "#3a3470") + plus(930, 760, 34, YEL, 0.2)
     + at(shot(540, 1330, 480, 600, PINK, 0.8), T.suram + 0.4) + stamp(540, 1720, "TERLALU GELAP", RED, -4, T.suram + 1.2, 54),
-    html: tx("Foto di booth *jadi suram.*", T.suram, null, "left:120px;top:310px;font-size:112px;line-height:1;color:#fff", "big") });
+    html: tx("Foto di booth *jadi suram.*", T.suram, null, "left:120px;top:325px;font-size:112px;line-height:1;color:#fff", "big") });
   // 3 running to the booth, changing settings one by one
   SC.push({ i: 3, bg: PINK, dark: false, from: "90% 50%", art:
     blob(180, 520, 200, "#ffb3cf") + dot(950, 1560, 90, "#ff6fa5", 0.2) + plus(110, 1560, 32, INK, 0.1)
     + at(P({ x: 300, y: 1700, s: 0.8, expr: "khawatir", hair: "bun", skin: 2, pose: "up", color: 1 }), T.lari + 0.4)
     + at(camera(760, 1330, 1.0, "#2b2f6b", ORG), T.lari + 0.6)
     + chip(700, 1030, "ISO", "#fff", INK, T.lari + 2.0, 240, 40) + chip(820, 1130, "Shutter", "#fff", INK, T.lari + 2.8, 300, 40) + chip(700, 1560, "Aperture", "#fff", INK, T.lari + 3.6, 320, 40) + chip(840, 1660, "WB", "#fff", INK, T.lari + 4.2, 200, 40),
-    html: tx("Lari ke booth, buka kamera, *ubah satu per satu.*", T.lari, null, "left:120px;top:310px;font-size:84px;line-height:1", "big") });
+    html: tx("Lari ke booth, buka kamera, *ubah satu per satu.*", T.lari, null, "left:120px;top:325px;font-size:84px;line-height:1", "big") });
   // 4 STUDIODO: from the dashboard
   SC.push({ i: 4, bg: BLUE, dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a64ff") + dot(960, 1560, 150, "#3a64ff") + star(980, 700, 30, YEL, 0.3)
     + at(`<rect x="100" y="1020" width="880" height="620" rx="40" style="fill:#0f1330;opacity:.35"/>`, T.studiodo + 0.3)
     + sliders(150, 1130, 780, T.atur + 0.2, 1.1),
-    html: tx("Di STUDIODO, atur *dari dashboard.*", T.studiodo, T.atur - 0.1, "left:120px;top:310px;font-size:100px;line-height:1;color:#fff", "big") + tx("ISO, shutter, aperture, *white balance.*", T.atur, null, "left:120px;top:310px;font-size:96px;line-height:1;color:#fff", "big") });
+    html: tx("Di STUDIODO, atur *dari dashboard.*", T.studiodo, T.atur - 0.1, "left:120px;top:325px;font-size:100px;line-height:1;color:#fff", "big") + tx("ISO, shutter, aperture, *white balance.*", T.atur, null, "left:120px;top:325px;font-size:96px;line-height:1;color:#fff", "big") });
   // 5 without touching the camera
   SC.push({ i: 5, bg: MINT, dark: false, from: "10% 90%", art:
     blob(880, 480, 210, "#7af0bd") + dot(120, 1560, 90, "#7af0bd") + star(940, 1450, 30, INK, 0.3)
@@ -55,20 +55,20 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + at(`<path d="M400 1400 C470 1280 560 1250 640 1250" style="fill:none;stroke:${INK};stroke-width:10;stroke-linecap:round;stroke-dasharray:4 24"/>`, T.tanpa + 0.8)
     + at(laptop(760, 1250, 0.95, `<rect x="-150" y="-80" width="300" height="42" rx="21" style="fill:#e4e7f7"/><rect x="-150" y="-80" width="170" height="42" rx="21" style="fill:${ORG}"/><circle cx="20" cy="-59" r="20" style="fill:#fff;stroke:${ORG};stroke-width:6"/><rect x="-150" y="0" width="300" height="42" rx="21" style="fill:#e4e7f7"/><rect x="-150" y="0" width="110" height="42" rx="21" style="fill:${BLUE}"/><circle cx="-40" cy="21" r="20" style="fill:#fff;stroke:${BLUE};stroke-width:6"/>`), T.tanpa + 0.6)
     + chip(540, 1700, "Tanpa menyentuh kamera", "#fff", INK, T.tanpa + 1.4, 700, 40),
-    html: tx("Tanpa *menyentuh kameranya.*", T.tanpa, null, "left:120px;top:310px;font-size:112px;line-height:1", "big") });
+    html: tx("Tanpa *menyentuh kameranya.*", T.tanpa, null, "left:120px;top:325px;font-size:112px;line-height:1", "big") });
   // 6 live view alongside, saved
   SC.push({ i: 6, bg: LIL, dark: false, from: "90% 20%", art:
     blob(860, 500, 220, "#dccdff") + dot(130, 1560, 80, "#b49cff") + plus(930, 1560, 30, INK, 0.2) + star(120, 900, 28, INK, 0.3)
     + at(laptop(540, 1300, 1.5, ""), T.live + 0.3)
     + `<g transform="translate(540 1300) scale(1.5)">${vis(shot(0, 0, 160, 200, PINK, 0.5), T.live + 0.5, T.live + 2.6)}${vis(shot(0, 0, 160, 200, PINK, 1), T.live + 2.6, null)}</g>`
     + chip(540, 1700, "Live view", "#fff", INK, T.live + 0.9, 300, 40) + chip(780, 1560, "Tersimpan", GREEN, "#fff", T.simpan + 0.2, 320, 38) + at(tick(640, 1560, 26, "#fff"), T.simpan + 0.5),
-    html: tx("Live view di sebelahnya: *hasil langsung kelihatan.*", T.live, T.simpan - 0.1, "left:120px;top:310px;font-size:88px;line-height:1", "big") + tx("Setelan *tersimpan.*", T.simpan, null, "left:120px;top:310px;font-size:116px;line-height:1", "big") });
+    html: tx("Live view di sebelahnya: *hasil langsung kelihatan.*", T.live, T.simpan - 0.1, "left:120px;top:325px;font-size:88px;line-height:1", "big") + tx("Setelan *tersimpan.*", T.simpan, null, "left:120px;top:325px;font-size:116px;line-height:1", "big") });
   // 7 the settings are right, nobody ran anywhere
   SC.push({ i: 7, bg: CREAM, dark: false, from: "20% 50%", art:
     blob(860, 520, 220, "#ffe3c4") + dot(110, 1560, 70, "#ffd0d8") + plus(930, 1560, 30, ORG, 0.3)
     + at(shot(760, 1360, 360, 460, PINK, 1, "Pas"), T.pas + 0.4)
     + at(P({ x: 290, y: 1700, s: 0.8, expr: "lega", hair: "bun", skin: 2, pose: "up", color: 2, jacket: "#fff3e4" }), T.pas + 0.2),
-    html: tx("Setelan pas, *tanpa lari-lari.*", T.pas, null, "left:120px;top:310px;font-size:112px;line-height:1", "big") });
+    html: tx("Setelan pas, *tanpa lari-lari.*", T.pas, null, "left:120px;top:325px;font-size:112px;line-height:1", "big") });
   // 8 reveal
   SC.push({ i: 8, bg: "#ffffff", dark: false, from: "50% 50%", art:
     [[160, 520, 40, ORG], [900, 600, 50, BLUE], [200, 1400, 60, YEL], [880, 1380, 44, PINK], [540, 440, 30, MINT]].map(([x, y, r, c], i) => at(dot(x as number, y as number, r as number, c as string, 0.1 * i), T.brand + 0.1 * i)).join(""),
@@ -79,7 +79,7 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + at(P({ x: 250, y: 1700, s: 0.78, expr: "senang", hair: "short", skin: 2, pose: "wave", color: 1, jacket: "#fff3e4" }), T.coba + 0.4)
     + at(camera(600, 1560, 0.8, "#fff3e4", ORG), T.coba + 0.6)
     + at(P({ x: 880, y: 1700, s: 0.78, expr: "lega", hair: "hijab", skin: 1, pose: "up", color: 3 }), T.coba + 0.8),
-    html: tx("Atur kamera *dari dashboard.*", T.coba, null, "left:120px;top:310px;font-size:104px;line-height:1;color:#fff", "big")
+    html: tx("Atur kamera *dari dashboard.*", T.coba, null, "left:120px;top:325px;font-size:104px;line-height:1;color:#fff", "big")
       + `<div class="btn" style="--t:${s(T.tombol)};top:760px">Coba gratis →</div>` + tx("studiodo.id", T.tombol + 0.6, null, "left:120px;top:940px;font-size:56px;color:#fff", "url") });
   void booth; void scIdle; void star;
   return assembleReel(SC, STARTS, DURATION, CAM_CSS);

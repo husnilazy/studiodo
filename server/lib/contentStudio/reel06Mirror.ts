@@ -26,36 +26,36 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     blob(860, 520, 220, "#ffe3c4") + dot(110, 1500, 70, "#ffd0d8") + plus(930, 1500, 30, ORG, 0.3)
     + at(P({ x: 330, y: 1080, s: 0.95, expr: "senang", hair: "curly", skin: 2, pose: "up", color: 1 }), T.kaos + 0.2)
     + at(shirt(760, 1200, 1.2, "HALO", false), T.kaos + 0.5, null, "rise"),
-    html: tx("Customer berfoto pakai *baju bertulisan.*", T.kaos, null, "left:120px;top:310px;font-size:100px;line-height:1", "big") });
+    html: tx("Customer berfoto pakai *baju bertulisan.*", T.kaos, null, "left:120px;top:325px;font-size:100px;line-height:1", "big") });
   // 1 the live view is right
   SC.push({ i: 1, bg: MINT, dark: false, from: "20% 50%", art:
     blob(880, 480, 210, "#7af0bd") + dot(120, 1450, 90, "#7af0bd") + star(940, 1360, 30, INK, 0.3)
     + at(screenCard(540, 1150, 1.45, "HALO"), T.layar + 0.3, null, "rise") + at(tick(860, 900, 56), T.layar + 1.2),
-    html: tx("Di layar, tulisannya *benar.*", T.layar, null, "left:120px;top:310px;font-size:116px;line-height:.98", "big") });
+    html: tx("Di layar, tulisannya *benar.*", T.layar, null, "left:120px;top:325px;font-size:116px;line-height:.98", "big") });
   // 2 the print is reversed
   SC.push({ i: 2, bg: PINK, dark: false, from: "90% 50%", art:
     blob(180, 520, 200, "#ffb3cf") + dot(950, 1480, 90, "#ff6fa5", 0.2) + plus(110, 1500, 32, INK, 0.1)
     + at(strip(540, 1170, 1.15, "HALO", true), T.cetak + 0.3, null, "rise") + at(cross(800, 900, 56), T.kebalik + 0.3),
-    html: tx("Di hasil cetak... *kebalik.*", T.cetak, null, "left:120px;top:310px;font-size:124px;line-height:.98", "big") });
+    html: tx("Di hasil cetak... *kebalik.*", T.cetak, null, "left:120px;top:325px;font-size:124px;line-height:.98", "big") });
   // 3 confusion, the strip is thrown away
   SC.push({ i: 3, bg: "#14122b", dark: true, from: "50% 100%", art:
     dot(130, 560, 100, "#2a2550") + dot(960, 1400, 150, "#2a2550") + plus(930, 560, 34, YEL, 0.2)
     + at(P({ x: 250, y: 1090, s: 0.9, expr: "bingung", hair: "curly", skin: 2, pose: "chin", color: 1 }), T.bingung + 0.2)
     + at(P({ x: 560, y: 1110, s: 0.85, expr: "khawatir", hair: "hijab", skin: 1, pose: "hold", color: 2, jacket: "#fff3e4" }), T.bingung + 0.5)
     + at(`<g transform="translate(850 1330)"><path d="M-80 -90 H80 L66 110 H-66Z" style="fill:#3a3f7a"/><rect x="-96" y="-120" width="192" height="30" rx="10" style="fill:#4a50a0"/><g class="drop" style="--t:${s(T.bingung + 2.8)}"><rect x="-26" y="-250" width="52" height="150" rx="6" style="fill:#fff"/><rect x="-18" y="-240" width="36" height="34" rx="4" style="fill:${PINK}"/></g></g>`, T.bingung + 0.8),
-    html: tx("Customer bingung, kamu bingung, *strip dibuang.*", T.bingung, null, "left:120px;top:310px;font-size:92px;line-height:1;color:#fff", "big") });
+    html: tx("Customer bingung, kamu bingung, *strip dibuang.*", T.bingung, null, "left:120px;top:325px;font-size:92px;line-height:1;color:#fff", "big") });
   // 4 imagine: the Cermin / Asli switch
   SC.push({ i: 4, bg: BLUE, dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a64ff") + dot(960, 1500, 150, "#3a64ff") + star(980, 700, 30, YEL, 0.3)
     + at(toggle(540, 1100, "Cermin", "Asli", false), T.bayangin + 1.0, null, "rise")
     + vis(toggle(540, 1100, "Cermin", "Asli", true), T.bayangin + 3.0, null) + at(`<g transform="translate(540 1280)"><text x="0" y="0" text-anchor="middle" font-family="InterK,sans-serif" font-weight="800" font-size="34" style="fill:#fff;opacity:.8">Pilih di editor foto</text></g>`, T.bayangin + 1.6),
-    html: tx("Sekarang bayangin ada tombol *cermin atau asli.*", T.bayangin, null, "left:120px;top:310px;font-size:100px;line-height:1;color:#fff", "big") });
+    html: tx("Sekarang bayangin ada tombol *cermin atau asli.*", T.bayangin, null, "left:120px;top:325px;font-size:100px;line-height:1;color:#fff", "big") });
   // 5 the print now matches the screen
   SC.push({ i: 5, bg: YEL, dark: false, from: "10% 50%", art:
     blob(180, 520, 200, "#ffe27a") + dot(950, 1480, 90, ORG, 0.2) + plus(110, 1500, 32, INK, 0.3)
     + at(screenCard(330, 1180, 0.95, "HALO"), T.hasil + 0.4, null, "rise") + at(strip(790, 1180, 0.8, "HALO", false), T.hasil + 1.0, null, "rise")
     + at(`<text x="540" y="1190" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="90" style="fill:${INK}">=</text>`, T.hasil + 1.6) + at(tick(540, 940, 56), T.hasil + 2.0),
-    html: tx("Hasil cetak *persis* tampilan layar.", T.hasil, null, "left:120px;top:310px;font-size:112px;line-height:.98", "big") });
+    html: tx("Hasil cetak *persis* tampilan layar.", T.hasil, null, "left:120px;top:325px;font-size:112px;line-height:.98", "big") });
   // 6 reveal
   SC.push({ i: 6, bg: "#ffffff", dark: false, from: "50% 50%", art:
     [[160, 520, 40, ORG], [900, 600, 50, BLUE], [200, 1400, 60, YEL], [880, 1380, 44, PINK], [540, 440, 30, MINT]].map(([x, y, r, c], i) => at(dot(x as number, y as number, r as number, c as string, 0.1 * i), T.studiodo + 0.1 * i)).join(""),
@@ -66,7 +66,7 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + at(P({ x: 250, y: 1300, s: 0.78, expr: "kaget", hair: "long", skin: 1, pose: "point", color: 2, jacket: INK }), T.tag + 0.4)
     + at(P({ x: 560, y: 1320, s: 0.75, expr: "senang", hair: "short", skin: 2, pose: "wave", color: 1 }), T.tag + 0.6)
     + at(P({ x: 850, y: 1300, s: 0.78, expr: "bingung", hair: "bun", skin: 0, pose: "chin", color: 3, glasses: true }), T.tag + 0.8),
-    html: tx("Tag temanmu yang fotonya *pernah kebalik!*", T.tag, null, "left:120px;top:310px;font-size:104px;line-height:1", "big")
+    html: tx("Tag temanmu yang fotonya *pernah kebalik!*", T.tag, null, "left:120px;top:325px;font-size:104px;line-height:1", "big")
       + `<div class="btn" style="--t:${s(T.tombol)};top:760px;background:${INK};color:#fff">Tag di komentar ↓</div>` + tx("studiodo.id", T.tombol + 0.6, null, "left:120px;top:940px;font-size:56px", "url") });
   void CREAM; void RED; void chip; void GREEN;
   return assembleReel(SC, STARTS, DURATION, `.drop{transform:translateY(-120px);animation:drp 1s ease-in forwards;animation-delay:var(--t)}@keyframes drp{to{transform:translateY(60px);opacity:.0}}`);
