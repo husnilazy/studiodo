@@ -185,6 +185,17 @@ const DEFS: ReelDef[] = [
       { text: "Masuk pakai *Google,* satu klik!", bg: BLUE, dark: true, art: (c) => c.A(K.chip(540, 1260, "Masuk dengan Google", "#fff", INK, 52, 620), 0.3) + c.A(K.txt(540, 1480, "1 klik", 110, YEL), 1.0) },
       { text: "Atau *tautan email,* sekali klik.", bg: YEL, art: (c) => c.A(K.mail(540, 1260, 1.5), 0.3) + c.A(K.chip(540, 1540, "Tautan masuk", ORG, "#fff", 46), 1.0) },
     ] },
+  // 21 ------------------------------------------------------------------------------------------------ perkenalan (intro for new followers)
+  { id: "kenalan", music: "house", voice: "siti", brand: "Satu platform untuk semua booth-mu.",
+    cta: { text: "*Follow* buat tips usaha photobooth!", btn: "Link di bio →" },
+    scenes: [
+      { text: "Punya *photobooth,* atau baru mau mulai?", bg: YEL, art: (c) => c.A(K.photo(540, 1250, 520, 330, PINK, "Photobooth", true), 0.3) + who(c, { x: 200, expr: "bingung", pose: "chin", hair: "bun", s: 0.6 }, 0.8) },
+      { text: "Aplikasi, bayar, hasil foto. *Semuanya terpisah.*", bg: "#14122b", dark: true, size: 84, art: (c) => c.A(K.chip(320, 1180, "Aplikasi", BLUE, "#fff", 46), 0.3) + c.A(K.chip(760, 1280, "Pembayaran", ORG, "#fff", 46), 0.8) + c.A(K.chip(330, 1420, "Hasil foto", TEAL, "#fff", 46), 1.3) + c.A(K.chip(740, 1540, "Laporan", PINK, INK, 46), 1.8) },
+      { text: "Kenalin, *STUDIODO.* Semuanya satu platform.", bg: BLUE, dark: true, size: 92, art: (c) => c.A(K.card(540, 1230, 820, 240, "STUDIODO", "Satu platform photobooth", INK, ORG), 0.3) + c.A(K.chip(540, 1500, "Aplikasi · Bayar · Hasil · Dashboard", MINT, INK, 34), 1.0) },
+      { text: "Bayar *QRIS* di kiosk, sesi foto langsung jalan.", bg: MINT, size: 90, art: (c) => c.A(K.qr(540, 1230, 1.5), 0.3) + c.A(K.arrow(540, 1420, 540, 1520), 1.0) + c.A(K.chip(540, 1600, "Sesi langsung jalan", INK, "#fff", 44), 1.4) },
+      { text: "Hasil ke HP lewat *QR.* Pantau dari *dashboard.*", bg: CREAM, size: 88, art: (c) => c.A(laptop(400, 1280, 1.2, K.txt(0, -40, "Dashboard", 40, INK) + K.txt(0, 40, "Contoh tampilan", 22, "#8a8fb3", 700, "middle", "Inter")), 0.3) + c.A(K.qr(830, 1330, 0.9), 0.9) },
+      { text: "Mau mulai? *Coba dulu,* baru putuskan.", bg: LIL, art: (c) => c.A(K.chip(540, 1250, "Coba dulu", INK, "#fff", 84), 0.3) + c.A(K.arrow(540, 1370, 540, 1470), 1.0) + c.A(K.chip(540, 1570, "Baru putuskan", ORG, "#fff", 56), 1.4) },
+    ] },
   // 20 ----------------------------------------------------------------------------------------------- trial-lisensi + panduan-onboarding
   { id: "trial", music: "techno", voice: "maya", brand: "Pemula pun bisa mulai sendiri.",
     cta: { text: "Daftar *sekarang!*", btn: "Link di bio →" },

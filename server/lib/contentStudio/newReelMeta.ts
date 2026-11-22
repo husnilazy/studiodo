@@ -3,6 +3,8 @@ import type { StoryReel } from "./storyReels.js";
 
 // Registry entries for the reelKit story reels (scenes in newReels.ts, scripts in reelScripts.ts, voice over + timing in server/assets/story-reels).
 export const NEW_STORY_REELS: StoryReel[] = [
+  { id: "kenalan", featureId: "trial-lisensi", title: "Kenalan dengan STUDIODO", hook: "Punya photobooth, atau baru mau mulai?", cta: "link", music: "house", coverAt: 1.6,
+    caption: "Punya photobooth, atau baru mau mulai usaha photobooth? 📸\n\nKenalan sama STUDIODO: aplikasi photobooth lengkap dalam satu platform. Customer bayar QRIS di layar kiosk, sesi foto langsung jalan, hasilnya sampai ke HP lewat QR, dan kamu pantau semuanya dari dashboard.\n\nMau mulai? Coba dulu, baru putuskan.\n🔗 Info lengkap di studiodo.id (link di bio).", load: () => loadNew("kenalan") },
   { id: "rekening", featureId: "pilih-penerima-qris", title: "Uang QRIS masuk ke mana?", hook: "Uang QRIS masuk ke mana, hayo?", cta: "simpan", music: "house", coverAt: 1.6,
     caption: "Satu rekening buat semua, ribet pas bagi hasil. 🏦 (Ilustrasi.)\n\nDi STUDIODO kamu yang pilih penerima uang QRIS: lewat akun STUDIODO atau lewat gateway milikmu, dengan penjelasan di tiap pilihan. Saldo dan riwayat terpantau.\n\n📌 Simpan biar tidak lupa cek setting pembayaranmu.", needsCheck: "Cek ulang alur DOKU/Xendit di akun live sebelum posting.", load: () => loadNew("rekening") },
   { id: "saldo", featureId: "saldo-penarikan", title: "Saldo booth: tarik kapan perlu", hook: "Berapa saldo booth-mu sekarang?", cta: "tag", music: "lofi", coverAt: 1.6,
