@@ -3,8 +3,9 @@ import { camera, laptop, shot, slider, webcam } from "./reelCam.js";
 import { defineReel, K, type Ctx, type ReelDef } from "./reelKit.js";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { FigEd } from "./art4.js";
 
-// Real kiosk screens (captured with scripts/capture-kiosk.ts from the kiosk preview mode, stored in server/assets/ui) shown inside a phone-like frame.
+// Real kiosk screens (captured with scripts/capture-kiosk.ts from the kiosk preview mode, stored in server/assets/ui) shown inside a dark device frame (landscape, dark mode).
 const UI_CACHE = new Map<string, string>();
 const uiImage = (name: string) => {
   let v = UI_CACHE.get(name);
@@ -12,15 +13,12 @@ const uiImage = (name: string) => {
   return v;
 };
 let screenId = 0;
+const Z = 1.12; // zoom into the middle of the screen so the UI text stays readable on a phone
+/** A landscape (16:9) kiosk screen in a dark device frame. Art coordinates: x=540,y=1188,w=880 lands in the middle of the TikTok/Reels safe area. */
 const screen = (x: number, y: number, w: number, name: string, rot = 0) => {
-  const h = Math.round((w * 16) / 9), id = `scr${++screenId}`;
-  return `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="${-w / 2 - 14}" y="${-h / 2 - 14}" width="${w + 28}" height="${h + 28}" rx="46" style="fill:#14122b"/><clipPath id="${id}"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="32"/></clipPath><image href="${uiImage(name)}" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/></g>`;
+  const h = Math.round((w * 9) / 16), id = `scr${++screenId}`;
+  return `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="${-w / 2 - 16}" y="${-h / 2 - 16}" width="${w + 32}" height="${h + 32}" rx="40" style="fill:#14122b"/><clipPath id="${id}"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="26"/></clipPath><image href="${uiImage(name)}" x="${(-w * Z) / 2}" y="${(-h * Z) / 2}" width="${w * Z}" height="${h * Z}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/></g>`;
 };
-
-import type { FigEd } from "./art4.js";
-
-// The 20 "feature" story reels (reelKit). Each scene = one voice-over sentence, text is the on-screen line, art is the illustration for that beat.
-// Order of scenes must match the sentences in reelScripts.ts (the last two sentences are the brand line and the CTA, handled by the kit).
 
 const H = ["short", "long", "bun", "hijab", "curly"] as const;
 type PS = Partial<FigEd> & { x: number };
@@ -205,12 +203,12 @@ const DEFS: ReelDef[] = [
   { id: "alur", music: "house", voice: "maya", brand: "Dari bayar sampai hasil, satu alur.",
     cta: { text: "Mau lihat *langsung?* Coba gratis!", btn: "Link di bio →" },
     scenes: [
-      { text: "Ini *kiosk* STUDIODO yang sebenarnya.", bg: YEL, art: (c) => c.A(screen(540, 1440, 600, "kiosk-paket"), 0.3) + c.A(K.chip(840, 1060, "Bukan ilustrasi", ORG, "#fff", 40), 1.2) },
-      { text: "Pilih *paket,* harga langsung kelihatan.", bg: LIL, art: (c) => c.A(screen(540, 1440, 600, "kiosk-paket", -2), 0.2) },
-      { text: "Pilih tampilan *kamera:* cermin atau normal.", bg: MINT, art: (c) => c.A(screen(540, 1440, 600, "kiosk-kamera", 2), 0.2) },
-      { text: "Bayar pakai *QRIS,* atau voucher.", bg: PINK, art: (c) => c.A(screen(540, 1440, 600, "kiosk-bayar", -2), 0.2) },
-      { text: "Foto bisa *diedit* langsung di kiosk.", bg: CREAM, art: (c) => c.A(screen(540, 1440, 600, "kiosk-edit", 2), 0.2) },
-      { text: "Hasil lewat *QR.* Scan, lalu unduh.", bg: BLUE, dark: true, art: (c) => c.A(screen(540, 1440, 600, "kiosk-hasil", -2), 0.2) },
+      { text: "Ini *kiosk* STUDIODO yang sebenarnya.", bg: "#14122b", dark: true, art: (c) => c.A(screen(540, 1188, 880, "kiosk-sesi"), 0.3) + c.A(K.chip(540, 1500, "Bukan ilustrasi", ORG, "#fff", 42), 1.2) },
+      { text: "Pilih *paket,* harga langsung kelihatan.", bg: LIL, art: (c) => c.A(screen(540, 1188, 880, "kiosk-paket", -1), 0.2) + c.A(K.chip(540, 1500, "1 · Pilih paket", INK, "#fff", 42), 0.8) },
+      { text: "Pilih tampilan *kamera:* cermin atau normal.", bg: MINT, art: (c) => c.A(screen(540, 1188, 880, "kiosk-kamera", 1), 0.2) + c.A(K.chip(540, 1500, "2 · Tampilan kamera", INK, "#fff", 42), 0.8) },
+      { text: "Bayar pakai *QRIS,* atau voucher.", bg: PINK, art: (c) => c.A(screen(540, 1188, 880, "kiosk-bayar", -1), 0.2) + c.A(K.chip(540, 1500, "3 · Bayar", INK, "#fff", 42), 0.8) },
+      { text: "Foto bisa *diedit* langsung di kiosk.", bg: CREAM, art: (c) => c.A(screen(540, 1188, 880, "kiosk-edit", 1), 0.2) + c.A(K.chip(540, 1500, "4 · Edit foto", INK, "#fff", 42), 0.8) },
+      { text: "Hasil lewat *QR.* Scan, lalu unduh.", bg: BLUE, dark: true, art: (c) => c.A(screen(540, 1188, 880, "kiosk-hasil", -1), 0.2) + c.A(K.chip(540, 1500, "5 · Hasil QR", "#fff", INK, 42), 0.8) },
     ] },
   // 22-25 ------------------------------------------------------------------------------------------- tips for the TikTok starter pack
   { id: "kesalahan", music: "techno", voice: "finn", brand: "Mulai dari yang benar.",
