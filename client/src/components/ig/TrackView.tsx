@@ -22,7 +22,7 @@ function IgCell({ p }: { p: CsPost }) {
 
 // Starter pack for a brand-new TikTok account: relatable-problem reels first (strong hook in the first second, nothing that needs a live-app check),
 // then the pitch. All of them already have the voice over, so it is download -> upload by hand -> tick.
-const TIKTOK_ORDER = ["kenalan", "kesalahan", "urutan", "galeri", "harga", "frame", "hari", "cetak", "pelanggan", "trial"];
+const TIKTOK_ORDER = ["kenalan", "kesalahan", "urutan", "alur", "galeri", "harga", "frame", "hari", "cetak", "trial"];
 const TIKTOK_TAGS = "#photobooth #usahaphotobooth #bisnisphotobooth #fotoboothindonesia #studiodo";
 const tiktokCaption = (r: CsStoryReel) => `${r.hook}
 

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { contentStudioApi, type CsMonthResult, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
 import { PreviewModal, type PreviewTarget } from "./PreviewModal";
-import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, StatusChip, timeOf, Toggle, type Notice, NoticeLine } from "./shared";
+import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, inputClass, StatusChip, timeOf, Toggle, type Notice, NoticeLine } from "./shared";
 
 // Ringkasan: what needs attention, what posts next, and the Autopilot switch.
+
+// Newest story reels, pinned to the top of the list (newest first) and badged "Baru".
+const NEWEST_REELS = ["alur", "hari", "harga", "urutan", "kesalahan", "kenalan"];
 
 export type Tab = "tinjau" | "bahan" | "ringkasan" | "generator" | "kalender" | "pantau" | "studio" | "aset" | "pengaturan";
 
@@ -22,6 +25,12 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
   const [busy, setBusy] = useState(false);
   const [n, setN] = useState<Notice>(null);
   const [reels, setReels] = useState<CsStoryReel[]>([]);
+  const [rq, setRq] = useState("");
+  const [rf, setRf] = useState<"semua" | "baru" | "belum">("semua");
+  const shownReels = reels
+    .filter((r) => (rf === "baru" ? NEWEST_REELS.includes(r.id) : rf === "belum" ? r.queued.length === 0 : true))
+    .filter((r) => !rq.trim() || `${r.title} ${r.hook} ${r.id}`.toLowerCase().includes(rq.trim().toLowerCase()))
+    .sort((a, b) => { const ia = NEWEST_REELS.indexOf(a.id), ib = NEWEST_REELS.indexOf(b.id); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); }); // stable: the rest keep their order
   useEffect(() => { contentStudioApi.storyReels().then((r) => setReels(r ?? [])).catch(() => undefined); }, [posts.length]);
   const queueReel = async (id: string) => {
     setN(null);
@@ -87,16 +96,23 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
             )}
           </Card>
           <Card title={`Reel cerita (${reels.length})`} hint="Reel bersuara (VO + musik + efek). Masuk Kalender sebagai draf; dirender di PC saat mendekati jadwal.">
-            <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
-              {reels.map((r) => (
+            <div className="mb-3 grid gap-2">
+              <input className={`${inputClass} !mt-0`} placeholder="Cari reel (judul atau hook)…" value={rq} onChange={(e) => setRq(e.target.value)} />
+              <div className="flex flex-wrap gap-1.5">
+                {([["semua", "Semua"], ["baru", "Baru"], ["belum", "Belum di kalender"]] as const).map(([v, l]) => <button key={v} onClick={() => setRf(v)} className={`rounded-full px-3 py-1 text-[11px] font-bold ${rf === v ? "bg-fg text-canvas" : "bg-fg/10 text-fg/60 hover:bg-fg/20"}`}>{l}</button>)}
+                <span className="self-center text-[11px] text-fg/45">{shownReels.length} dari {reels.length}</span>
+              </div>
+            </div>
+            <ul className="grid max-h-[26rem] gap-2 overflow-y-auto pr-1">
+              {shownReels.map((r) => (
                 <li key={r.id} className="rounded-xl bg-canvas/60 px-3 py-2.5">
-                  <p className="text-sm font-semibold">{r.title}</p>
+                  <p className="text-sm font-semibold">{r.title}{NEWEST_REELS.includes(r.id) && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold text-accent">Baru</span>}</p>
                   <p className="text-xs text-fg/55">CTA: {r.cta} · musik: {r.music}</p>
                   {r.needsCheck && <p className="mt-1 text-xs text-amber-700">Cek dulu: {r.needsCheck}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-2"><button className={btnAccent} onClick={() => setPreview({ title: r.title, storyReelId: r.id })}>▶ Tonton</button>{r.queued.length ? <span className="text-xs text-emerald-700">Sudah di kalender ({r.queued[0].status})</span> : <button className={btnGhost} onClick={() => void queueReel(r.id)}>Antrekan sebagai draf</button>}</div>
                 </li>
               ))}
-              {reels.length === 0 && <p className="text-sm text-fg/50">Belum ada reel cerita.</p>}
+              {shownReels.length === 0 && <p className="text-sm text-fg/50">{reels.length === 0 ? "Belum ada reel cerita." : "Tidak ada reel yang cocok."}</p>}
             </ul>
           </Card>
           {(queue.held?.length ?? 0) > 0 && (
