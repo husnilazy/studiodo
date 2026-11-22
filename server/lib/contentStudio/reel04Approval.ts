@@ -27,48 +27,48 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     dot(130, 520, 100, "#2a2550") + dot(960, 1400, 150, "#2a2550") + plus(930, 560, 34, YEL, 0.2) + star(120, 1450, 30, "#fff", 0.4)
     + row(540, 1040, "Rekening baru", "BCA •••• 4821", MINT, T.rekening + 0.5, 780, { txt: "BARU", bg: YEL, fg: INK })
     + chip(540, 1240, "Penarikan diubah", "#fff", INK, T.rekening + 1.2, 440, 30),
-    html: tx("Rekening baru *ditambahkan.*", T.rekening, null, "left:120px;top:325px;font-size:120px;line-height:.98;color:#fff", "big") });
+    html: tx("Rekening baru *ditambahkan.*", T.rekening, null, "left:120px;top:310px;font-size:120px;line-height:.98;color:#fff", "big") });
   // 1 balance gone
   SC.push({ i: 1, bg: RED, dark: true, from: "20% 50%", art:
     dot(150, 1500, 80, "#ff7a84") + dot(940, 480, 60, "#ff7a84", 0.4) + plus(920, 1500, 34, "#fff", 0.2)
     + at(wallet(540, 1180, "Saldo booth", "Rp 12.500.000", BLUE), T.hilang + 0.2, null, "rise")
     + vis(wallet(540, 1180, "Saldo booth", "Rp 0", INK), T.nol, null)
     + at(`<g transform="translate(540 1420)"><rect x="-300" y="-20" width="600" height="40" rx="20" style="fill:rgba(255,255,255,.25)"/><rect class="drain" x="-300" y="-20" width="600" height="40" rx="20" style="fill:${YEL};--t:${s(T.hilang + 0.9)}"/></g>`, T.hilang + 0.4),
-    html: tx("Besok pagi, saldo booth... *hilang.*", T.hilang, null, "left:120px;top:325px;font-size:112px;line-height:.98;color:#fff", "big") });
+    html: tx("Besok pagi, saldo booth... *hilang.*", T.hilang, null, "left:120px;top:310px;font-size:112px;line-height:.98;color:#fff", "big") });
   // 2 one person can withdraw alone
   SC.push({ i: 2, bg: ORG, dark: true, from: "90% 50%", art:
     dot(140, 1450, 110, "#ff8a50") + dot(960, 560, 70, YEL, 0.3) + plus(930, 1500, 34, "#fff", 0.2)
     + at(P({ x: 300, y: 1080, s: 0.98, expr: "senang", hair: "short", skin: 2, pose: "hold", color: 1, jacket: INK }), T.sendirian + 0.2)
     + at(phone(740, 1180, 1.4, `<rect x="-100" y="-200" width="200" height="400" style="fill:#fff"/><text x="0" y="-130" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="24" style="fill:${INK}">Tarik dana</text><rect x="-80" y="-80" width="160" height="60" rx="14" style="fill:#eef2ff"/><text x="0" y="-40" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="26" style="fill:${INK}">Rp 12.500.000</text><g class="beat"><rect x="-80" y="60" width="160" height="62" rx="31" style="fill:${RED}"/><text x="0" y="100" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="26" style="fill:#fff">TARIK</text></g>`, 6), T.sendirian + 0.4, null, "rise")
     + chip(300, 780, "Sendirian", YEL, INK, T.sendirian + 1.2, 300, 30),
-    html: tx("Satu orang bisa tarik dana *sendirian...*", T.sendirian, null, "left:120px;top:325px;font-size:104px;line-height:1;color:#fff", "big") });
+    html: tx("Satu orang bisa tarik dana *sendirian...*", T.sendirian, null, "left:120px;top:310px;font-size:104px;line-height:1;color:#fff", "big") });
   // 3 the owner finds out later
   SC.push({ i: 3, bg: CREAM, dark: false, from: "10% 50%", art:
     blob(860, 520, 220, "#ffe3c4") + dot(110, 1500, 70, "#ffd0d8") + plus(930, 1500, 30, ORG, 0.3)
     + at(P({ x: 270, y: 1040, s: 0.98, expr: "kaget", hair: "hijab", skin: 1, pose: "hold", color: 2, jacket: INK }), T.belakangan + 0.2)
     + at(phone(740, 1180, 1.5, `<rect x="-100" y="-200" width="200" height="400" style="fill:#fff"/><text x="0" y="-100" text-anchor="middle" font-family="InterK,sans-serif" font-weight="700" font-size="20" style="fill:${INK};opacity:.6">Saldo booth</text><text x="0" y="-40" text-anchor="middle" font-family="Bricolage,sans-serif" font-weight="800" font-size="46" style="fill:${RED}">Rp 0</text>`, -5), T.belakangan + 0.4, null, "rise")
     + chip(300, 800, "Baru tahu…", "#fff", INK, T.belakangan + 1.2, 320, 30),
-    html: tx("dan kamu baru tahu *belakangan.*", T.belakangan, null, "left:120px;top:325px;font-size:112px;line-height:.98", "big") });
+    html: tx("dan kamu baru tahu *belakangan.*", T.belakangan, null, "left:120px;top:310px;font-size:112px;line-height:.98", "big") });
   // 4 imagine: second person must approve
   SC.push({ i: 4, bg: BLUE, dark: true, from: "50% 50%", art:
     dot(130, 1000, 100, "#3a64ff") + dot(960, 1500, 150, "#3a64ff") + star(980, 700, 30, YEL, 0.3)
     + row(540, 1000, "Penarikan Rp 10.000.000", "Butuh 2 persetujuan", YEL, T.bayangin + 1.6, 780)
     + avatar(300, 1290, ORG, "A", T.bayangin + 2.3, true) + avatar(780, 1290, MINT, "B", T.bayangin + 3.3, true)
     + vis(chip(540, 1480, "1 / 2 disetujui", "#fff", INK, 0, 420, 30), T.bayangin + 2.4, T.bayangin + 3.3) + vis(chip(540, 1480, "2 / 2 disetujui · diproses", GREEN, "#fff", 0, 560, 30), T.bayangin + 3.3, null),
-    html: tx("Sekarang bayangin penarikan besar *disetujui orang kedua.*", T.bayangin, null, "left:120px;top:325px;font-size:92px;line-height:1;color:#fff", "big") });
+    html: tx("Sekarang bayangin penarikan besar *disetujui orang kedua.*", T.bayangin, null, "left:120px;top:310px;font-size:92px;line-height:1;color:#fff", "big") });
   // 5 new accounts are held
   SC.push({ i: 5, bg: YEL, dark: false, from: "10% 50%", art:
     blob(180, 520, 200, "#ffe27a") + dot(950, 1480, 90, ORG, 0.2) + plus(110, 1500, 32, INK, 0.3)
     + row(540, 1050, "Rekening baru", "BCA •••• 4821", MINT, T.ditahan + 0.4, 780, { txt: "DITAHAN", bg: INK, fg: YEL })
     + at(lock(540, 1330, 1.6, INK), T.ditahan + 1.0, null, "stamp"),
-    html: tx("Rekening baru? *Ditahan dulu.*", T.ditahan, null, "left:120px;top:325px;font-size:124px;line-height:.98", "big") });
+    html: tx("Rekening baru? *Ditahan dulu.*", T.ditahan, null, "left:120px;top:310px;font-size:124px;line-height:.98", "big") });
   // 6 every approval leaves a trail
   SC.push({ i: 6, bg: MINT, dark: false, from: "90% 20%", art:
     blob(880, 480, 210, "#7af0bd") + dot(120, 1450, 90, "#7af0bd") + star(940, 1360, 30, INK, 0.3)
     + row(540, 960, "Disetujui oleh Rani", "Penarikan Rp 10.000.000 · 19:40", GREEN, T.jejak + 0.5)
     + row(540, 1140, "Diajukan oleh Dimas", "Penarikan Rp 10.000.000 · 19:32", BLUE, T.jejak + 1.1)
     + row(540, 1320, "Rekening baru ditahan", "BCA •••• 4821 · 19:20", YEL, T.jejak + 1.7),
-    html: tx("Setiap persetujuan, *ada jejaknya.*", T.jejak, null, "left:120px;top:325px;font-size:116px;line-height:.98", "big") });
+    html: tx("Setiap persetujuan, *ada jejaknya.*", T.jejak, null, "left:120px;top:310px;font-size:116px;line-height:.98", "big") });
   // 7 reveal
   SC.push({ i: 7, bg: "#ffffff", dark: false, from: "50% 50%", art:
     [[160, 520, 40, ORG], [900, 600, 50, BLUE], [200, 1400, 60, YEL], [880, 1380, 44, PINK], [540, 440, 30, MINT]].map(([x, y, r, c], i) => at(dot(x as number, y as number, r as number, c as string, 0.1 * i), T.studiodo + 0.1 * i)).join(""),
@@ -79,7 +79,7 @@ export function buildReelDoc(): { html: string; durationSec: number } {
     + at(P({ x: 250, y: 1280, s: 0.78, expr: "bingung", hair: "bun", skin: 0, pose: "chin", color: 2, jacket: INK }), T.tanya + 0.4)
     + at(P({ x: 560, y: 1300, s: 0.75, expr: "senang", hair: "short", skin: 2, pose: "hold", color: 1 }), T.tanya + 0.6)
     + at(P({ x: 850, y: 1280, s: 0.78, expr: "berpikir", hair: "curly", skin: 3, pose: "chin", color: 3, glasses: true }), T.tanya + 0.8),
-    html: tx("Uang booth-mu *dijaga siapa?*", T.tanya, null, "left:120px;top:325px;font-size:100px;line-height:.98", "big")
+    html: tx("Uang booth-mu *dijaga siapa?*", T.tanya, null, "left:120px;top:310px;font-size:100px;line-height:.98", "big")
       + `<div class="btn" style="--t:${s(T.jawab)};top:700px;background:${INK};color:#fff">Cerita di komentar ↓</div><div class="kw" style="--t:${s(T.jawab + 0.3)};top:850px;border-style:solid;color:${INK};border-color:${INK}">Satu orang, atau berdua?</div>` + tx("studiodo.id", T.jawab + 1.4, null, "left:120px;top:990px;font-size:56px", "url") });
   void TEAL; void PINK;
   return assembleReel(SC, STARTS, DURATION, `.drain{transform-origin:0 50%;animation:drn 2s ease-in forwards;animation-delay:var(--t)}@keyframes drn{to{transform:scaleX(0)}}`);
