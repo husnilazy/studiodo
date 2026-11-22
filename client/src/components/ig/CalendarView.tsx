@@ -3,7 +3,7 @@ import Select from "@/components/Select";
 import { contentStudioApi, type CsDeck, type CsPost, type CsPostStatus, type CsQueue } from "@/lib/superadminApi";
 import { ScheduleDialog } from "./ScheduleDialog";
 import { PreviewModal, previewTargetFor, type PreviewTarget } from "./PreviewModal";
-import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, fromLocalInput, inputClass, StatusChip, timeOf, toLocalInput, type Notice, NoticeLine, Field } from "./shared";
+import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, fromLocalInput, inputClass, MediaToggle, StatusChip, timeOf, toLocalInput, type Notice, NoticeLine, Field } from "./shared";
 
 // Kalender: every queued post by day, with the actions that make sense for its status.
 
@@ -70,6 +70,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
             ))}
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
+            <button className={btnGhost} disabled={busyId === "bulk"} title="Ubah semua carousel yang belum tayang sekaligus, dan jadikan default untuk yang baru" onClick={() => { const want = settings.carouselMedia === "video" ? "image" : "video"; if (window.confirm(want === "video" ? "Jadikan SEMUA carousel yang belum tayang animasi (video per slide)? Render tiap carousel jadi lebih lama." : "Jadikan SEMUA carousel yang belum tayang gambar diam?")) void run("bulk", () => contentStudioApi.setCarouselMedia(want), want === "video" ? "Semua carousel yang belum tayang sekarang animasi." : "Semua carousel yang belum tayang sekarang gambar diam."); }}>Semua carousel: {settings.carouselMedia === "video" ? "→ gambar diam" : "→ animasi"}</button>
             <button className={btnGhost} disabled={busyId === "check"} onClick={() => void checkIg()} title="Cek ke Instagram apakah post berstatus Sudah tayang benar-benar ada">{busyId === "check" ? "Mengecek…" : "Cek ke Instagram"}</button>
             {days.length > 1 && <button className={btnGhost} onClick={() => setOpenDays(Object.fromEntries(days.map(([k], i) => [k, !days.every(([kk], ii) => isOpen(kk, ii))])))}>{days.every(([k], i) => isOpen(k, i)) ? "Lipat semua hari" : "Buka semua hari"}</button>}
             {drafts > 0 && <button className={btnAccent} onClick={() => run("all", () => contentStudioApi.approvePosts(), `${drafts} draf disetujui. Akan dirender & tayang sesuai jadwal.`)}>Setujui semua draf ({drafts})</button>}
@@ -120,6 +121,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <StatusChip post={p} />
                       <span className="rounded-full bg-fg/10 px-2.5 py-1 text-[11px] font-semibold text-fg/60">{p.mode === "auto" ? "Auto-post" : "Manual"}</span>
+                      {p.format === "carousel" && (p.status === "posted" ? <span className="rounded-full bg-fg/10 px-2.5 py-1 text-[11px] font-semibold text-fg/60">{p.mediaType === "videos" ? "Animasi" : "Gambar diam"}</span> : <MediaToggle value={p.carouselMedia} disabled={busy || p.status === "skipped"} onChange={(v) => void run(p.id, () => contentStudioApi.patchPost(p.id, { carouselMedia: v }), v === "video" ? "Carousel ini akan tayang sebagai animasi." : "Carousel ini akan tayang sebagai gambar diam.")} />)}
                       {p.status === "ready" && p.mode === "auto" && !connected && <span className="text-[11px] text-amber-600">menunggu koneksi Instagram</span>}
                       {p.status === "ready" && p.mode === "auto" && connected && cap.reached && !p.force && <span className="text-[11px] text-amber-600">menunggu: batas {cap.maxPerDay} post/hari tercapai ({cap.postedToday}/{cap.maxPerDay}). Tayang besok, atau tekan Kirim sekarang.</span>}
                       {p.status === "ready" && p.mode === "manual" && <span className="text-[11px] text-fg/50">unduh file lalu posting sendiri</span>}
@@ -130,12 +132,12 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     {busy && <span className="text-[11px] text-fg/50">sedang diproses…</span>}
-                    {deck && <button className={btnGhost} onClick={() => setPreview(previewTargetFor(p.title, deck))}>{p.format === "reel" ? "▶ Pratinjau" : "Pratinjau"}</button>}
+                    {deck && <button className={btnGhost} onClick={() => setPreview({ ...previewTargetFor(p.title, deck), media: p.format === "carousel" ? p.carouselMedia : undefined })}>{p.format === "reel" ? "▶ Pratinjau" : "Pratinjau"}</button>}
                     {!busy && p.status === "draft" && <button className={btnAccent} disabled={!!p.revision} title={p.revision ? "Revisi diminta, selesaikan dulu" : undefined} onClick={() => run(p.id, () => contentStudioApi.approvePosts([p.id]))}>Setujui</button>}
                     {!busy && (p.status === "scheduled" || p.status === "ready") && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik–menit." : "Disiapkan sekarang.")}>{p.mode === "auto" ? "Kirim sekarang" : "Siapkan sekarang"}</button>}
                     {!busy && p.status === "ready" && (p.files ?? []).map((f) => <button key={f} className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.downloadPostFile(p.id, f))}>{(p.files ?? []).length > 1 ? `↓ ${f.replace(/.*-(\d+)\.\w+$/, "slide $1")}` : "↓ Unduh"}</button>)}
                     {!busy && (p.status === "ready" || p.status === "scheduled") && p.mode === "manual" && <button className={btnPrimary} onClick={() => run(p.id, () => contentStudioApi.markPosted(p.id))}>Tandai terposting</button>}
-                    {!busy && p.status === "posted" && p.igGone && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.repostPost(p.id), "Masuk antrean lagi. Dirender dan dikirim dalam beberapa menit.")}>Posting ulang</button>}
+                    {!busy && p.status === "posted" && p.igGone && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.repostPost(p.id, p.carouselMedia), "Masuk antrean lagi. Dirender dan dikirim dalam beberapa menit.")}>Posting ulang</button>}
                     {!busy && p.status === "failed" && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.retryPost(p.id))}>Ulangi</button>}
                     {!busy && p.status === "skipped" && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.patchPost(p.id, { status: "scheduled" }))}>Aktifkan lagi</button>}
                     {!busy && p.status !== "posted" && <button className={btnGhost} onClick={() => setEditing(editing === p.id ? null : p.id)}>{editing === p.id ? "Tutup" : "Edit"}</button>}

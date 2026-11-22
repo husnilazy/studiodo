@@ -84,3 +84,16 @@ export function NoticeLine({ n }: { n: Notice }) {
 }
 
 export const errText = (e: unknown, fallback = "Terjadi kesalahan") => (e instanceof Error ? e.message : fallback);
+
+/** What a carousel uploads: still JPEGs, or one animated clip per slide (what the preview shows). */
+export const MEDIA_LABEL = { image: "Gambar diam", video: "Animasi" } as const;
+export function MediaToggle({ value, onChange, disabled }: { value: "image" | "video"; onChange: (v: "image" | "video") => void; disabled?: boolean }) {
+  return (
+    <span role="group" aria-label="Isi carousel" className="inline-flex rounded-full bg-fg/10 p-0.5 text-[11px] font-bold">
+      {(["image", "video"] as const).map((v) => (
+        <button key={v} type="button" disabled={disabled} title={v === "image" ? "Upload slide sebagai gambar JPEG diam" : "Upload tiap slide sebagai klip beranimasi (render lebih lama)"} onClick={() => value !== v && onChange(v)}
+          className={`rounded-full px-2.5 py-1 transition disabled:opacity-40 ${value === v ? "bg-fg text-canvas" : "text-fg/60 hover:text-fg"}`}>{MEDIA_LABEL[v]}</button>
+      ))}
+    </span>
+  );
+}

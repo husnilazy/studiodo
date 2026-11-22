@@ -6,7 +6,7 @@ import { SlidePreview } from "./ReviewView";
 // Pratinjau: watch a reel before it posts (rendered on the server PC with the real voice-over, music and effects, the same pipeline
 // as the post itself), or flip through the slides of a carousel. Reels take about a minute the first time and are kept for a day.
 
-export type PreviewTarget = { title: string; deck?: CsDeck; storyReelId?: string };
+export type PreviewTarget = { title: string; deck?: CsDeck; storyReelId?: string; media?: "image" | "video" };
 
 const keyOf = (t: PreviewTarget) => (t.storyReelId ? `story-${t.storyReelId}` : (t.deck?.id ?? "").replace(/[^a-zA-Z0-9-]/g, ""));
 
@@ -73,12 +73,13 @@ function ReelPlayer({ target }: { target: PreviewTarget }) {
   );
 }
 
-function CarouselViewer({ deck }: { deck: CsDeck }) {
+function CarouselViewer({ deck, media }: { deck: CsDeck; media?: "image" | "video" }) {
   const [i, setI] = useState(0);
   const [replay, setReplay] = useState(0);
   const n = deck.slides.length;
   return (
     <div className="mx-auto grid w-full max-w-md gap-3">
+      {media && <p className={`rounded-xl px-3 py-2 text-xs ${media === "video" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>{media === "video" ? "Yang tayang: animasi, tiap slide jadi klip seperti pratinjau ini." : "Yang tayang: gambar diam (JPEG). Pratinjau ini bergerak, hasil di Instagram tidak. Ganti ke Animasi di Kalender atau Tinjau kalau mau bergerak."}</p>}
       <SlidePreview deck={deck} index={i} replay={replay} />
       <div className="flex items-center justify-between gap-2">
         <button className={btnGhost} disabled={i === 0} onClick={() => setI(i - 1)} aria-label="Slide sebelumnya">‹</button>
@@ -104,7 +105,7 @@ export function PreviewModal({ target, onClose }: { target: PreviewTarget; onClo
           <div className="min-w-0"><p className="text-[11px] font-bold uppercase tracking-wider text-fg/45">Pratinjau {isReel ? "reel" : "carousel"}</p><h3 className="truncate text-sm font-bold">{target.title}</h3></div>
           <button className={btnPrimary} onClick={onClose}>Tutup</button>
         </header>
-        {isReel ? <ReelPlayer target={target} /> : target.deck ? <CarouselViewer deck={target.deck} /> : <p className="p-6 text-center text-sm text-fg/50">Desain post ini tidak ditemukan di Studio.</p>}
+        {isReel ? <ReelPlayer target={target} /> : target.deck ? <CarouselViewer deck={target.deck} media={target.media} /> : <p className="p-6 text-center text-sm text-fg/50">Desain post ini tidak ditemukan di Studio.</p>}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { contentStudioApi, type CsDeck, type CsPost, type CsQueue } from "@/lib/superadminApi";
-import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, type Notice, NoticeLine, StatusChip, timeOf } from "./shared";
+import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, type Notice, NoticeLine, MediaToggle, StatusChip, timeOf } from "./shared";
 import type { Tab } from "./OverviewView";
 import { PreviewModal, previewTargetFor, type PreviewTarget } from "./PreviewModal";
 
@@ -41,9 +41,9 @@ export function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: num
   );
 }
 
-function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision, onPreview }: {
+function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision, onPreview, onMedia }: {
   post: CsPost; deck?: CsDeck; warn?: string; tz: number; connected: boolean; capFull?: string; busy: boolean;
-  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void; onPreview: () => void;
+  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void; onPreview: () => void; onMedia: (v: "image" | "video") => void;
 }) {
   const [note, setNote] = useState("");
   const [i, setI] = useState(0);
@@ -59,6 +59,7 @@ function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove,
       <header className="flex flex-wrap items-center gap-2">
         <StatusChip post={post} />
         <span className="rounded-full bg-fg/10 px-2.5 py-1 text-[11px] font-semibold text-fg/60">{isReel ? "Reel" : "Carousel"}{deck?.theme ? ` · ${deck.theme}` : ""}</span>
+        {!isReel && post.status !== "posted" && <MediaToggle value={post.carouselMedia} disabled={busy} onChange={onMedia} />}
         <span className="ml-auto text-[11px] font-semibold text-fg/50">{when}</span>
       </header>
       <h3 className="text-sm font-bold leading-snug">{post.title}</h3>
@@ -171,7 +172,8 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
           onSendNow={() => { if (window.confirm(p.mode === "auto" ? "Kirim post ini ke Instagram sekarang?" : "Siapkan file post ini sekarang?")) void run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik sampai menit." : "Disiapkan."); }}
           onDelete={() => { if (window.confirm("Hapus post ini dari kalender?")) void run(p.id, () => contentStudioApi.deletePost(p.id)); }}
           onRevision={(text) => void run(p.id, () => contentStudioApi.patchPost(p.id, { revision: text }), text.trim() ? "Catatan revisi tersimpan. Post ditahan sebagai draf." : "Permintaan revisi dibatalkan.")}
-          onPreview={() => setPreview(previewTargetFor(p.title, decks.find((d) => d.id === p.deckId)))}
+          onPreview={() => setPreview({ ...previewTargetFor(p.title, decks.find((d) => d.id === p.deckId)), media: p.format === "carousel" ? p.carouselMedia : undefined })}
+          onMedia={(v) => void run(p.id, () => contentStudioApi.patchPost(p.id, { carouselMedia: v }), v === "video" ? "Tayang sebagai animasi." : "Tayang sebagai gambar diam.")}
           onEdit={() => go("kalender")} />
       ))}
       {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}

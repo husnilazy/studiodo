@@ -146,7 +146,7 @@ export async function refillCalendar(opts: { weeks?: number; force?: boolean; ex
     const story = slot.format === "reel" ? STORY_REELS.find((r) => r.featureId === slot.featureId && !held.reels.includes(r.id) && !live.some((p) => p.deckId === `story-${r.id}`) && !created.some((c) => c.deckId === `story-${r.id}`)) : undefined;
     const deck = story ? storyReelDeck(story) : featureDeck(f, slot.format, (live.length + i) % CAPTION_VARIANTS);
     await saveDeck(deck);
-    created.push(await createPost(deck, slot.scheduledAt, s.defaultMode, s.autoApprove ? "scheduled" : "draft"));
+    created.push(await createPost(deck, slot.scheduledAt, s.defaultMode, s.autoApprove ? "scheduled" : "draft", { carouselMedia: s.carouselMedia }));
   }
   await saveSettings({ ...s, lastRefillAt: new Date().toISOString() });
   return created;

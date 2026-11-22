@@ -131,6 +131,7 @@ export function SettingsView({ settings, onChange }: { settings: CsSettings; onC
               <Field label="Reel tiap berapa post" hint="0 = tanpa reel"><input type="number" min={0} max={10} className={inputClass} value={s.reelEvery} onChange={(e) => setS({ ...s, reelEvery: Number(e.target.value) })} /></Field>
               <Field label="Maks post per hari" hint="Pengaman terhadap posting berlebih"><input type="number" min={1} max={25} className={inputClass} value={s.maxPerDay} onChange={(e) => setS({ ...s, maxPerDay: Number(e.target.value) })} /></Field>
               <Field label="Render sebelum tayang (menit)"><input type="number" min={5} className={inputClass} value={s.prepLeadMin} onChange={(e) => setS({ ...s, prepLeadMin: Number(e.target.value) })} /></Field>
+              <Field label="Isi carousel default" hint="Gambar diam = JPEG. Animasi = klip per slide, render lebih lama."><Select className={inputClass} value={s.carouselMedia ?? "image"} onChange={(e) => setS({ ...s, carouselMedia: e.target.value as "image" | "video" })}><option value="image">Gambar diam</option><option value="video">Animasi (video per slide)</option></Select></Field>
               <Field label="Cara posting default"><Select className={inputClass} value={s.defaultMode} onChange={(e) => setS({ ...s, defaultMode: e.target.value as "auto" | "manual" })}><option value="auto">Auto-post</option><option value="manual">Manual</option></Select></Field>
             </div>
           </div>

@@ -44,6 +44,7 @@ export type CsSettings = {
   times: string[]; // HH:mm local
   reelEvery: number; // every Nth post is a reel (0 = never)
   defaultMode: PostMode;
+  carouselMedia: "image" | "video"; // what new carousel posts upload: still JPEGs, or one animated clip per slide
   prepLeadMin: number; // render this long before the post is due
   maxPerDay: number; // safety cap on published posts per local day
   autopilot: boolean; // keep the calendar filled automatically
@@ -56,7 +57,7 @@ export type CsSettings = {
 };
 
 export const DEFAULT_SETTINGS: CsSettings = {
-  tzOffsetMin: 420, days: [1, 3, 5, 0], times: ["19:00"], reelEvery: 3, defaultMode: "auto", prepLeadMin: 30, maxPerDay: 3,
+  tzOffsetMin: 420, days: [1, 3, 5, 0], times: ["19:00"], reelEvery: 3, defaultMode: "auto", carouselMedia: "image", prepLeadMin: 30, maxPerDay: 3,
   autopilot: false, autoApprove: false, horizonDays: 14, slotFormats: {}, checkedKeys: [],
 };
 
@@ -134,6 +135,7 @@ export function parseSettings(input: any, base: CsSettings): CsSettings | string
     days: [...new Set<number>(days)], times: [...new Set<string>(times)].sort().slice(0, 6),
     reelEvery: num(input.reelEvery, base.reelEvery, 0, 10),
     defaultMode: input.defaultMode === "manual" ? "manual" : "auto",
+    carouselMedia: input.carouselMedia === "video" ? "video" : input.carouselMedia === "image" ? "image" : base.carouselMedia,
     prepLeadMin: num(input.prepLeadMin, base.prepLeadMin, 5, 720),
     maxPerDay: num(input.maxPerDay, base.maxPerDay, 1, 25),
     autopilot: !!input.autopilot, autoApprove: !!input.autoApprove,

@@ -106,7 +106,7 @@ contentQueueRouter.post("/queue", async (req, res) => {
   try {
     const s = await loadSettings();
     const mode = req.body?.mode === "manual" ? "manual" : req.body?.mode === "auto" ? "auto" : s.defaultMode;
-    res.json(await createPost(deck, at.toISOString(), mode, req.body?.status === "draft" ? "draft" : "scheduled"));
+    res.json(await createPost(deck, at.toISOString(), mode, req.body?.status === "draft" ? "draft" : "scheduled", { carouselMedia: req.body?.carouselMedia === "video" || req.body?.carouselMedia === "image" ? req.body.carouselMedia : s.carouselMedia }));
   } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Gagal menjadwalkan" }); }
 });
 
@@ -173,11 +173,31 @@ contentQueueRouter.post("/queue/reconcile", async (_req, res) => {
   catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Pengecekan gagal" }); }
 });
 
+// One switch for every carousel that has not gone out yet: "image" = still JPEGs, "video" = an animated clip per slide. Also becomes the default for new posts.
+contentQueueRouter.post("/queue/carousel-media", async (req, res) => {
+  const media = req.body?.media;
+  if (media !== "image" && media !== "video") return res.status(400).json({ error: "Pilih image atau video" });
+  const changed = await mutatePosts((posts) => {
+    let n = 0;
+    for (const p of posts) {
+      if (p.format !== "carousel" || p.carouselMedia === media || !["draft", "scheduled", "ready", "failed"].includes(p.status)) continue;
+      p.carouselMedia = media;
+      if (p.status === "ready") { p.status = "scheduled"; p.files = []; p.mediaType = undefined; } // already rendered the other way: render again
+      p.log = [...p.log, `${new Date().toISOString().slice(0, 16).replace("T", " ")} isi carousel: ${media === "video" ? "animasi" : "gambar diam"}`].slice(-12);
+      n++;
+    }
+    return n;
+  });
+  await saveSettings({ ...(await loadSettings()), carouselMedia: media });
+  res.json({ changed, media });
+});
+
 // A post that Instagram no longer has goes back to the queue (due now) and is rendered + published again.
 contentQueueRouter.post("/queue/:id/repost", async (req, res) => {
   const cur = await getPost(cleanId(req.params.id));
   if (!cur || cur.status !== "posted" || !cur.igGone) return res.status(409).json({ error: "Hanya post yang hilang dari Instagram yang bisa diposting ulang" });
-  const post = await patchPost(cur.id, { status: "scheduled", scheduledAt: new Date().toISOString(), force: true, attempts: 0, nextTryAt: undefined, error: undefined, igGone: undefined, igCheckedAt: undefined, igMediaId: undefined, permalink: undefined, postedAt: undefined, files: [], coverFile: undefined, mediaType: undefined }, "diposting ulang (hilang dari Instagram)");
+  const media = req.body?.carouselMedia === "video" || req.body?.carouselMedia === "image" ? req.body.carouselMedia : cur.carouselMedia;
+  const post = await patchPost(cur.id, { carouselMedia: media, status: "scheduled", scheduledAt: new Date().toISOString(), force: true, attempts: 0, nextTryAt: undefined, error: undefined, igGone: undefined, igCheckedAt: undefined, igMediaId: undefined, permalink: undefined, postedAt: undefined, files: [], coverFile: undefined, mediaType: undefined }, "diposting ulang (hilang dari Instagram)");
   void tick();
   res.json(post);
 });

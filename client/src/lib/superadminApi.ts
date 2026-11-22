@@ -785,7 +785,7 @@ export type CsPost = {
 };
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
-  tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; prepLeadMin: number; maxPerDay: number;
+  tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; carouselMedia?: "image" | "video"; prepLeadMin: number; maxPerDay: number;
   autopilot: boolean; autoApprove: boolean; horizonDays: number; slotFormats?: Record<string, "reel" | "carousel">; checkedKeys?: string[]; autopilotUntil?: string; lastRefillAt?: string;
 };
 export type CsHeld = { key: string; label: string; note: string };
@@ -850,8 +850,9 @@ export const contentStudioApi = {
     if (!res.ok) throw new Error("Video pratinjau gagal dimuat");
     return URL.createObjectURL(await res.blob());
   },
+  setCarouselMedia: (media: "image" | "video") => request<{ changed: number; media: string }>("/content-studio/queue/carousel-media", { method: "POST", body: JSON.stringify({ media }) }),
   reconcilePosts: () => request<{ checked: number; gone: number }>(`/content-studio/queue/reconcile`, { method: "POST" }),
-  repostPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/repost`, { method: "POST" }),
+  repostPost: (id: string, carouselMedia?: "image" | "video") => request<CsPost>(`/content-studio/queue/${id}/repost`, { method: "POST", body: JSON.stringify({ carouselMedia }) }),
   retryPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/retry`, { method: "POST" }),
   markPosted: (id: string, permalink?: string) => request<CsPost>(`/content-studio/queue/${id}/mark-posted`, { method: "POST", body: JSON.stringify({ permalink }) }),
   async downloadPostFile(id: string, name: string) {
