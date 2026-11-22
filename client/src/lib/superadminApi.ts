@@ -112,7 +112,7 @@ function request<T>(path: string, options?: RequestInit): Promise<T | undefined>
     getCache.clear();
     return rawRequest<T>(path, options);
   }
-  if (/^\/(support|alerts)(\/|\?|$)/.test(path)) return rawRequest<T>(path, options); // live data: always fresh
+  if (/^\/(support|alerts|content-studio\/video-preview)(\/|\?|$)/.test(path)) return rawRequest<T>(path, options); // live data: always fresh (the preview render status is polled)
   const key = `${superadminToken ?? ""}|${path}`;
   const hit = getCache.get(key);
   if (hit && Date.now() - hit.at < GET_TTL_MS) return hit.promise as Promise<T | undefined>;
@@ -774,13 +774,14 @@ export type CsSlide = {
   items?: string[]; itemsBefore?: string[]; labelBefore?: string; labelAfter?: string; stat?: { value: number; suffix?: string; prefix?: string; label: string };
   images?: string[]; bgImage?: string; icon?: string; emoji?: string; chat?: { from: "them" | "us"; text: string }[]; seconds?: number;
 };
-export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; style?: "klasik" | "kontak" | "kaca"; theme?: "biru" | "ungu" | "rose" | "senja" | "tosca"; featureId?: string; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string };
+export type CsDeck = { id: string; title: string; format: "carousel" | "reel" | "highlight"; tone: CsTone; style?: "klasik" | "kontak" | "kaca"; theme?: "biru" | "ungu" | "rose" | "senja" | "tosca"; featureId?: string; handle: string; caption: string; hashtags: string[]; slides: CsSlide[]; builtin?: boolean; updatedAt?: string; storyReel?: string };
 export type CsFeature = { id: string; name: string; pillar: string; since: string; hook: string; tagline: string; emoji: string; pain: string[]; gain: string[]; how: string[]; mockup: CsMockup; tip: string; stat?: { value: number; prefix?: string; suffix?: string; label: string }; check?: string };
+export type CsPreviewState = { key: string; status: "none" | "rendering" | "ready" | "failed"; error?: string; startedAt?: number };
 export type CsPostStatus = "draft" | "scheduled" | "preparing" | "ready" | "posting" | "posted" | "failed" | "skipped";
 export type CsPost = {
   id: string; deckId: string; title: string; format: "carousel" | "reel"; featureId?: string; scheduledAt: string; mode: "auto" | "manual"; status: CsPostStatus;
   caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string; force?: boolean; revision?: { text: string; at: string };
-  attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; postedAt?: string; createdAt: string; log: string[];
+  attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; igGone?: boolean; igCheckedAt?: string; postedAt?: string; createdAt: string; log: string[];
 };
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
@@ -841,6 +842,16 @@ export const contentStudioApi = {
   deletePost: (id: string) => request<{ ok: boolean }>(`/content-studio/queue/${id}`, { method: "DELETE" }),
   approvePosts: (ids?: string[]) => request<{ approved: number }>("/content-studio/queue/approve", { method: "POST", body: JSON.stringify({ ids }) }),
   postNow: (id: string) => request<CsPost>(`/content-studio/queue/${id}/post-now`, { method: "POST" }),
+  startVideoPreview: (target: { storyReelId?: string; deckId?: string }, force = false) => request<CsPreviewState>("/content-studio/video-preview", { method: "POST", body: JSON.stringify({ ...target, force }) }),
+  videoPreviewState: (key: string) => request<CsPreviewState>(`/content-studio/video-preview/${encodeURIComponent(key)}`),
+  /** The mp4 needs the login header, so it is fetched as a blob and played from an object URL. */
+  async videoPreviewUrl(key: string) {
+    const res = await fetch(`${getApiBaseUrl()}/superadmin/content-studio/video-preview/${encodeURIComponent(key)}/file`, { headers: superadminToken ? { Authorization: `Bearer ${superadminToken}` } : {} });
+    if (!res.ok) throw new Error("Video pratinjau gagal dimuat");
+    return URL.createObjectURL(await res.blob());
+  },
+  reconcilePosts: () => request<{ checked: number; gone: number }>(`/content-studio/queue/reconcile`, { method: "POST" }),
+  repostPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/repost`, { method: "POST" }),
   retryPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/retry`, { method: "POST" }),
   markPosted: (id: string, permalink?: string) => request<CsPost>(`/content-studio/queue/${id}/mark-posted`, { method: "POST", body: JSON.stringify({ permalink }) }),
   async downloadPostFile(id: string, name: string) {

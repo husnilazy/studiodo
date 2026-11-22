@@ -2,8 +2,9 @@ import { rm } from "node:fs/promises";
 import { appBaseUrl } from "../urls.js";
 import { FEATURES, featureById } from "./features.js";
 import { featureDeck, planAutopilot, localToIso, postingSlots, CAPTION_VARIANTS } from "./generator.js";
-import { buildCaption, checkConnection, loadConnection, publishPost } from "./instagram.js";
+import { buildCaption, checkConnection, loadConnection, mediaStatus, publishPost } from "./instagram.js";
 import { listDecks, renderForPublish, saveDeck } from "./render.js";
+import { withRenderLock } from "./previews.js";
 import { renderStoryReelForPublish, STORY_REELS, storyReelDeck } from "./storyReels.js";
 import {
   duePrepare, duePublish, getPost, listPosts, loadSettings, localDayKey, mutatePosts, newPostId, newToken, patchPost, publishDir, retryDelayMs, saveSettings,
@@ -47,7 +48,7 @@ async function prepare(p: ScheduledPost): Promise<void> {
     if (!deck) throw new Error("Deck tidak ditemukan (sudah dihapus?)");
     const problem = validateForPosting(deck);
     if (problem) throw new Error(problem);
-    const out = deck.storyReel ? await renderStoryReelForPublish(deck.storyReel, publishDir(p.id)) : await renderForPublish(deck, publishDir(p.id), p.carouselMedia);
+    const out = await withRenderLock(() => (deck.storyReel ? renderStoryReelForPublish(deck.storyReel, publishDir(p.id)) : renderForPublish(deck, publishDir(p.id), p.carouselMedia))); // one render at a time, shared with the preview player
     if (!out.files.length) throw new Error("Render tidak menghasilkan file");
     await patchPost(p.id, { status: "ready", mediaType: out.type, files: out.files, coverFile: out.cover, attempts: 0, nextTryAt: undefined }, `render selesai (${out.files.length} file)`);
   } catch (e) {
@@ -80,6 +81,32 @@ async function publish(p: ScheduledPost): Promise<void> {
       : { status: "ready", attempts, error: msg, nextTryAt: new Date(Date.now() + wait).toISOString() }, `gagal posting: ${msg}`);
   }
 }
+
+/**
+ * "Sudah tayang" must mean "is on Instagram", not "the API once answered with an id". Posts published in the last 30 days are
+ * looked up on the Graph API; a media that no longer exists is flagged (igGone) so the calendar can say so and offer a re-post.
+ * Returns how many were checked and how many are missing.
+ */
+export async function reconcilePosted(opts: { all?: boolean } = {}): Promise<{ checked: number; gone: number }> {
+  const conn = await loadConnection();
+  if (!conn) return { checked: 0, gone: 0 };
+  const cutoff = Date.now() - 30 * 86_400_000;
+  const list = (await listPosts()).filter((p) => p.status === "posted" && p.igMediaId && new Date(p.postedAt ?? p.scheduledAt).getTime() > cutoff
+    && (opts.all || !p.igCheckedAt || Date.now() - new Date(p.igCheckedAt).getTime() > 6 * 3_600_000));
+  let checked = 0, gone = 0;
+  for (const p of list) {
+    const st = await mediaStatus(conn, p.igMediaId!);
+    if (st === "unknown") continue;
+    checked++;
+    const missing = st === "gone";
+    if (missing) gone++;
+    if (missing !== !!p.igGone || !p.igCheckedAt || Date.now() - new Date(p.igCheckedAt).getTime() > 3_600_000) {
+      await patchPost(p.id, { igGone: missing || undefined, igCheckedAt: new Date().toISOString() }, missing === !!p.igGone ? undefined : missing ? "tidak ditemukan di Instagram" : "ditemukan lagi di Instagram");
+    }
+  }
+  return { checked, gone };
+}
+let lastReconcile = 0;
 
 /** Content autopilot must not queue by itself: flagged "cek dulu" (feature `check` / story reel `needsCheck`) and not yet confirmed by the owner. */
 export function heldKeys(checkedKeys: string[]): { features: string[]; reels: string[] } {
@@ -141,6 +168,7 @@ export async function tick(now = new Date()): Promise<void> {
       const done = new Date(p.postedAt ?? p.scheduledAt).getTime();
       if (now.getTime() - done > 3 * 86_400_000) { await rm(publishDir(p.id), { recursive: true, force: true }); await patchPost(p.id, { files: [], coverFile: undefined }); }
     }
+    if (Date.now() - lastReconcile > 20 * 60_000) { lastReconcile = Date.now(); await reconcilePosted(); }
     if (s.autopilot && now.getTime() - new Date(s.lastRefillAt ?? 0).getTime() > 6 * 3_600_000) await refillCalendar();
   } catch (e) {
     console.error("[content-studio] penjadwal error:", e instanceof Error ? e.message : e);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FEATURES } from "./features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, localToIso, planAutopilot, postingSlots, withPhotos } from "./generator.js";
 import { displayUrls } from "./sourcePhotos.js";
-import { buildCaption, discoverAccounts, publishPost, type Fetcher } from "./instagram.js";
+import { buildCaption, discoverAccounts, mediaStatus, publishPost, type Fetcher } from "./instagram.js";
 import { approvable, capStatus, duePrepare, duePublish, localDayKey, retryDelayMs, revisionPatch, type ScheduledPost } from "./schedule.js";
 import { HOOKS, CTA_KEYWORD } from "./hooks.js";
 import { buildContactReelDoc, buildContactSlideDoc } from "./styleContact.js";
@@ -299,6 +299,17 @@ describe("Instagram publishing", () => {
     const err: Fetcher = async () => ({ ok: true, status: 200, json: async () => (step++ === 0 ? { id: "c1" } : { status_code: "ERROR", status: "bad video" }) });
     await expect(publishPost(conn, { type: "reel", urls: ["https://x/r.mp4"], caption: "" }, err, noSleep)).rejects.toThrow(/ERROR/);
     await expect(publishPost(conn, { type: "images", urls: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"], caption: "" }, fake().f, noSleep)).rejects.toThrow(/2 sampai 10/);
+  });
+
+  it("tells a media that Instagram no longer has from one that is live, and never guesses on network trouble", async () => {
+    const live: Fetcher = async () => ({ ok: true, status: 200, json: async () => ({ id: "m1", permalink: "https://instagram.com/p/x" }) });
+    const gone: Fetcher = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: "Unsupported get request. Object does not exist", code: 100, error_subcode: 33 } }) });
+    const token: Fetcher = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: "Invalid token", code: 190 } }) });
+    const down: Fetcher = async () => { throw new Error("ECONNRESET"); };
+    expect(await mediaStatus(conn, "m1", live)).toBe("ok");
+    expect(await mediaStatus(conn, "m1", gone)).toBe("gone");
+    expect(await mediaStatus(conn, "m1", token)).toBe("unknown");
+    expect(await mediaStatus(conn, "m1", down)).toBe("unknown");
   });
 
   it("trims captions to Instagram's limits", () => {

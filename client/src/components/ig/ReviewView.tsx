@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { contentStudioApi, type CsDeck, type CsPost, type CsQueue } from "@/lib/superadminApi";
 import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, type Notice, NoticeLine, StatusChip, timeOf } from "./shared";
 import type { Tab } from "./OverviewView";
+import { PreviewModal, previewTargetFor, type PreviewTarget } from "./PreviewModal";
 
 // Tinjau: phone-first review of what is waiting to go out. One post per card with the real slide preview (the same HTML the
 // renderer uses, scaled to the screen), the caption, any claim warning, and the approve / send / delete actions.
 
 const cache = new Map<string, string>();
 
-function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: number; replay: number }) {
+export function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: number; replay: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(320);
   const [html, setHtml] = useState<string | null>(null);
@@ -40,9 +41,9 @@ function SlidePreview({ deck, index, replay }: { deck: CsDeck; index: number; re
   );
 }
 
-function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision }: {
+function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove, onDraft, onSendNow, onDelete, onEdit, onRevision, onPreview }: {
   post: CsPost; deck?: CsDeck; warn?: string; tz: number; connected: boolean; capFull?: string; busy: boolean;
-  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void;
+  onApprove: () => void; onDraft: () => void; onSendNow: () => void; onDelete: () => void; onEdit: () => void; onRevision: (text: string) => void; onPreview: () => void;
 }) {
   const [note, setNote] = useState("");
   const [i, setI] = useState(0);
@@ -74,7 +75,7 @@ function ReviewCard({ post, deck, warn, tz, connected, capFull, busy, onApprove,
                 </div>
                 <button className={btnGhost} disabled={i >= slides - 1} onClick={() => setI(i + 1)} aria-label="Slide berikutnya">›</button>
               </>
-            ) : <p className="text-[11px] text-fg/50">Preview reel diputar utuh.</p>}
+            ) : <button className={btnAccent} onClick={onPreview}>▶ Putar dengan suara</button>}
             <button className={btnGhost} onClick={() => setReplay(replay + 1)}>Putar ulang</button>
           </div>
         </div>
@@ -124,6 +125,7 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
   const [show, setShow] = useState<"tinjau" | "jadwal">("tinjau");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [n, setN] = useState<Notice>(null);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const [checks, setChecks] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -169,8 +171,10 @@ export function ReviewView({ queue, decks, onChange, go }: { queue: CsQueue; dec
           onSendNow={() => { if (window.confirm(p.mode === "auto" ? "Kirim post ini ke Instagram sekarang?" : "Siapkan file post ini sekarang?")) void run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik sampai menit." : "Disiapkan."); }}
           onDelete={() => { if (window.confirm("Hapus post ini dari kalender?")) void run(p.id, () => contentStudioApi.deletePost(p.id)); }}
           onRevision={(text) => void run(p.id, () => contentStudioApi.patchPost(p.id, { revision: text }), text.trim() ? "Catatan revisi tersimpan. Post ditahan sebagai draf." : "Permintaan revisi dibatalkan.")}
+          onPreview={() => setPreview(previewTargetFor(p.title, decks.find((d) => d.id === p.deckId)))}
           onEdit={() => go("kalender")} />
       ))}
+      {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

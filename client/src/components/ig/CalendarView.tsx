@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { contentStudioApi, type CsDeck, type CsPost, type CsPostStatus, type CsQueue } from "@/lib/superadminApi";
 import { ScheduleDialog } from "./ScheduleDialog";
+import { PreviewModal, previewTargetFor, type PreviewTarget } from "./PreviewModal";
 import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, fromLocalInput, inputClass, StatusChip, timeOf, toLocalInput, type Notice, NoticeLine, Field } from "./shared";
 
 // Kalender: every queued post by day, with the actions that make sense for its status.
@@ -20,17 +21,34 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
   const [pickDeck, setPickDeck] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [n, setN] = useState<Notice>(null);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
 
-  const needsAttention = (p: CsPost) => p.status === "draft" || p.status === "failed" || (p.status === "ready" && (p.mode === "manual" || !connected));
-  const shown = useMemo(() => posts.filter((p) => filter === "semua" || (filter === "perhatian" ? needsAttention(p) : p.status === filter)), [posts, filter, connected]); // eslint-disable-line react-hooks/exhaustive-deps
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, f.id === "semua" ? posts.length : f.id === "perhatian" ? posts.filter(needsAttention).length : posts.filter((p) => p.status === f.id).length])), [posts, connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  const today = dayKey(new Date().toISOString(), tz);
+  // "Mendatang" (default) hides days that are already over, so the list starts at today instead of at the oldest post; a post that still needs action is always shown.
+  const [range, setRange] = useState<"mendatang" | "lewat" | "semua">("mendatang");
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const needsAttention = (p: CsPost) => p.status === "draft" || p.status === "failed" || (p.status === "posted" && !!p.igGone) || (p.status === "ready" && (p.mode === "manual" || !connected));
+  const inRange = (p: CsPost) => range === "semua" || (range === "mendatang" ? dayKey(p.scheduledAt, tz) >= today || needsAttention(p) : dayKey(p.scheduledAt, tz) < today);
+  const shown = useMemo(() => posts.filter((p) => inRange(p) && (filter === "semua" || (filter === "perhatian" ? needsAttention(p) : p.status === filter))), [posts, filter, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, posts.filter((p) => inRange(p) && (f.id === "semua" || (f.id === "perhatian" ? needsAttention(p) : p.status === f.id))).length])), [posts, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
   const days = useMemo(() => {
     const m = new Map<string, CsPost[]>();
     for (const p of shown) m.set(dayKey(p.scheduledAt, tz), [...(m.get(dayKey(p.scheduledAt, tz)) ?? []), p]);
-    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [shown, tz]);
-  const today = dayKey(new Date().toISOString(), tz);
+    for (const list of m.values()) list.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)); // morning first
+    return [...m.entries()].sort(([a], [b]) => (range === "lewat" ? b.localeCompare(a) : a.localeCompare(b)));
+  }, [shown, tz, range]);
+  // today and the next two days with posts start open, the rest are folded (one click to open) so the page does not turn into a 100-row scroll
+  const isOpen = (key: string, idx: number) => openDays[key] ?? (range !== "mendatang" ? idx < 2 : idx < 3);
+  const goneCount = posts.filter((p) => p.status === "posted" && p.igGone).length;
   const cap = capToday(posts, settings.maxPerDay, tz);
+  const checkIg = async () => {
+    setBusyId("check"); setN(null);
+    try {
+      const r = await contentStudioApi.reconcilePosts();
+      await onChange();
+      setN(!r ? { ok: false, text: "Server tidak membalas" } : r.checked === 0 ? { ok: false, text: "Belum ada post tayang yang bisa dicek (atau Instagram belum tersambung)." } : r.gone ? { ok: false, text: `${r.gone} dari ${r.checked} post tidak ditemukan di Instagram. Lihat tanda merah di daftar, lalu tekan Posting ulang.` } : { ok: true, text: `${r.checked} post tayang terbaca di Instagram, semuanya masih ada.` });
+    } catch (e) { setN({ ok: false, text: errText(e) }); } finally { setBusyId(null); }
+  };
   const drafts = posts.filter((p) => p.status === "draft" && !p.revision).length;
 
   // keep the list fresh while something is rendering/posting
@@ -44,7 +62,20 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="sticky top-0 z-20 -mx-1 grid gap-2 bg-canvas/95 px-1 py-2 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-full bg-fg/10 p-0.5 text-xs font-bold">
+            {([["mendatang", "Mendatang"], ["lewat", "Sudah lewat"], ["semua", "Semua"]] as const).map(([id, label]) => (
+              <button key={id} onClick={() => { setRange(id); setOpenDays({}); }} className={`rounded-full px-3.5 py-1.5 transition ${range === id ? "bg-fg text-canvas" : "text-fg/60 hover:text-fg"}`}>{label}</button>
+            ))}
+          </div>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button className={btnGhost} disabled={busyId === "check"} onClick={() => void checkIg()} title="Cek ke Instagram apakah post berstatus Sudah tayang benar-benar ada">{busyId === "check" ? "Mengecek…" : "Cek ke Instagram"}</button>
+            {days.length > 1 && <button className={btnGhost} onClick={() => setOpenDays(Object.fromEntries(days.map(([k], i) => [k, !days.every(([kk], ii) => isOpen(kk, ii))])))}>{days.every(([k], i) => isOpen(k, i)) ? "Lipat semua hari" : "Buka semua hari"}</button>}
+            {drafts > 0 && <button className={btnAccent} onClick={() => run("all", () => contentStudioApi.approvePosts(), `${drafts} draf disetujui. Akan dirender & tayang sesuai jadwal.`)}>Setujui semua draf ({drafts})</button>}
+            <button className={btnPrimary} onClick={() => setAdding(true)}>+ Jadwalkan deck</button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {FILTERS.map((f) => (
             <button key={f.id} onClick={() => setFilter(f.id)} className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${filter === f.id ? "bg-fg text-canvas" : "bg-fg/10 text-fg/70 hover:bg-fg/20"}`}>
@@ -52,12 +83,9 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
             </button>
           ))}
         </div>
-        <div className="ml-auto flex flex-wrap gap-2">
-          {drafts > 0 && <button className={btnAccent} onClick={() => run("all", () => contentStudioApi.approvePosts(), `${drafts} draf disetujui. Akan dirender & tayang sesuai jadwal.`)}>Setujui semua draf ({drafts})</button>}
-          <button className={btnPrimary} onClick={() => setAdding(true)}>+ Jadwalkan deck</button>
-        </div>
       </div>
       <NoticeLine n={n} />
+      {goneCount > 0 && <p className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-300">{goneCount} post berstatus tayang ternyata tidak ada di Instagram (dihapus atau dihapus Instagram). Cari tanda merah &ldquo;Hilang dari Instagram&rdquo;, lalu tekan <b>Posting ulang</b>.</p>}
       {!connected && posts.some((p) => p.mode === "auto" && p.status !== "posted") && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">Instagram belum tersambung, jadi post bermode Auto akan berhenti di &ldquo;Siap tayang&rdquo;. Sambungkan di tab Pengaturan, atau unduh filenya dan posting manual.</p>
       )}
@@ -68,10 +96,16 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
         </div>
       )}
 
-      {days.map(([key, list]) => (
+      {days.map(([key, list], dayIdx) => (
         <section key={key} className="grid gap-2">
-          <h3 className={`text-xs font-bold uppercase tracking-wider ${key === today ? "text-accent" : "text-fg/50"}`}>{dayLabel(key, today)}</h3>
-          {list.map((p) => {
+          <button type="button" onClick={() => setOpenDays((o) => ({ ...o, [key]: !isOpen(key, dayIdx) }))} className={`flex items-center gap-2 text-left text-xs font-bold uppercase tracking-wider ${key === today ? "text-accent" : "text-fg/50"} hover:text-fg`}>
+            <span className={`inline-block transition ${isOpen(key, dayIdx) ? "rotate-90" : ""}`}>▸</span>
+            {dayLabel(key, today)}
+            <span className="rounded-full bg-fg/10 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-fg/60">
+              {list.length} post{!isOpen(key, dayIdx) ? ` · ${list.map((p) => timeOf(p.scheduledAt, tz)).join(", ")}` : ""}
+            </span>
+          </button>
+          {isOpen(key, dayIdx) && list.map((p) => {
             const busy = busyId === p.id || p.status === "preparing" || p.status === "posting";
             const deck = decks.find((d) => d.id === p.deckId);
             return (
@@ -89,16 +123,19 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                       {p.status === "ready" && p.mode === "auto" && !connected && <span className="text-[11px] text-amber-600">menunggu koneksi Instagram</span>}
                       {p.status === "ready" && p.mode === "auto" && connected && cap.reached && !p.force && <span className="text-[11px] text-amber-600">menunggu: batas {cap.maxPerDay} post/hari tercapai ({cap.postedToday}/{cap.maxPerDay}). Tayang besok, atau tekan Kirim sekarang.</span>}
                       {p.status === "ready" && p.mode === "manual" && <span className="text-[11px] text-fg/50">unduh file lalu posting sendiri</span>}
-                      {p.permalink && <a className="text-[11px] font-semibold text-accent underline" href={p.permalink} target="_blank" rel="noreferrer">Lihat di Instagram</a>}
+                      {p.permalink && !p.igGone && <a className="text-[11px] font-semibold text-accent underline" href={p.permalink} target="_blank" rel="noreferrer">Lihat di Instagram</a>}
                     </div>
+                    {p.status === "posted" && p.igGone && <p className="mt-1.5 text-xs text-red-500">Instagram sudah tidak punya post ini (dihapus, atau dihapus oleh Instagram). Tautannya tidak berlaku lagi.</p>}
                     {p.error && <p className="mt-1.5 text-xs text-red-500">{p.error}</p>}
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     {busy && <span className="text-[11px] text-fg/50">sedang diproses…</span>}
+                    {deck && <button className={btnGhost} onClick={() => setPreview(previewTargetFor(p.title, deck))}>{p.format === "reel" ? "▶ Pratinjau" : "Pratinjau"}</button>}
                     {!busy && p.status === "draft" && <button className={btnAccent} disabled={!!p.revision} title={p.revision ? "Revisi diminta, selesaikan dulu" : undefined} onClick={() => run(p.id, () => contentStudioApi.approvePosts([p.id]))}>Setujui</button>}
                     {!busy && (p.status === "scheduled" || p.status === "ready") && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.postNow(p.id), p.mode === "auto" ? "Dikirim dalam hitungan detik–menit." : "Disiapkan sekarang.")}>{p.mode === "auto" ? "Kirim sekarang" : "Siapkan sekarang"}</button>}
                     {!busy && p.status === "ready" && (p.files ?? []).map((f) => <button key={f} className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.downloadPostFile(p.id, f))}>{(p.files ?? []).length > 1 ? `↓ ${f.replace(/.*-(\d+)\.\w+$/, "slide $1")}` : "↓ Unduh"}</button>)}
                     {!busy && (p.status === "ready" || p.status === "scheduled") && p.mode === "manual" && <button className={btnPrimary} onClick={() => run(p.id, () => contentStudioApi.markPosted(p.id))}>Tandai terposting</button>}
+                    {!busy && p.status === "posted" && p.igGone && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.repostPost(p.id), "Masuk antrean lagi. Dirender dan dikirim dalam beberapa menit.")}>Posting ulang</button>}
                     {!busy && p.status === "failed" && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.retryPost(p.id))}>Ulangi</button>}
                     {!busy && p.status === "skipped" && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.patchPost(p.id, { status: "scheduled" }))}>Aktifkan lagi</button>}
                     {!busy && p.status !== "posted" && <button className={btnGhost} onClick={() => setEditing(editing === p.id ? null : p.id)}>{editing === p.id ? "Tutup" : "Edit"}</button>}
@@ -114,6 +151,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
         </section>
       ))}
 
+      {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
       {adding && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setAdding(false); }}>
           <div className="w-full max-w-md rounded-2xl border border-fg/15 bg-canvas p-5 shadow-2xl">

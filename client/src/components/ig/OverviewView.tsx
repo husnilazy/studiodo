@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { contentStudioApi, type CsMonthResult, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
+import { PreviewModal, type PreviewTarget } from "./PreviewModal";
 import { btnAccent, btnGhost, btnPrimary, Card, dayKey, dayLabel, errText, StatusChip, timeOf, Toggle, type Notice, NoticeLine } from "./shared";
 
 // Ringkasan: what needs attention, what posts next, and the Autopilot switch.
@@ -26,6 +27,7 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
     setN(null);
     try { await contentStudioApi.queueStoryReel(id); await onChange(); setN({ ok: true, text: "Reel masuk Kalender sebagai draf. Tinjau lalu setujui." }); } catch (e) { setN({ ok: false, text: errText(e) }); }
   };
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const [replace, setReplace] = useState(true);
   const [month, setMonthRes] = useState<CsMonthResult | null>(null);
   const startMonth = async () => {
@@ -37,7 +39,7 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
   const until = settings.autopilotUntil ? new Date(settings.autopilotUntil) : null;
   const today = dayKey(new Date().toISOString(), tz);
   const count = (s: CsPost["status"]) => posts.filter((p) => p.status === s).length;
-  const upcoming = posts.filter((p) => ["scheduled", "ready", "preparing", "posting"].includes(p.status)).slice(0, 5);
+  const upcoming = posts.filter((p) => ["scheduled", "ready", "preparing", "posting"].includes(p.status)).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)).slice(0, 5); // soonest first
   const postedMonth = posts.filter((p) => p.status === "posted" && p.postedAt && Date.now() - new Date(p.postedAt).getTime() < 30 * 86_400_000).length;
   const manualDue = posts.filter((p) => p.status === "ready" && p.mode === "manual" && new Date(p.scheduledAt).getTime() <= Date.now());
 
@@ -55,11 +57,12 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
 
   return (
     <div className="grid gap-4">
+      {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat value={count("draft")} label="Draf menunggu persetujuan" tone={count("draft") ? "text-amber-600" : ""} onClick={() => go("kalender")} />
         <Stat value={count("scheduled") + count("ready")} label="Terjadwal & siap tayang" onClick={() => go("kalender")} />
         <Stat value={postedMonth} label="Tayang 30 hari terakhir" onClick={() => go("kalender")} />
-        <Stat value={count("failed")} label="Gagal, perlu dicek" tone={count("failed") ? "text-red-500" : ""} onClick={() => go("kalender")} />
+        <Stat value={count("failed") + posts.filter((p) => p.status === "posted" && p.igGone).length} label="Gagal / hilang dari IG, perlu dicek" tone={count("failed") + posts.filter((p) => p.status === "posted" && p.igGone).length ? "text-red-500" : ""} onClick={() => go("kalender")} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -83,22 +86,34 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
               </ul>
             )}
           </Card>
-        </div>
-
-        <div className="grid content-start gap-4">
+          {(queue.held?.length ?? 0) > 0 && (
+            <Card title={`Perlu kamu cek dulu (${queue.held!.length})`} hint="Konten ini tidak ikut autopilot sampai kamu centang 'sudah dicek'. Baca catatannya, pastikan fiturnya benar di akun live.">
+              <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+                {queue.held!.map((h) => (
+                  <li key={h.key} className="flex items-start gap-3 rounded-xl border border-fg/10 p-3 text-sm">
+                    <input type="checkbox" className="mt-1" checked={false} onChange={(e) => confirmKey(h.key, e.target.checked)} />
+                    <span><b>{h.label}</b><br /><span className="text-xs text-fg/55">{h.note}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card title="Reel cerita" hint="Reel bersuara (VO + musik + efek). Masuk Kalender sebagai draf; dirender di PC saat mendekati jadwal.">
-            <ul className="grid gap-2">
+            <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
               {reels.map((r) => (
                 <li key={r.id} className="rounded-xl bg-canvas/60 px-3 py-2.5">
                   <p className="text-sm font-semibold">{r.title}</p>
                   <p className="text-xs text-fg/55">CTA: {r.cta} · musik: {r.music}</p>
                   {r.needsCheck && <p className="mt-1 text-xs text-amber-700">Cek dulu: {r.needsCheck}</p>}
-                  {r.queued.length ? <p className="mt-1 text-xs text-emerald-700">Sudah di kalender ({r.queued[0].status})</p> : <button className={`${btnGhost} mt-2`} onClick={() => void queueReel(r.id)}>Antrekan sebagai draf</button>}
+                  <div className="mt-2 flex flex-wrap items-center gap-2"><button className={btnAccent} onClick={() => setPreview({ title: r.title, storyReelId: r.id })}>▶ Tonton</button>{r.queued.length ? <span className="text-xs text-emerald-700">Sudah di kalender ({r.queued[0].status})</span> : <button className={btnGhost} onClick={() => void queueReel(r.id)}>Antrekan sebagai draf</button>}</div>
                 </li>
               ))}
               {reels.length === 0 && <p className="text-sm text-fg/50">Belum ada reel cerita.</p>}
             </ul>
           </Card>
+        </div>
+
+        <div className="grid content-start gap-4">
           <Card title="Instagram">
             {connected ? (
               <p className="flex items-center gap-2 text-sm"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Tersambung. Post bermode Auto tayang otomatis.</p>
@@ -118,18 +133,6 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
               {month && <p className="text-xs text-fg/55">{month.created} post: {month.reels} reel, {month.carousels} carousel.</p>}
             </div>
           </Card>
-          {(queue.held?.length ?? 0) > 0 && (
-            <Card title={`Perlu kamu cek dulu (${queue.held!.length})`} hint="Konten ini tidak ikut autopilot sampai kamu centang 'sudah dicek'. Baca catatannya, pastikan fiturnya benar di akun live.">
-              <ul className="grid gap-2">
-                {queue.held!.map((h) => (
-                  <li key={h.key} className="flex items-start gap-3 rounded-xl border border-fg/10 p-3 text-sm">
-                    <input type="checkbox" className="mt-1" checked={false} onChange={(e) => confirmKey(h.key, e.target.checked)} />
-                    <span><b>{h.label}</b><br /><span className="text-xs text-fg/55">{h.note}</span></span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
           <Card title="Autopilot" hint="Mengisi kalender dari katalog fitur: format & topik bergantian, tidak ada fitur yang terulang.">
             <div className="grid gap-3">
               <Toggle on={settings.autopilot} onChange={(v) => void save({ autopilot: v })} label="Isi kalender otomatis" hint={`Menjaga ${settings.horizonDays} hari ke depan selalu terisi`} />

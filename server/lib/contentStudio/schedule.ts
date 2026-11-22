@@ -31,6 +31,8 @@ export type ScheduledPost = {
   error?: string;
   igMediaId?: string;
   permalink?: string;
+  igGone?: boolean; // Instagram no longer has this media (deleted, removed by Instagram, ...): checked against the Graph API after posting
+  igCheckedAt?: string;
   postedAt?: string;
   createdAt: string;
   log: string[]; // last few events, newest last

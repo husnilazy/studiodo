@@ -62,6 +62,16 @@ export async function checkConnection(c: IgConnection, f: Fetcher = defaultFetch
   return { username: String(j.username ?? ""), mediaCount: typeof j.media_count === "number" ? j.media_count : undefined };
 }
 
+/**
+ * Does a published media still exist on Instagram? "gone" only when Graph says the object does not exist / cannot be loaded
+ * (code 100 subcode 33: deleted, removed by Instagram, or the token lost access). Network/other errors are "unknown" so a hiccup
+ * never marks a live post as missing.
+ */
+export async function mediaStatus(c: IgConnection, id: string, f: Fetcher = defaultFetch): Promise<"ok" | "gone" | "unknown"> {
+  try { await call(c, f, "GET", id, { fields: "id,permalink" }); return "ok"; }
+  catch (e) { return e instanceof Error && /kode 100\/33/.test(e.message) ? "gone" : "unknown"; }
+}
+
 export type IgCandidate = { igUserId: string; username: string; pageName: string; pageToken: string };
 
 /**

@@ -46,8 +46,8 @@ export function capToday(posts: Pick<CsPost, "status" | "postedAt">[], maxPerDay
   return { postedToday, maxPerDay, reached: postedToday >= maxPerDay };
 }
 
-export function StatusChip({ post }: { post: Pick<CsPost, "status"> }) {
-  const s = STATUS[post.status];
+export function StatusChip({ post }: { post: Pick<CsPost, "status" | "igGone"> }) {
+  const s = post.status === "posted" && post.igGone ? { label: "Hilang dari Instagram", cls: "bg-red-500/15 text-red-600" } : STATUS[post.status];
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${s.cls}`}>{s.label}</span>;
 }
 

@@ -4,7 +4,8 @@ import path from "node:path";
 import { FEATURES, PILLARS, featureById } from "../lib/contentStudio/features.js";
 import { CAPTION_VARIANTS, captionFor, featureDeck, withPhotos } from "../lib/contentStudio/generator.js";
 import { checkConnection, clearConnection, discoverAccounts, loadConnection, mask, saveConnection } from "../lib/contentStudio/instagram.js";
-import { createPost, heldKeys, mediaBase, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
+import { previewFile, previewState, startPreview } from "../lib/contentStudio/previews.js";
+import { createPost, heldKeys, mediaBase, reconcilePosted, refillCalendar, tick } from "../lib/contentStudio/publisher.js";
 import { listDecks, saveDeck } from "../lib/contentStudio/render.js";
 import { MONTH_PROGRAM, approvable, getPost, listPosts, loadSettings, mutatePosts, parseSettings, patchPost, publishDir, revisionPatch, saveSettings, type ScheduledPost } from "../lib/contentStudio/schedule.js";
 import { STORY_REELS, storyReelById, storyReelDeck, storyReelDeckId } from "../lib/contentStudio/storyReels.js";
@@ -73,6 +74,20 @@ contentQueueRouter.get("/queue", async (_req, res) => {
     ...h.reels.map((id) => ({ key: `r:${id}`, label: `🎬 ${storyReelById(id)?.title ?? id}`, note: storyReelById(id)?.needsCheck ?? "" })),
   ];
   res.json({ posts, settings, connected: !!conn, mediaBase: mediaBase(), held });
+});
+
+// Video preview of a reel (voice-over, music and effects as in the real post). POST starts a render on the PC and returns at once;
+// GET /video-preview/:key is polled until it is "ready", then GET /video-preview/:key/file streams the mp4 (Range supported).
+contentQueueRouter.post("/video-preview", async (req, res) => {
+  try { res.json(await startPreview({ storyReelId: typeof req.body?.storyReelId === "string" ? req.body.storyReelId : undefined, deckId: typeof req.body?.deckId === "string" ? req.body.deckId : undefined }, req.body?.force === true)); }
+  catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Pratinjau gagal dimulai" }); }
+});
+contentQueueRouter.get("/video-preview/:key", (req, res) => res.json(previewState(String(req.params.key))));
+contentQueueRouter.get("/video-preview/:key/file", (req, res) => {
+  const f = previewFile(String(req.params.key));
+  if (!f) return res.status(404).json({ error: "Pratinjau belum siap" });
+  res.setHeader("Content-Type", "video/mp4");
+  res.sendFile(f, { dotfiles: "allow" }, (err) => { if (err && !res.headersSent) res.status(404).end(); });
 });
 
 contentQueueRouter.get("/settings", async (_req, res) => res.json(await loadSettings()));
@@ -150,6 +165,21 @@ contentQueueRouter.post("/queue/:id/retry", async (req, res) => {
   const cur = await getPost(cleanId(req.params.id));
   if (!cur || cur.status !== "failed") return res.status(409).json({ error: "Hanya post gagal yang bisa diulang" });
   res.json(await patchPost(cur.id, { status: "scheduled", attempts: 0, nextTryAt: undefined, error: undefined }, "diulang"));
+});
+
+// Ask Instagram whether the posts we marked "posted" are really there (the worker also does this every 20 minutes).
+contentQueueRouter.post("/queue/reconcile", async (_req, res) => {
+  try { res.json(await reconcilePosted({ all: true })); }
+  catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : "Pengecekan gagal" }); }
+});
+
+// A post that Instagram no longer has goes back to the queue (due now) and is rendered + published again.
+contentQueueRouter.post("/queue/:id/repost", async (req, res) => {
+  const cur = await getPost(cleanId(req.params.id));
+  if (!cur || cur.status !== "posted" || !cur.igGone) return res.status(409).json({ error: "Hanya post yang hilang dari Instagram yang bisa diposting ulang" });
+  const post = await patchPost(cur.id, { status: "scheduled", scheduledAt: new Date().toISOString(), force: true, attempts: 0, nextTryAt: undefined, error: undefined, igGone: undefined, igCheckedAt: undefined, igMediaId: undefined, permalink: undefined, postedAt: undefined, files: [], coverFile: undefined, mediaType: undefined }, "diposting ulang (hilang dari Instagram)");
+  void tick();
+  res.json(post);
 });
 
 contentQueueRouter.post("/queue/:id/mark-posted", async (req, res) => {
