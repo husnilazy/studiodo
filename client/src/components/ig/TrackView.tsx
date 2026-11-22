@@ -22,7 +22,7 @@ function IgCell({ p }: { p: CsPost }) {
 
 // Starter pack for a brand-new TikTok account: relatable-problem reels first (strong hook in the first second, nothing that needs a live-app check),
 // then the pitch. All of them already have the voice over, so it is download -> upload by hand -> tick.
-const TIKTOK_ORDER = ["kenalan", "galeri", "frame", "cetak", "zoom", "printer", "stopmotion", "mode", "pelanggan", "trial", "dashboard"];
+const TIKTOK_ORDER = ["kenalan", "kesalahan", "urutan", "galeri", "harga", "frame", "hari", "cetak", "pelanggan", "trial"];
 const TIKTOK_TAGS = "#photobooth #usahaphotobooth #bisnisphotobooth #fotoboothindonesia #studiodo";
 const tiktokCaption = (r: CsStoryReel) => `${r.hook}
 
@@ -47,7 +47,7 @@ function TiktokStarter({ queue, onChange }: { queue: CsQueue; onChange: () => Pr
   return (
     <section className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
       <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div><h3 className="text-sm font-bold">Mulai di TikTok: 11 reel pertama</h3><p className="mt-0.5 max-w-2xl text-xs text-fg/60">Urutan untuk akun baru: mulai dari masalah yang dialami semua pemilik booth (hook kuat di detik pertama), baru pelan-pelan ke penawaran. Satu reel per hari sudah cukup. Tonton, unduh MP4, upload manual di TikTok, lalu centang.</p></div>
+        <div><h3 className="text-sm font-bold">Mulai di TikTok: 10 reel pertama</h3><p className="mt-0.5 max-w-2xl text-xs text-fg/60">Urutan untuk akun baru: mulai dari masalah yang dialami semua pemilik booth (hook kuat di detik pertama), baru pelan-pelan ke penawaran. Satu reel per hari sudah cukup. Tonton, unduh MP4, upload manual di TikTok, lalu centang.</p></div>
         <span className="rounded-full bg-fg/10 px-3 py-1.5 text-xs font-bold">{done.filter((k) => list.some((r) => r.id === k)).length}/{list.length} terupload</span>
       </header>
       {err && <p className="mb-2 text-xs text-red-500">{err}</p>}
