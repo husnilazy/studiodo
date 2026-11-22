@@ -3,7 +3,7 @@ import type { StoryReel } from "./storyReels.js";
 
 // Registry entries for the reelKit story reels (scenes in newReels.ts, scripts in reelScripts.ts, voice over + timing in server/assets/story-reels).
 export const NEW_STORY_REELS: StoryReel[] = [
-  { id: "alur", featureId: "trial-lisensi", title: "Kiosk asli: dari bayar sampai hasil", hook: "Ini kiosk STUDIODO yang sebenarnya. Bukan ilustrasi.", cta: "coba", music: "house", coverAt: 1.6,
+  { id: "alur", featureId: "trial-lisensi", title: "Kiosk asli: dari bayar sampai hasil", hook: "Ini kiosk STUDIODO yang sebenarnya. Bukan ilustrasi.", cta: "link", music: "house", coverAt: 1.6,
     caption: "Ini bukan ilustrasi: ini layar kiosk STUDIODO yang sebenarnya. 📲\n\nCustomer pilih paket, pilih tampilan kamera, bayar lewat QRIS atau voucher, edit foto langsung di kiosk, lalu hasilnya sampai lewat QR.\n\nMau lihat langsung? Coba gratis dulu.\n🔗 Info lengkap di studiodo.id (link di bio).", load: () => loadNew("alur") },
   { id: "kesalahan", featureId: "kasir-pos", title: "3 kesalahan owner photobooth baru", hook: "3 kesalahan owner photobooth baru.", cta: "simpan", music: "techno", coverAt: 1.6,
     caption: "Tiga kesalahan yang sering bikin owner photobooth baru boncos: beli alat banyak sebelum tahu pasarnya, harga paket asal-asalan, dan tidak punya catatan penjualan. 📉\n\nLaporan penjualan harian bisa otomatis lewat STUDIODO.\n\n📌 Simpan biar tidak mengulang kesalahan yang sama.\n🔗 Info lengkap di studiodo.id (link di bio).", load: () => loadNew("kesalahan") },
