@@ -1,6 +1,22 @@
 import { BLUE, CREAM, INK, LIL, MINT, ORG, PINK, TEAL, YEL } from "./heroReel2.js";
 import { camera, laptop, shot, slider, webcam } from "./reelCam.js";
 import { defineReel, K, type Ctx, type ReelDef } from "./reelKit.js";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+// Real kiosk screens (captured with scripts/capture-kiosk.ts from the kiosk preview mode, stored in server/assets/ui) shown inside a phone-like frame.
+const UI_CACHE = new Map<string, string>();
+const uiImage = (name: string) => {
+  let v = UI_CACHE.get(name);
+  if (!v) { v = `data:image/jpeg;base64,${readFileSync(path.join(process.cwd(), "server", "assets", "ui", `${name}.jpg`)).toString("base64")}`; UI_CACHE.set(name, v); }
+  return v;
+};
+let screenId = 0;
+const screen = (x: number, y: number, w: number, name: string, rot = 0) => {
+  const h = Math.round((w * 16) / 9), id = `scr${++screenId}`;
+  return `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="${-w / 2 - 14}" y="${-h / 2 - 14}" width="${w + 28}" height="${h + 28}" rx="46" style="fill:#14122b"/><clipPath id="${id}"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="32"/></clipPath><image href="${uiImage(name)}" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/></g>`;
+};
+
 import type { FigEd } from "./art4.js";
 
 // The 20 "feature" story reels (reelKit). Each scene = one voice-over sentence, text is the on-screen line, art is the illustration for that beat.
@@ -184,6 +200,17 @@ const DEFS: ReelDef[] = [
       { text: "Lupa password lagi? *Reset lagi?*", bg: PINK, art: (c) => c.A(K.card(540, 1230, 760, 150, "Password", "••••••••", INK, "#e5384f"), 0.3) + c.A(K.chip(540, 1470, "Reset ×∞", INK, "#fff", 46), 1.0) },
       { text: "Masuk pakai *Google,* satu klik!", bg: BLUE, dark: true, art: (c) => c.A(K.chip(540, 1260, "Masuk dengan Google", "#fff", INK, 52, 620), 0.3) + c.A(K.txt(540, 1480, "1 klik", 110, YEL), 1.0) },
       { text: "Atau *tautan email,* sekali klik.", bg: YEL, art: (c) => c.A(K.mail(540, 1260, 1.5), 0.3) + c.A(K.chip(540, 1540, "Tautan masuk", ORG, "#fff", 46), 1.0) },
+    ] },
+  // 26 ------------------------------------------------------------------------------------------------ real kiosk footage (trial)
+  { id: "alur", music: "house", voice: "maya", brand: "Dari bayar sampai hasil, satu alur.",
+    cta: { text: "Mau lihat *langsung?* Coba gratis!", btn: "Link di bio →" },
+    scenes: [
+      { text: "Ini *kiosk* STUDIODO yang sebenarnya.", bg: YEL, art: (c) => c.A(screen(540, 1440, 600, "kiosk-paket"), 0.3) + c.A(K.chip(840, 1060, "Bukan ilustrasi", ORG, "#fff", 40), 1.2) },
+      { text: "Pilih *paket,* harga langsung kelihatan.", bg: LIL, art: (c) => c.A(screen(540, 1440, 600, "kiosk-paket", -2), 0.2) },
+      { text: "Pilih tampilan *kamera:* cermin atau normal.", bg: MINT, art: (c) => c.A(screen(540, 1440, 600, "kiosk-kamera", 2), 0.2) },
+      { text: "Bayar pakai *QRIS,* atau voucher.", bg: PINK, art: (c) => c.A(screen(540, 1440, 600, "kiosk-bayar", -2), 0.2) },
+      { text: "Foto bisa *diedit* langsung di kiosk.", bg: CREAM, art: (c) => c.A(screen(540, 1440, 600, "kiosk-edit", 2), 0.2) },
+      { text: "Hasil lewat *QR.* Scan, lalu unduh.", bg: BLUE, dark: true, art: (c) => c.A(screen(540, 1440, 600, "kiosk-hasil", -2), 0.2) },
     ] },
   // 22-25 ------------------------------------------------------------------------------------------- tips for the TikTok starter pack
   { id: "kesalahan", music: "techno", voice: "finn", brand: "Mulai dari yang benar.",
