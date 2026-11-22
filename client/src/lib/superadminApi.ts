@@ -781,7 +781,7 @@ export type CsPostStatus = "draft" | "scheduled" | "preparing" | "ready" | "post
 export type CsPost = {
   id: string; deckId: string; title: string; format: "carousel" | "reel"; featureId?: string; scheduledAt: string; mode: "auto" | "manual"; status: CsPostStatus;
   caption: string; hashtags: string[]; carouselMedia: "image" | "video"; mediaType?: "reel" | "images" | "videos"; files?: string[]; coverFile?: string; force?: boolean; revision?: { text: string; at: string };
-  attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; igGone?: boolean; igCheckedAt?: string; postedAt?: string; createdAt: string; log: string[];
+  attempts: number; nextTryAt?: string; error?: string; igMediaId?: string; permalink?: string; igGone?: boolean; igCheckedAt?: string; tiktokAt?: string; hidden?: boolean; postedAt?: string; createdAt: string; log: string[];
 };
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
@@ -853,6 +853,8 @@ export const contentStudioApi = {
   setCarouselMedia: (media: "image" | "video") => request<{ changed: number; media: string }>("/content-studio/queue/carousel-media", { method: "POST", body: JSON.stringify({ media }) }),
   reconcilePosts: () => request<{ checked: number; gone: number }>(`/content-studio/queue/reconcile`, { method: "POST" }),
   repostPost: (id: string, carouselMedia?: "image" | "video") => request<CsPost>(`/content-studio/queue/${id}/repost`, { method: "POST", body: JSON.stringify({ carouselMedia }) }),
+  setTiktok: (id: string, done: boolean) => request<CsPost>(`/content-studio/queue/${id}/tiktok`, { method: "POST", body: JSON.stringify({ done }) }),
+  hidePost: (id: string, hidden: boolean) => request<CsPost>(`/content-studio/queue/${id}/hide`, { method: "POST", body: JSON.stringify({ hidden }) }),
   retryPost: (id: string) => request<CsPost>(`/content-studio/queue/${id}/retry`, { method: "POST" }),
   markPosted: (id: string, permalink?: string) => request<CsPost>(`/content-studio/queue/${id}/mark-posted`, { method: "POST", body: JSON.stringify({ permalink }) }),
   async downloadPostFile(id: string, name: string) {

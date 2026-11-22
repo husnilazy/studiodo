@@ -202,6 +202,20 @@ contentQueueRouter.post("/queue/:id/repost", async (req, res) => {
   res.json(post);
 });
 
+// Checklist: TikTok is uploaded by hand, the owner ticks it here. { done: boolean }
+contentQueueRouter.post("/queue/:id/tiktok", async (req, res) => {
+  const cur = await getPost(cleanId(req.params.id));
+  if (!cur) return res.status(404).json({ error: "Post tidak ditemukan" });
+  res.json(await patchPost(cur.id, { tiktokAt: req.body?.done ? new Date().toISOString() : undefined }));
+});
+
+// Hide (or show again) a post in the calendar lists. { hidden: boolean }
+contentQueueRouter.post("/queue/:id/hide", async (req, res) => {
+  const cur = await getPost(cleanId(req.params.id));
+  if (!cur) return res.status(404).json({ error: "Post tidak ditemukan" });
+  res.json(await patchPost(cur.id, { hidden: req.body?.hidden ? true : undefined }));
+});
+
 contentQueueRouter.post("/queue/:id/mark-posted", async (req, res) => {
   const cur = await getPost(cleanId(req.params.id));
   if (!cur) return res.status(404).json({ error: "Post tidak ditemukan" });

@@ -4,6 +4,7 @@ import { IconPanel } from "@/components/IconPanel";
 import { TeaserPanel } from "@/components/TeaserPanel";
 import { TriptychPanel } from "@/components/TriptychPanel";
 import { CalendarView } from "@/components/ig/CalendarView";
+import { TrackView } from "@/components/ig/TrackView";
 import { GeneratorView } from "@/components/ig/GeneratorView";
 import { OverviewView, type Tab } from "@/components/ig/OverviewView";
 import { ReviewView } from "@/components/ig/ReviewView";
@@ -20,7 +21,7 @@ import { contentStudioApi, type CsDeck, type CsIdea, type CsQueue } from "@/lib/
 // Rendering runs on the server PC (Chrome + ffmpeg): see server/lib/contentStudio.
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "tinjau", label: "Tinjau" }, { id: "ringkasan", label: "Ringkasan" }, { id: "bahan", label: "Bahan foto" }, { id: "generator", label: "Generator" }, { id: "kalender", label: "Kalender" },
+  { id: "tinjau", label: "Tinjau" }, { id: "ringkasan", label: "Ringkasan" }, { id: "bahan", label: "Bahan foto" }, { id: "generator", label: "Generator" }, { id: "kalender", label: "Kalender" }, { id: "pantau", label: "Pantau" },
   { id: "studio", label: "Studio desain" }, { id: "aset", label: "Aset profil" }, { id: "pengaturan", label: "Pengaturan" },
 ];
 const ASSETS = [["trio", "Pembuka Feed (3 tile)"], ["teaser", "Teaser Reel"], ["icon", "Logo"], ["plan", "Checklist peluncuran"]] as const;
@@ -66,6 +67,7 @@ export function ContentStudioPanel() {
       {tab === "bahan" && <SourceView onGenerated={async () => { await loadDecks(); }} go={setTab} />}
       {tab === "generator" && <GeneratorView decks={decks} onGenerated={async () => { await loadDecks(); }} onOpenDeck={openDeck} onSchedule={setScheduleDeck} />}
       {tab === "kalender" && <CalendarView queue={queue} decks={decks} onChange={loadQueue} onOpenDeck={openDeck} />}
+      {tab === "pantau" && <TrackView queue={queue} onChange={loadQueue} />}
       {tab === "studio" && <StudioView decks={decks} ideas={ideas} env={env} queue={queue} openId={openId} reload={loadDecks} onScheduled={(m) => { setToast({ ok: true, text: m }); void loadQueue(); setTab("kalender"); }} />}
       {tab === "pengaturan" && <SettingsView settings={queue.settings} onChange={loadQueue} />}
       {tab === "aset" && (

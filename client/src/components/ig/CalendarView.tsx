@@ -7,9 +7,9 @@ import { btnAccent, btnGhost, btnPrimary, capToday, dayKey, dayLabel, errText, f
 
 // Kalender: every queued post by day, with the actions that make sense for its status.
 
-const FILTERS: { id: "semua" | "perhatian" | CsPostStatus; label: string }[] = [
+const FILTERS: { id: "semua" | "perhatian" | "sembunyi" | CsPostStatus; label: string }[] = [
   { id: "semua", label: "Semua" }, { id: "perhatian", label: "Perlu tindakan" }, { id: "draft", label: "Draf" }, { id: "scheduled", label: "Terjadwal" },
-  { id: "ready", label: "Siap" }, { id: "posted", label: "Tayang" }, { id: "failed", label: "Gagal" },
+  { id: "ready", label: "Siap" }, { id: "posted", label: "Tayang" }, { id: "failed", label: "Gagal" }, { id: "sembunyi", label: "Disembunyikan" },
 ];
 
 export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: CsQueue; decks: CsDeck[]; onChange: () => Promise<void>; onOpenDeck: (id: string) => void }) {
@@ -27,10 +27,12 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
   // "Mendatang" (default) hides days that are already over, so the list starts at today instead of at the oldest post; a post that still needs action is always shown.
   const [range, setRange] = useState<"mendatang" | "lewat" | "semua">("mendatang");
   const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const isHidden = (p: CsPost) => !!p.hidden || p.status === "skipped"; // skipped = replaced by a newer plan: out of sight unless asked for
+  const matches = (p: CsPost, f: string) => (f === "sembunyi" ? isHidden(p) : !isHidden(p) && (f === "semua" || (f === "perhatian" ? needsAttention(p) : p.status === f)));
   const needsAttention = (p: CsPost) => p.status === "draft" || p.status === "failed" || (p.status === "posted" && !!p.igGone) || (p.status === "ready" && (p.mode === "manual" || !connected));
   const inRange = (p: CsPost) => range === "semua" || (range === "mendatang" ? dayKey(p.scheduledAt, tz) >= today || needsAttention(p) : dayKey(p.scheduledAt, tz) < today);
-  const shown = useMemo(() => posts.filter((p) => inRange(p) && (filter === "semua" || (filter === "perhatian" ? needsAttention(p) : p.status === filter))), [posts, filter, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, posts.filter((p) => inRange(p) && (f.id === "semua" || (f.id === "perhatian" ? needsAttention(p) : p.status === f.id))).length])), [posts, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => posts.filter((p) => inRange(p) && matches(p, filter)), [posts, filter, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, posts.filter((p) => inRange(p) && matches(p, f.id)).length])), [posts, connected, range, today]); // eslint-disable-line react-hooks/exhaustive-deps
   const days = useMemo(() => {
     const m = new Map<string, CsPost[]>();
     for (const p of shown) m.set(dayKey(p.scheduledAt, tz), [...(m.get(dayKey(p.scheduledAt, tz)) ?? []), p]);
@@ -39,7 +41,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
   }, [shown, tz, range]);
   // today and the next two days with posts start open, the rest are folded (one click to open) so the page does not turn into a 100-row scroll
   const isOpen = (key: string, idx: number) => openDays[key] ?? (range !== "mendatang" ? idx < 2 : idx < 3);
-  const goneCount = posts.filter((p) => p.status === "posted" && p.igGone).length;
+  const goneCount = posts.filter((p) => p.status === "posted" && p.igGone && !p.hidden).length;
   const cap = capToday(posts, settings.maxPerDay, tz);
   const checkIg = async () => {
     setBusyId("check"); setN(null);
@@ -139,6 +141,7 @@ export function CalendarView({ queue, decks, onChange, onOpenDeck }: { queue: Cs
                     {!busy && (p.status === "ready" || p.status === "scheduled") && p.mode === "manual" && <button className={btnPrimary} onClick={() => run(p.id, () => contentStudioApi.markPosted(p.id))}>Tandai terposting</button>}
                     {!busy && p.status === "posted" && p.igGone && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.repostPost(p.id, p.carouselMedia), "Masuk antrean lagi. Dirender dan dikirim dalam beberapa menit.")}>Posting ulang</button>}
                     {!busy && p.status === "failed" && <button className={btnAccent} onClick={() => run(p.id, () => contentStudioApi.retryPost(p.id))}>Ulangi</button>}
+                    {!busy && ((p.status === "posted" && !!p.igGone) || p.status === "skipped" || p.hidden) && <button className={btnGhost} title="Sembunyikan dari daftar (tidak dihapus)" onClick={() => run(p.id, () => contentStudioApi.hidePost(p.id, !p.hidden))}>{p.hidden ? "Tampilkan" : "Sembunyikan"}</button>}
                     {!busy && p.status === "skipped" && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.patchPost(p.id, { status: "scheduled" }))}>Aktifkan lagi</button>}
                     {!busy && p.status !== "posted" && <button className={btnGhost} onClick={() => setEditing(editing === p.id ? null : p.id)}>{editing === p.id ? "Tutup" : "Edit"}</button>}
                     {!busy && (p.status === "scheduled" || p.status === "ready") && <button className={btnGhost} onClick={() => run(p.id, () => contentStudioApi.patchPost(p.id, { status: "draft" }))}>Jadikan draf</button>}

@@ -88,9 +88,10 @@ const RAW_DECKS: Deck[] = [
  * Carousels move to the newest look ("kaca": dark glass, per-deck colour theme) unless a deck says otherwise. Reels and highlights keep their
  * own look. The theme rotates through the carousels so the feed does not turn into one blue wall.
  */
+/** The pre-"program 1 bulan" feed decks and motion reels were retired (never posted, no longer on message). Only the profile highlight covers stay. */
 export const BUILTIN_DECKS: Deck[] = (() => {
   let n = 0;
-  return RAW_DECKS.map((d) => (d.format === "carousel" && !d.style ? { ...d, style: "kaca" as const, theme: d.theme ?? THEMES[n++ % THEMES.length] } : d));
+  return RAW_DECKS.filter((d) => d.format === "highlight").map((d) => (d.format === "carousel" && !d.style ? { ...d, style: "kaca" as const, theme: d.theme ?? THEMES[n++ % THEMES.length] } : d));
 })();
 
 export type Idea = { pillar: string; title: string; hook: string; format: "carousel" | "reel"; source: string; deckId?: string };
@@ -172,4 +173,5 @@ const IDEA_DECK: Record<string, string> = {
   "Cara menentukan harga paket foto": "carousel-menentukan-harga-paket",
   "Booth event vs booth tetap: bedanya apa?": "carousel-event-vs-tetap"
 };
-export const IDEA_BACKLOG: Idea[] = RAW_IDEAS.map((i) => ({ ...i, deckId: IDEA_DECK[i.title] }));
+// Ideas whose deck was retired are dropped with it.
+export const IDEA_BACKLOG: Idea[] = RAW_IDEAS.map((i) => ({ ...i, deckId: IDEA_DECK[i.title] })).filter((i) => !i.deckId);

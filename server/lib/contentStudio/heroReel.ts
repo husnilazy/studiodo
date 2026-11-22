@@ -154,7 +154,7 @@ ${ART_CSS}
 .art .a-pop,.a-pop{animation:apop .7s cubic-bezier(.3,1.5,.5,1) both;animation-delay:calc(var(--d,0s) + .25s)}
 
 `;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${kacaFonts()}${css}</style></head><body><div class="stage"><div class="bg"><i></i><i></i><i></i></div><div class="ribs"></div>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${kacaFonts()}${css}</style></head><body><div class="stage"><div class="bg"><i></i><i></i><i></i></div>
 <img class="logo" src="${wordmark("white")}" alt="STUDIODO">${s1}${s2}${s3}${s4}${s5}${s6}${[T.bayangin - 0.2, 18.2, 25.35, 31.2, 33.95].map(sweep).join("")}</div>
 <script>window.__seek=(ms)=>{document.getAnimations().forEach(a=>{a.pause();a.currentTime=ms;});};window.__ready=true;</script></body></html>`;
   void [coins, clock, qr];

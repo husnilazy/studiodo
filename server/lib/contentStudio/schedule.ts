@@ -33,6 +33,8 @@ export type ScheduledPost = {
   permalink?: string;
   igGone?: boolean; // Instagram no longer has this media (deleted, removed by Instagram, ...): checked against the Graph API after posting
   igCheckedAt?: string;
+  tiktokAt?: string; // ISO: the owner ticked "sudah di TikTok" (TikTok is uploaded by hand, so this is only a checklist)
+  hidden?: boolean; // kept out of the calendar lists (e.g. deleted on purpose); still in the queue file
   postedAt?: string;
   createdAt: string;
   log: string[]; // last few events, newest last

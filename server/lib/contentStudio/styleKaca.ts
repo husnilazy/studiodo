@@ -216,7 +216,7 @@ const ktape = (s: Slide) => (s.note ? `<div class="k_tape k_glass" ${D(0.9)}>${e
 const longCls = (s: Slide) => (s.title.replace(/[|*]/g, "").length > 30 ? " s" : "");
 const longest0 = (s: Slide) => Math.max(...s.title.replace(/\*/g, "").split("|").map((l) => l.length));
 const sizeCls = (s: Slide) => (s.title.replace(/[|*]/g, "").length > 38 ? "m" : "");
-const ribs = (low = false) => `<div class="k_ribs${low ? " low" : ""}"></div>`;
+const ribs = (_low = false) => ""; // the vertical stripe texture was dropped: flat aurora glow only
 
 type Pick = (salt: number, n: number) => number;
 
@@ -264,7 +264,7 @@ function inner(s: Slide, deck: Deck, reel: boolean, pick: Pick): { html: string;
       const items = s.items ?? [];
       if (pick(2, 2) === 0) {
         const list = items.map((it, i) => `<div class="k_it" ${D(0.6 + i * 0.32)}><span class="k_no">${i + 1}</span><span class="k_tx">${em(it)}</span></div>`).join("");
-        return { cls: "ctr", extra: `<div class="k_ribs low"></div>`, html: `${kpill(s)}<h1 class="kh m">${lines(s.title, 0.15)}</h1><div class="k_stpA">${list}</div>${kbody(s, 0.7 + items.length * 0.3)}` };
+        return { cls: "ctr", extra: "", html: `${kpill(s)}<h1 class="kh m">${lines(s.title, 0.15)}</h1><div class="k_stpA">${list}</div>${kbody(s, 0.7 + items.length * 0.3)}` };
       }
       const list = items.map((it, i) => `<div class="k_it k_glass" ${D(0.6 + i * 0.3)}><span class="k_no">${i + 1}</span><span>${em(it)}</span></div>`).join("");
       return { cls: "ctr", extra: "", html: `${kpill(s)}<h1 class="kh m">${lines(s.title, 0.15)}</h1><div class="k_stpB">${list}</div>${kbody(s, 0.7 + items.length * 0.3)}` };

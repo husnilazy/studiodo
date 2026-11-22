@@ -32,6 +32,7 @@ export function StudioView({ decks, ideas, env, queue, openId, reload, onSchedul
   const [left, setLeft] = useState<"decks" | "ideas">("decks");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"semua" | "carousel" | "reel" | "kaca">("semua");
+  const [usage, setUsage] = useState<"all" | "belum" | "jadwal" | "tayang">("all"); // where a deck is in the pipeline: unused / queued / already on Instagram
   const [tab, setTab] = useState<"slide" | "deck" | "caption">("slide");
   const [scheduling, setScheduling] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -110,10 +111,16 @@ export function StudioView({ decks, ideas, env, queue, openId, reload, onSchedul
   const size = draft ? SIZES[draft.format] : SIZES.carousel;
   const previewW = 380;
   const scale = previewW / size.w;
+  const deckState = (id: string): "belum" | "jadwal" | "tayang" => {
+    const mine = queue.posts.filter((p) => p.deckId === id && p.status !== "skipped");
+    return mine.some((p) => p.status === "posted" && !p.igGone) ? "tayang" : mine.length ? "jadwal" : "belum";
+  };
+  const usageCount = (u: "belum" | "jadwal" | "tayang") => decks.filter((d) => d.format !== "highlight" && deckState(d.id) === u).length;
   const shownDecks = useMemo(() => decks.filter((d) => {
     if (q.trim() && !d.title.toLowerCase().includes(q.trim().toLowerCase())) return false;
+    if (usage !== "all" && deckState(d.id) !== usage) return false;
     return filter === "semua" || (filter === "kaca" ? d.style === "kaca" : d.format === filter);
-  }), [decks, q, filter]);
+  }), [decks, q, filter, usage, queue.posts]); // eslint-disable-line react-hooks/exhaustive-deps
   const grouped = useMemo(() => { const m = new Map<string, CsIdea[]>(); ideas.filter((i) => !i.deckId).forEach((i) => m.set(i.pillar, [...(m.get(i.pillar) ?? []), i])); return [...m.entries()]; }, [ideas]);
   const scheduledOf = (id: string) => queue.posts.filter((p) => p.deckId === id && p.status !== "skipped").length;
   const canPreviewNow = draft && draft.slides.length > 0;
@@ -138,6 +145,9 @@ export function StudioView({ decks, ideas, env, queue, openId, reload, onSchedul
             <div className="mb-2 flex flex-wrap gap-1">
               {([["semua", "Semua"], ["kaca", "Kaca"], ["carousel", "Carousel"], ["reel", "Reel"]] as const).map(([v, l]) => <button key={v} onClick={() => setFilter(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${filter === v ? "bg-accent text-white" : "bg-fg/10 text-fg/60 hover:bg-fg/20"}`}>{l}</button>)}
             </div>
+            <div className="mb-2 flex flex-wrap gap-1">
+              {([["all", "Semua status", null], ["belum", "Belum dipakai", usageCount("belum")], ["jadwal", "Terjadwal", usageCount("jadwal")], ["tayang", "Sudah tayang", usageCount("tayang")]] as const).map(([v, l, c]) => <button key={v} onClick={() => setUsage(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${usage === v ? "bg-fg text-canvas" : "bg-fg/10 text-fg/60 hover:bg-fg/20"}`}>{l}{c !== null && <span className="opacity-60"> {c}</span>}</button>)}
+            </div>
             <div className="mb-2 grid grid-cols-3 gap-1.5 [&>button]:!px-1.5">
               <button onClick={() => addDeck("carousel")} className={btnGhost}>+ Carousel</button>
               <button onClick={() => addDeck("reel")} className={btnGhost}>+ Reel</button>
@@ -157,7 +167,7 @@ export function StudioView({ decks, ideas, env, queue, openId, reload, onSchedul
                   <span className="mt-1 flex flex-wrap items-center gap-1 text-[10.5px] text-fg/50">
                     <span>{d.format === "reel" ? "Reel" : d.format === "highlight" ? "Sorotan" : "Carousel"} · {d.slides.length} slide</span>
                     {d.style === "kaca" && <span className="rounded bg-fg/10 px-1.5 py-px font-bold">Kaca · {d.theme ?? "biru"}</span>}{d.style === "kontak" && <span className="rounded bg-fg/10 px-1.5 py-px font-bold">Contact</span>}
-                    {scheduledOf(d.id) > 0 && <span className="rounded bg-accent/15 px-1.5 py-px font-bold text-accent">dijadwalkan</span>}
+                    {deckState(d.id) === "tayang" ? <span className="rounded bg-emerald-500/15 px-1.5 py-px font-bold text-emerald-600 dark:text-emerald-400">sudah tayang</span> : scheduledOf(d.id) > 0 && <span className="rounded bg-accent/15 px-1.5 py-px font-bold text-accent">dijadwalkan</span>}
                   </span>
                 </button>
               ))}
