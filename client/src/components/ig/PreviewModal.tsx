@@ -67,7 +67,7 @@ function ReelPlayer({ target }: { target: PreviewTarget }) {
       <video src={url} controls autoPlay playsInline className="mx-auto max-h-[72vh] w-auto max-w-full rounded-xl bg-black" style={{ aspectRatio: "9 / 16" }} />
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg/55">
         <span>Sama dengan yang dikirim ke Instagram (1080×1920, dengan suara).</span>
-        <button className={btnGhost} onClick={() => setRun((r) => r + 1)}>Render ulang</button>
+        <span className="flex gap-2"><a className={btnGhost} href={url} download={`studiodo-${key}.mp4`}>↓ Unduh MP4</a><button className={btnGhost} onClick={() => setRun((r) => r + 1)}>Render ulang</button></span>
       </div>
     </div>
   );

@@ -786,7 +786,7 @@ export type CsPost = {
 export type CsSourceSession = { id: string; createdAt: string; consent: boolean; orientation: string; hasVideo: boolean; photos: string[]; strip: string | null };
 export type CsSettings = {
   tzOffsetMin: number; days: number[]; times: string[]; reelEvery: number; defaultMode: "auto" | "manual"; carouselMedia?: "image" | "video"; prepLeadMin: number; maxPerDay: number;
-  autopilot: boolean; autoApprove: boolean; horizonDays: number; slotFormats?: Record<string, "reel" | "carousel">; checkedKeys?: string[]; autopilotUntil?: string; lastRefillAt?: string;
+  autopilot: boolean; autoApprove: boolean; horizonDays: number; slotFormats?: Record<string, "reel" | "carousel">; checkedKeys?: string[]; tiktokKeys?: string[]; autopilotUntil?: string; lastRefillAt?: string;
 };
 export type CsHeld = { key: string; label: string; note: string };
 export type CsMonthResult = { settings: CsSettings; skipped: number; created: number; reels: number; carousels: number; first?: string; last?: string };

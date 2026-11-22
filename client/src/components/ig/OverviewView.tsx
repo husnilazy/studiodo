@@ -86,19 +86,7 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
               </ul>
             )}
           </Card>
-          {(queue.held?.length ?? 0) > 0 && (
-            <Card title={`Perlu kamu cek dulu (${queue.held!.length})`} hint="Konten ini tidak ikut autopilot sampai kamu centang 'sudah dicek'. Baca catatannya, pastikan fiturnya benar di akun live.">
-              <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
-                {queue.held!.map((h) => (
-                  <li key={h.key} className="flex items-start gap-3 rounded-xl border border-fg/10 p-3 text-sm">
-                    <input type="checkbox" className="mt-1" checked={false} onChange={(e) => confirmKey(h.key, e.target.checked)} />
-                    <span><b>{h.label}</b><br /><span className="text-xs text-fg/55">{h.note}</span></span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-          <Card title="Reel cerita" hint="Reel bersuara (VO + musik + efek). Masuk Kalender sebagai draf; dirender di PC saat mendekati jadwal.">
+          <Card title={`Reel cerita (${reels.length})`} hint="Reel bersuara (VO + musik + efek). Masuk Kalender sebagai draf; dirender di PC saat mendekati jadwal.">
             <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
               {reels.map((r) => (
                 <li key={r.id} className="rounded-xl bg-canvas/60 px-3 py-2.5">
@@ -111,6 +99,18 @@ export function OverviewView({ queue, onChange, go }: { queue: CsQueue; onChange
               {reels.length === 0 && <p className="text-sm text-fg/50">Belum ada reel cerita.</p>}
             </ul>
           </Card>
+          {(queue.held?.length ?? 0) > 0 && (
+            <Card title={`Perlu kamu cek dulu (${queue.held!.length})`} hint="Konten ini tidak ikut autopilot sampai kamu centang 'sudah dicek'. Baca catatannya, pastikan fiturnya benar di akun live.">
+              <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+                {queue.held!.map((h) => (
+                  <li key={h.key} className="flex items-start gap-3 rounded-xl border border-fg/10 p-3 text-sm">
+                    <input type="checkbox" className="mt-1" checked={false} onChange={(e) => confirmKey(h.key, e.target.checked)} />
+                    <span><b>{h.label}</b><br /><span className="text-xs text-fg/55">{h.note}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         <div className="grid content-start gap-4">

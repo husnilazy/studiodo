@@ -53,6 +53,7 @@ export type CsSettings = {
   autoApprove: boolean; // autopilot drafts go straight to "scheduled" (off = a person approves first)
   horizonDays: number; // autopilot keeps this many days of posts queued ahead
   slotFormats: Record<string, "reel" | "carousel">; // HH:mm -> format for that slot (overrides reelEvery for the slots listed)
+  tiktokKeys: string[]; // story reel ids the owner already uploaded to TikTok by hand (starter checklist)
   checkedKeys: string[]; // content the owner confirmed ("f:<featureId>" / "r:<storyReelId>"); anything flagged "cek dulu" stays out of autopilot until listed here
   autopilotUntil?: string; // ISO: autopilot stops queuing new posts after this moment (the 1-month trial)
   lastRefillAt?: string;
@@ -60,7 +61,7 @@ export type CsSettings = {
 
 export const DEFAULT_SETTINGS: CsSettings = {
   tzOffsetMin: 420, days: [1, 3, 5, 0], times: ["19:00"], reelEvery: 3, defaultMode: "auto", carouselMedia: "image", prepLeadMin: 30, maxPerDay: 3,
-  autopilot: false, autoApprove: false, horizonDays: 14, slotFormats: {}, checkedKeys: [],
+  autopilot: false, autoApprove: false, horizonDays: 14, slotFormats: {}, tiktokKeys: [], checkedKeys: [],
 };
 
 /** "Program 1 bulan": 3 posts a day (09:00 reel, 14:00 carousel, 18:30 reel), every day, published automatically. */
@@ -146,6 +147,7 @@ export function parseSettings(input: any, base: CsSettings): CsSettings | string
       ? Object.fromEntries(Object.entries(input.slotFormats as Record<string, unknown>).filter(([k, v]) => HM.test(k) && (v === "reel" || v === "carousel")) as [string, "reel" | "carousel"][])
       : base.slotFormats,
     autopilotUntil: typeof input.autopilotUntil === "string" && !Number.isNaN(Date.parse(input.autopilotUntil)) ? new Date(input.autopilotUntil).toISOString() : undefined,
+    tiktokKeys: Array.isArray(input.tiktokKeys) ? [...new Set<string>(input.tiktokKeys.map(String).filter((k: string) => /^[a-z0-9-]{1,40}$/.test(k)))].slice(0, 100) : base.tiktokKeys ?? [],
     checkedKeys: Array.isArray(input.checkedKeys) ? [...new Set<string>(input.checkedKeys.map(String).filter((k: string) => /^[fr]:[a-z0-9-]{1,60}$/.test(k)))].slice(0, 300) : base.checkedKeys,
   };
 }

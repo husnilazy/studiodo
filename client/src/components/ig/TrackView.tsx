@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { contentStudioApi, type CsPost, type CsQueue } from "@/lib/superadminApi";
+import { useEffect, useMemo, useState } from "react";
+import { contentStudioApi, type CsPost, type CsQueue, type CsStoryReel } from "@/lib/superadminApi";
+import { PreviewModal, type PreviewTarget } from "./PreviewModal";
 import { btnGhost, btnPrimary, dayKey, errText, timeOf, type Notice, NoticeLine } from "./shared";
 
 // Pantau: one checklist of what has actually gone out. Instagram is checked against the Graph API ("Cek ke Instagram");
@@ -17,6 +18,56 @@ function IgCell({ p }: { p: CsPost }) {
   if (p.status === "posted" && p.igGone) return <span className="text-xs font-bold text-red-500">✕ Tidak ada di Instagram</span>;
   if (p.status === "failed") return <span className="text-xs font-bold text-red-500">Gagal kirim</span>;
   return <span className="text-xs font-semibold text-fg/45">Belum ({p.status === "draft" ? "draf" : "terjadwal"})</span>;
+}
+
+// Starter pack for a brand-new TikTok account: relatable-problem reels first (strong hook in the first second, nothing that needs a live-app check),
+// then the pitch. All of them already have the voice over, so it is download -> upload by hand -> tick.
+const TIKTOK_ORDER = ["galeri", "frame", "cetak", "zoom", "printer", "stopmotion", "mode", "pelanggan", "trial", "dashboard"];
+const TIKTOK_TAGS = "#photobooth #usahaphotobooth #bisnisphotobooth #fotoboothindonesia #studiodo";
+const tiktokCaption = (r: CsStoryReel) => `${r.hook}
+
+Coba gratis di studiodo.id (link di bio) 📸
+${TIKTOK_TAGS}`;
+
+function TiktokStarter({ queue, onChange }: { queue: CsQueue; onChange: () => Promise<void> }) {
+  const [reels, setReels] = useState<CsStoryReel[]>([]);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { contentStudioApi.storyReels().then((r) => setReels(r ?? [])).catch(() => undefined); }, []);
+  const done = queue.settings.tiktokKeys ?? [];
+  const list = TIKTOK_ORDER.map((id) => reels.find((r) => r.id === id)).filter((r): r is CsStoryReel => !!r);
+  const toggle = async (id: string, on: boolean) => {
+    setErr(null);
+    try { await contentStudioApi.saveSettings({ ...queue.settings, tiktokKeys: on ? [...new Set([...done, id])] : done.filter((k) => k !== id) }); await onChange(); } catch (e) { setErr(errText(e)); }
+  };
+  const copy = async (r: CsStoryReel) => { try { await navigator.clipboard.writeText(tiktokCaption(r)); setCopied(r.id); setTimeout(() => setCopied(null), 1500); } catch { setErr("Tidak bisa menyalin, pilih teksnya manual."); } };
+  if (!list.length) return null;
+  const next = list.find((r) => !done.includes(r.id));
+  return (
+    <section className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
+      <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div><h3 className="text-sm font-bold">Mulai di TikTok: 10 reel pertama</h3><p className="mt-0.5 max-w-2xl text-xs text-fg/60">Urutan untuk akun baru: mulai dari masalah yang dialami semua pemilik booth (hook kuat di detik pertama), baru pelan-pelan ke penawaran. Satu reel per hari sudah cukup. Tonton, unduh MP4, upload manual di TikTok, lalu centang.</p></div>
+        <span className="rounded-full bg-fg/10 px-3 py-1.5 text-xs font-bold">{done.filter((k) => list.some((r) => r.id === k)).length}/{list.length} terupload</span>
+      </header>
+      {err && <p className="mb-2 text-xs text-red-500">{err}</p>}
+      <ol className="grid gap-2">
+        {list.map((r, i) => (
+          <li key={r.id} className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-xl bg-canvas/60 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] ${done.includes(r.id) ? "opacity-55" : ""}`}>
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-fg/10 text-xs font-bold">{i + 1}</span>
+            <div className="min-w-0"><p className="truncate text-sm font-semibold">{r.title}</p><p className="truncate text-xs text-fg/55">Hook: &ldquo;{r.hook}&rdquo;{next?.id === r.id && <b className="ml-2 text-accent">berikutnya</b>}</p></div>
+            <div className="col-span-2 flex flex-wrap items-center gap-1.5 sm:col-span-1 sm:justify-end">
+              <button className={btnGhost} onClick={() => setPreview({ title: r.title, storyReelId: r.id })}>▶ Tonton / unduh</button>
+              <button className={btnGhost} onClick={() => copy(r)}>{copied === r.id ? "Tersalin ✓" : "Salin caption"}</button>
+              <label className="flex cursor-pointer items-center gap-1.5 px-1 text-xs font-semibold"><input type="checkbox" className="h-4 w-4" checked={done.includes(r.id)} onChange={(e) => toggle(r.id, e.target.checked)} />Sudah upload</label>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <ul className="mt-3 grid gap-1 text-xs text-fg/55"><li>• Upload sekali per hari, jam 12:00 atau 19:00 WIB (jam santai orang scroll).</li><li>• Di TikTok, pilih sendiri suara trending di bawah suara asli kalau mau: volume suara trending kecilkan agar VO tetap terdengar.</li><li>• Balas semua komentar di jam pertama, dan sematkan komentar &ldquo;COBA&rdquo; sebagai ajakan.</li><li>• Cuplikan ini juga bisa dipakai sebagai Instagram Reels, jadi tidak perlu bikin ulang.</li></ul>
+      {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
+    </section>
+  );
 }
 
 export function TrackView({ queue, onChange }: { queue: CsQueue; onChange: () => Promise<void> }) {
@@ -51,6 +102,7 @@ export function TrackView({ queue, onChange }: { queue: CsQueue; onChange: () =>
 
   return (
     <div className="grid gap-4">
+      <TiktokStarter queue={queue} onChange={onChange} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-xs font-bold">
           <span className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-emerald-700 dark:text-emerald-300">Instagram {igDone}/{base.length}</span>
