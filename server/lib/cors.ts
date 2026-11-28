@@ -8,8 +8,8 @@ import type { NextFunction, Request, Response } from "express";
 //  - no Origin header at all: servers, curl, the website's own server-side calls, payment-gateway webhooks
 //  - "null": the packaged Electron app loads its UI from file:// and its origin is "null". Every protected route still needs
 //    a token or a device-bound key, so this does not open anything by itself
-//  - the website (PORTAL_BASE_URL, default https://www.studiodo.id), this API's own address (PUBLIC_BASE_URL), and
-//    anything listed in CORS_ALLOWED_ORIGINS (comma separated)
+//  - the website (PORTAL_BASE_URL, default https://www.studiodo.id), this API's own addresses (PUBLIC_BASE_URL and
+//    APP_BASE_URL, the domain of "Luncurkan di HP" and other links), and anything listed in CORS_ALLOWED_ORIGINS (comma separated)
 //  - http://localhost and http://127.0.0.1 on any port (development, tools running on the same PC)
 
 const DEFAULTS = ["https://www.studiodo.id"];
@@ -19,7 +19,7 @@ const clean = (v: string | undefined) => (v ?? "").trim().replace(/\/$/, "");
 
 export function allowedOrigins(env: Record<string, string | undefined> = process.env): Set<string> {
   const set = new Set<string>(DEFAULTS);
-  for (const v of [env.PORTAL_BASE_URL, env.PUBLIC_BASE_URL]) {
+  for (const v of [env.PORTAL_BASE_URL, env.PUBLIC_BASE_URL, env.APP_BASE_URL]) {
     const o = clean(v);
     if (/^https?:\/\/[^/]+$/.test(o)) set.add(o);
   }

@@ -29,11 +29,22 @@ function writeLocalStorage(key: string, value: string | null) {
 // A packaged Electron build has no such server — it loads dist-client/index.html
 // straight off disk (file://), where a relative "/api" resolves to nowhere.
 // VITE_DEFAULT_API_BASE_URL (baked in at build time via client/.env.production)
-// gives a production build a real fallback so admin login etc. work the
+// gives the file:// build a real fallback so admin login etc. work the
 // instant it's installed, before any kiosk pairing has happened at all —
 // pairing (below) only needs to override this for a tenant on a different
 // deployment.
-const DEFAULT_API_BASE_URL = (import.meta.env.VITE_DEFAULT_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "/api";
+//
+// A page served over http(s) (a phone opened by "Luncurkan di HP", the gallery,
+// the web admin) must NOT use the baked address: the same dist-client is served
+// by the API server under several domains, so it calls whichever one served it.
+// Calling another domain from there is cross-origin and fails ("Server tidak
+// dapat dijangkau") unless that server happens to list the page's domain.
+export function defaultApiBaseUrl(pageProtocol: string | undefined, baked: string | undefined): string {
+  if (pageProtocol === "http:" || pageProtocol === "https:") return "/api";
+  return baked?.replace(/\/$/, "") || "/api";
+}
+
+const DEFAULT_API_BASE_URL = defaultApiBaseUrl(globalThis.location?.protocol, import.meta.env.VITE_DEFAULT_API_BASE_URL as string | undefined);
 
 export function getApiBaseUrl(): string {
   const stored = readLocalStorage(API_BASE_URL_KEY);
