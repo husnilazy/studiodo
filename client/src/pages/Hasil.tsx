@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildPrintJobs } from "@/lib/printLayout";
+import { composePrintSheet } from "@/lib/printSheet";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
@@ -11,7 +12,7 @@ import type { BoothConfig } from "@/lib/boothConfigStore";
 import { drawStickers, renderTemplate } from "@/lib/output";
 import { renderPhotoStrip } from "@/lib/stripRenderer";
 import { renderStopMotion } from "@/lib/stopMotion";
-import { OUTPUT_PRESETS, useTemplateLibrary } from "@/lib/templateStore";
+import { useTemplateLibrary } from "@/lib/templateStore";
 import type { LocalTemplate } from "@/lib/templateStore";
 import { useStickerLibrary } from "@/lib/stickerStore";
 import { buildStickerAssets, useEmojiVersion } from "@/lib/builtinStickers";
@@ -100,21 +101,7 @@ async function renderPrintStrip(
     await drawStickers(sourceCanvas, photoStickers, stickerAssets);
   }
 
-  // A landscape frame prints on the same 4R paper turned sideways (1800×1200), instead of being cropped to fill a
-  // portrait sheet. The caller tells the printer the same orientation.
-  const landscape = sourceCanvas.width > sourceCanvas.height;
-  const printCanvas = document.createElement("canvas");
-  printCanvas.width = landscape ? OUTPUT_PRESETS["4r"].height : OUTPUT_PRESETS["4r"].width;
-  printCanvas.height = landscape ? OUTPUT_PRESETS["4r"].width : OUTPUT_PRESETS["4r"].height;
-  const printContext = printCanvas.getContext("2d");
-  if (!printContext) throw new Error("Canvas print tidak tersedia");
-  printContext.fillStyle = "#ffffff";
-  printContext.fillRect(0, 0, printCanvas.width, printCanvas.height);
-  const scale = Math.max(printCanvas.width / sourceCanvas.width, printCanvas.height / sourceCanvas.height);
-  const width = sourceCanvas.width * scale;
-  const height = sourceCanvas.height * scale;
-  printContext.drawImage(sourceCanvas, (printCanvas.width - width) / 2, (printCanvas.height - height) / 2, width, height);
-  return { dataUrl: printCanvas.toDataURL("image/jpeg", 0.95), orientation: landscape ? ("landscape" as const) : ("portrait" as const) };
+  return composePrintSheet(sourceCanvas);
 }
 
 export default function Hasil() {
