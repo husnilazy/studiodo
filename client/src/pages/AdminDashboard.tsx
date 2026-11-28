@@ -5,8 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { isViewOnlyAdmin, setAdminToken } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
-import { printLayoutFromConfig } from "@/lib/printLayout";
-import { prepareFileForPrint } from "@/lib/printSheet";
+import PrintPreviewModal from "@/components/PrintPreviewModal";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import UpdateNotice from "@/components/UpdateNotice";
@@ -684,6 +683,7 @@ export default function AdminDashboard() {
   // that exact asset is in flight (stops the repeat-click pile-up) and lets
   // a real error surface as a toast instead of silently doing nothing.
   const [downloadingKeys, setDownloadingKeys] = useState<Set<string>>(new Set());
+  const [printTarget, setPrintTarget] = useState<{ url: string; title: string; isStrip: boolean } | null>(null);
 
   const overviewFingerprintRef = useRef("");
   const loadOverview = useCallback(async (opts?: { silent?: boolean }) => {
@@ -818,22 +818,15 @@ export default function AdminDashboard() {
     }
   };
 
-  const printAsset = async (item: any) => {
+  // "Print" opens the preview first; the copy count is chosen and the job is sent from there.
+  const printAsset = (item: any) => {
     if (!window.studiodo?.printImage || isMotionAsset(item.type)) return;
-    // Same file preparation and printer settings as a print made during the session.
-    const config = useBoothConfig.getState().config;
-    try {
-      const sheet = await prepareFileForPrint(item.downloadUrl ?? item.url);
-      const layout = printLayoutFromConfig(config);
-      const result = await window.studiodo.printImage({
-        ...sheet, ...layout, twoUp: item.type === "Strip final" && layout.twoUp, printerName: config.printerName, copies: 1,
-      });
-      if (!result.ok) throw new Error(result.error ?? "Printer tidak merespons");
-      pushToast({ type: "success", title: "Dikirim ke printer", sub: config.printerName || "Printer default" });
-    } catch (error) {
-      console.error("Gagal mencetak asset", item.type, error);
-      pushToast({ type: "error", title: "Gagal mencetak", sub: error instanceof Error ? error.message : "Coba lagi beberapa saat." });
-    }
+    const date = new Date(item.session.createdAt).toLocaleString("id-ID");
+    setPrintTarget({
+      url: item.downloadUrl ?? item.url,
+      title: `${item.type}${item.type === "Foto" ? ` #${item.index + 1}` : ""} · ${date} · Sesi ${String(item.session.id).slice(0, 8)}`,
+      isStrip: item.type === "Strip final",
+    });
   };
 
   // Where each "Kesiapan booth" step sends the tenant: "kiosk:keys", "finance:gateway", "section:control" or "href:/admin/frames".
@@ -1025,6 +1018,7 @@ export default function AdminDashboard() {
         </div>
       </main>
       <HelpChatButton />
+      {printTarget && <PrintPreviewModal {...printTarget} onClose={() => setPrintTarget(null)} />}
       {phoneOpen && <PhoneLinkModal onClose={() => setPhoneOpen(false)} />}
       {tour && <AppTour steps={tour.steps} mode={tour.mode} tenantId={me?.tenantId ?? ""} onStep={goToTourStep} onClose={() => setTour(null)} />}
     </div>
