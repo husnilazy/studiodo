@@ -624,6 +624,25 @@ const DOWNLOAD_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) STUDIODO-Kiosk";
 const DOWNLOAD_ATTEMPTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 90 * 1000;
 
+// A saved strip/photo for reprinting. Fetched here because the page can't read Google Drive files (no CORS headers).
+ipcMain.handle("print:fetchImage", async (_event, payload) => {
+  try {
+    const url = String(payload?.url ?? "");
+    if (!/^(https?:\/\/|data:image\/)/i.test(url)) throw new Error("Alamat gambar tidak valid");
+    const response = await fetch(normalizeDownloadUrl(url), { headers: { "User-Agent": DOWNLOAD_UA }, redirect: "follow", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`Gambar tidak bisa diambil (HTTP ${response.status})`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    // Judged by the first bytes: some storage hosts label a real picture as a generic download.
+    const type = buffer[0] === 0xff && buffer[1] === 0xd8 ? "image/jpeg"
+      : buffer.subarray(1, 4).toString() === "PNG" ? "image/png"
+      : buffer.subarray(8, 12).toString() === "WEBP" ? "image/webp" : null;
+    if (!type) throw new Error("File yang diterima bukan gambar (file dihapus/akses privat?)");
+    return { ok: true, dataUrl: `data:${type};base64,${buffer.toString("base64")}` };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Gambar tidak bisa diambil" };
+  }
+});
+
 // Any Drive link (uc?export=download, /file/d/<id>/view, thumbnail?id=) is rewritten to Drive's direct-download host with
 // confirm=t. The old uc?export=download endpoint answers bigger files with an HTML "can't scan for viruses" page, which
 // was the main reason downloads failed; this host serves the real bytes straight away. Thumbnail links are also upgraded

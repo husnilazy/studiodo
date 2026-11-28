@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("studiodo", {
   listPrinters: () => ipcRenderer.invoke("print:listPrinters"),
   waitPrintDone: (payload) => ipcRenderer.invoke("print:waitDone", payload),
   printImage: (payload) => ipcRenderer.invoke("print:image", payload),
+  fetchImage: (payload) => ipcRenderer.invoke("print:fetchImage", payload),
   downloadAsset: (payload) => ipcRenderer.invoke("download:asset", payload),
   getSystemDiagnostics: () => ipcRenderer.invoke("system:getDiagnostics"),
   getUpdaterStatus: () => ipcRenderer.invoke("updater:getStatus"),

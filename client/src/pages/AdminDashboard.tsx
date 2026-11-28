@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { isViewOnlyAdmin, setAdminToken } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
+import { printLayoutFromConfig } from "@/lib/printLayout";
+import { prepareFileForPrint } from "@/lib/printSheet";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import UpdateNotice from "@/components/UpdateNotice";
@@ -818,15 +820,20 @@ export default function AdminDashboard() {
 
   const printAsset = async (item: any) => {
     if (!window.studiodo?.printImage || isMotionAsset(item.type)) return;
-    const response = await fetch(item.downloadUrl ?? item.url);
-    const blob = await response.blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error ?? new Error("Gagal membaca asset"));
-      reader.readAsDataURL(blob);
-    });
-    await window.studiodo.printImage({ dataUrl, copies: 1 });
+    // Same file preparation and printer settings as a print made during the session.
+    const config = useBoothConfig.getState().config;
+    try {
+      const sheet = await prepareFileForPrint(item.downloadUrl ?? item.url);
+      const layout = printLayoutFromConfig(config);
+      const result = await window.studiodo.printImage({
+        ...sheet, ...layout, twoUp: item.type === "Strip final" && layout.twoUp, printerName: config.printerName, copies: 1,
+      });
+      if (!result.ok) throw new Error(result.error ?? "Printer tidak merespons");
+      pushToast({ type: "success", title: "Dikirim ke printer", sub: config.printerName || "Printer default" });
+    } catch (error) {
+      console.error("Gagal mencetak asset", item.type, error);
+      pushToast({ type: "error", title: "Gagal mencetak", sub: error instanceof Error ? error.message : "Coba lagi beberapa saat." });
+    }
   };
 
   // Where each "Kesiapan booth" step sends the tenant: "kiosk:keys", "finance:gateway", "section:control" or "href:/admin/frames".

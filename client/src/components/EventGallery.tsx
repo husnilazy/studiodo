@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type EventGalleryItem } from "@/lib/api";
 import { panel } from "@/lib/adminUi";
 import { useBoothConfig } from "@/lib/boothConfigStore";
+import { printLayoutFromConfig } from "@/lib/printLayout";
+import { prepareFileForPrint } from "@/lib/printSheet";
 import { pushToast } from "@/lib/toastStore";
 
 // Gallery of ONE event: every finished session, newest first. A guest who wants another copy (or one more print) is served
@@ -9,18 +11,6 @@ import { pushToast } from "@/lib/toastStore";
 
 const time = (iso: string) => new Date(iso).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const cover = (i: EventGalleryItem) => i.stripUrl || i.photoUrls[0] || i.gifUrl || "";
-
-async function toDataUrl(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Gambar tidak bisa diambil (HTTP ${response.status})`);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Gagal membaca gambar"));
-    reader.readAsDataURL(blob);
-  });
-}
 
 export default function EventGallery({ eventId }: { eventId: string }) {
   const config = useBoothConfig((s) => s.config);
@@ -50,10 +40,10 @@ export default function EventGallery({ eventId }: { eventId: string }) {
     if (!current || printing || !window.studiodo?.printImage) return;
     setPrinting(true);
     try {
-      const dataUrl = await toDataUrl(current);
+      const sheet = await prepareFileForPrint(current);
+      const layout = printLayoutFromConfig(config);
       const result = await window.studiodo.printImage({
-        dataUrl, printerName: config.printerName, copies, pageSize: config.printPaperSize, fit: config.printFit, marginMm: config.printMarginMm,
-        orientation: open?.orientation === "landscape" ? "landscape" : "portrait",
+        ...sheet, ...layout, twoUp: current === open?.stripUrl && layout.twoUp, printerName: config.printerName, copies,
       });
       if (!result.ok) throw new Error(result.error ?? "Printer tidak merespons");
       pushToast({ type: "success", title: `${copies} lembar dikirim ke printer`, sub: config.printerName || "Printer default" });
