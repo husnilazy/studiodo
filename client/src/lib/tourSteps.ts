@@ -42,6 +42,7 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "frames", since: "0.1.40", section: "monitor", title: "Kelola Frame", body: "Menu “Kelola Frame” di sidebar adalah tempat mengunggah dan menyusun frame (bingkai foto) yang dipilih customer." },
   { id: "offline-mode", since: "0.1.40", section: "kiosk", kioskSubtab: "printer", title: "Internet putus? Sesi tetap jalan", body: "Foto disimpan di komputer booth lalu dikirim otomatis saat internet kembali. Pembayaran tunai saat offline butuh PIN petugas, jadi atur PIN di Kiosk → Akses operator. Sesi offline tampil sebagai “Offline (cek manual)” di Transaksi. Pengaturannya ada di Kiosk → Printer → Offline Mode." },
   { id: "phone", since: "0.1.40", section: "monitor", title: "Admin di HP", body: "Tombol “Luncurkan di HP” di menu samping membuat QR sekali pakai. Pindai dengan HP dan Admin langsung terbuka tanpa login, lalu HP itu tetap masuk selama 30 hari." },
+  { id: "reprint-preview", since: "0.1.41", section: "media", title: "Pratinjau sebelum cetak ulang", body: "Tombol cetak di Database Foto & Video kini membuka pratinjau berkas yang akan dikirim ke printer. Cek kertas dan orientasinya, lalu pilih Print 1×, 2×, atau jumlah sendiri. Cetak ulang memakai setelan printer booth, sama seperti cetak saat sesi." },
 ];
 
 const seenKey = (tenantId: string) => `studiodo-tour-seen:${tenantId || "-"}`;
