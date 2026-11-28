@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { isViewOnlyAdmin, setAdminToken } from "@/lib/api";
 import { useBoothConfig } from "@/lib/boothConfigStore";
+import PrintPreviewModal from "@/components/PrintPreviewModal";
 import { panel } from "@/lib/adminUi";
 import { pushToast } from "@/lib/toastStore";
 import UpdateNotice from "@/components/UpdateNotice";
@@ -682,6 +683,7 @@ export default function AdminDashboard() {
   // that exact asset is in flight (stops the repeat-click pile-up) and lets
   // a real error surface as a toast instead of silently doing nothing.
   const [downloadingKeys, setDownloadingKeys] = useState<Set<string>>(new Set());
+  const [printTarget, setPrintTarget] = useState<{ url: string; title: string; isStrip: boolean } | null>(null);
 
   const overviewFingerprintRef = useRef("");
   const loadOverview = useCallback(async (opts?: { silent?: boolean }) => {
@@ -816,17 +818,15 @@ export default function AdminDashboard() {
     }
   };
 
-  const printAsset = async (item: any) => {
+  // "Print" opens the preview first; the copy count is chosen and the job is sent from there.
+  const printAsset = (item: any) => {
     if (!window.studiodo?.printImage || isMotionAsset(item.type)) return;
-    const response = await fetch(item.downloadUrl ?? item.url);
-    const blob = await response.blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error ?? new Error("Gagal membaca asset"));
-      reader.readAsDataURL(blob);
+    const date = new Date(item.session.createdAt).toLocaleString("id-ID");
+    setPrintTarget({
+      url: item.downloadUrl ?? item.url,
+      title: `${item.type}${item.type === "Foto" ? ` #${item.index + 1}` : ""} · ${date} · Sesi ${String(item.session.id).slice(0, 8)}`,
+      isStrip: item.type === "Strip final",
     });
-    await window.studiodo.printImage({ dataUrl, copies: 1 });
   };
 
   // Where each "Kesiapan booth" step sends the tenant: "kiosk:keys", "finance:gateway", "section:control" or "href:/admin/frames".
@@ -1018,6 +1018,7 @@ export default function AdminDashboard() {
         </div>
       </main>
       <HelpChatButton />
+      {printTarget && <PrintPreviewModal {...printTarget} onClose={() => setPrintTarget(null)} />}
       {phoneOpen && <PhoneLinkModal onClose={() => setPhoneOpen(false)} />}
       {tour && <AppTour steps={tour.steps} mode={tour.mode} tenantId={me?.tenantId ?? ""} onStep={goToTourStep} onClose={() => setTour(null)} />}
     </div>

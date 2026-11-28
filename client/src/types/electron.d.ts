@@ -78,6 +78,7 @@ export interface StudiodoBridgeAPI {
   listPrinters: () => Promise<{ ok: boolean; printers: StudiodoPrinterInfo[]; error?: string }>;
   waitPrintDone: (payload: { printerName?: string; timeoutMs?: number }) => Promise<{ ok: boolean; unknown?: boolean; timedOut?: boolean; error?: string }>;
   printImage: (payload: StudiodoPrintPayload) => Promise<{ ok: boolean; error?: string }>;
+  fetchImage?: (payload: { url: string }) => Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
   downloadAsset: (payload: { url: string; filename: string }) => Promise<{ ok: boolean; path?: string; error?: string }>;
   getSystemDiagnostics: () => Promise<StudiodoSystemDiagnostics>;
   getUpdaterStatus: () => Promise<StudiodoUpdaterStatus>;
