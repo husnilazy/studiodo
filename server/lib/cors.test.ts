@@ -14,6 +14,12 @@ describe("isAllowedOrigin", () => {
     expect(isAllowedOrigin("http://localhost:5173", env)).toBe(true);
     expect(isAllowedOrigin("http://127.0.0.1:3100", env)).toBe(true);
   });
+  it("allows the app's own link domain, so pages opened from \"Luncurkan di HP\" can call the API", () => {
+    const withApp = { ...env, APP_BASE_URL: "https://panel.studiodo.id/" };
+    expect(isAllowedOrigin("https://panel.studiodo.id", withApp)).toBe(true);
+    expect(isAllowedOrigin("https://panel.studiodo.id.evil.example", withApp)).toBe(false);
+    expect(isAllowedOrigin("https://panel.studiodo.id", env)).toBe(false);
+  });
   it("refuses everything else, including look-alikes", () => {
     for (const o of ["https://evil.example", "https://www.studiodo.id.evil.example", "http://www.studiodo.id", "https://studiodo.id", "http://localhost.evil.example", "https://localhost:5173", "http://evil.example:5173"]) {
       expect(isAllowedOrigin(o, env)).toBe(false);
